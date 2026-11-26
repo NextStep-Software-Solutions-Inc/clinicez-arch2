@@ -40,21 +40,32 @@ export default function DentalVisionScreen() {
   const [saving, setSaving] = useState(false);
   const [lensesModal, setLensesModal] = useState(false);
 
-  const { control, handleSubmit, reset, formState: { isDirty } } = useForm<FormValues>({
+  const { control, handleSubmit, reset, watch, formState: { isDirty } } = useForm<FormValues>({
     defaultValues: { dentistName: '', dentistClinic: '', orthodonticDevice: '', eyeDoctorName: '', correctiveLenses: '' },
   });
 
   const [hasRecord, setHasRecord] = useState(false);
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const isSavingRef = useRef(false);
+
+  useEffect(() => {
+    const subscription = watch((_value, { type }) => {
+      if (type === 'change') {
+        isDirtyRef.current = true;
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch]);
 
   const load = useCallback(async () => {
     if (!patientId || isDirtyRef.current) return;
+    if (isSavingRef.current) return;
     try {
       const row = await db.query.patientDentalVision.findFirst({
         where: eq(patientDentalVision.patientId, patientId),
       });
-      if (row && !isDirtyRef.current) {
+      if (row && !isDirtyRef.current && !isSavingRef.current) {
         setHasRecord(true);
         reset({
           dentistName: row.dentistName ?? '',
@@ -76,6 +87,7 @@ export default function DentalVisionScreen() {
   useProfileSync(load, { isDirtyRef });
 
   const onSave = handleSubmit(async (data) => {
+    isSavingRef.current = true;
     setSaving(true);
     try {
       const payload = {
@@ -113,11 +125,13 @@ export default function DentalVisionScreen() {
 
       if (syncResult.isOffline) {
         reset(data);
+        isDirtyRef.current = false;
         dialog.alert('Saved Offline', 'Your dental & vision record has been saved locally and will sync when you are back online.', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       } else if (!syncResult.success && syncResult.failed > 0) {
         reset(data);
+        isDirtyRef.current = false;
         dialog.alert(
           'Sync Warning',
           `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`,
@@ -125,6 +139,7 @@ export default function DentalVisionScreen() {
         );
       } else {
         reset(data);
+        isDirtyRef.current = false;
         dialog.alert('Saved', 'Your dental & vision record has been updated successfully.', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
@@ -133,6 +148,7 @@ export default function DentalVisionScreen() {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save dental & vision record.');
     } finally {
+      isSavingRef.current = false;
       setSaving(false);
     }
   });

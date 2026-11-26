@@ -41,7 +41,7 @@ export const syncQueue = sqliteTable('sync_queue', {
   operation: text('operation', { enum: ['create', 'update', 'delete'] }).notNull(),
   payloadJson: text('payload_json').notNull(),
   status: text('status', {
-    enum: ['pending', 'syncing', 'synced', 'failed', 'dead', 'rejected'],
+    enum: ['pending', 'syncing', 'synced', 'failed', 'dead', 'rejected', 'conflict'],
   })
     .notNull()
     .default('pending'),

@@ -20,10 +20,10 @@ internal sealed class PatientMaleReproductiveSyncProcessor
 {
     public PatientMaleReproductiveSyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientMaleReproductive;
+    protected override bool UpsertOnMissingUpdate => true;
 
-    protected override async Task<PatientMaleReproductive?> FindExistingAsync(MaleReproductivePayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientMaleReproductives.FindAsync([id.Value], ct)
-            : await Context.PatientMaleReproductives.FirstOrDefaultAsync(e => e.PatientId == p.PatientId || e.ClientId == p.ClientId, ct);
+    protected override Task<PatientMaleReproductive?> FindExistingAsync(MaleReproductivePayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, e => e.PatientId == p.PatientId || (p.ClientId != Guid.Empty && e.ClientId == p.ClientId), ct);
 
     protected override PatientMaleReproductive CreateFromPayload(MaleReproductivePayload p) => new()
         { ClientId = p.ClientId, PatientId = p.PatientId, HasVasectomy = p.HasVasectomy, VasectomyDate = p.VasectomyDate, Conditions = p.Conditions };

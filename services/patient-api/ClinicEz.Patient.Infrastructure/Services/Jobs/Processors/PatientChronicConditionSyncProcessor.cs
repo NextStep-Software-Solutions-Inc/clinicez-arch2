@@ -23,9 +23,8 @@ internal sealed class PatientChronicConditionSyncProcessor
     public PatientChronicConditionSyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientChronicCondition;
 
-    protected override async Task<PatientChronicCondition?> FindExistingAsync(ChronicConditionPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientChronicConditions.FindAsync([id.Value], ct)
-            : await Context.PatientChronicConditions.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    protected override Task<PatientChronicCondition?> FindExistingAsync(ChronicConditionPayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, p.ClientId != Guid.Empty ? e => e.PatientId == p.PatientId && e.ClientId == p.ClientId : null, ct);
 
     protected override PatientChronicCondition CreateFromPayload(ChronicConditionPayload p) => new()
     {

@@ -29,9 +29,8 @@ internal sealed class PatientFamilyHistorySyncProcessor
     public PatientFamilyHistorySyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientFamilyHistory;
 
-    protected override async Task<PatientFamilyHistory?> FindExistingAsync(FamilyHistoryPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientFamilyHistories.FindAsync([id.Value], ct)
-            : await Context.PatientFamilyHistories.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    protected override Task<PatientFamilyHistory?> FindExistingAsync(FamilyHistoryPayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, p.ClientId != Guid.Empty ? e => e.PatientId == p.PatientId && e.ClientId == p.ClientId : null, ct);
 
     protected override PatientFamilyHistory CreateFromPayload(FamilyHistoryPayload p) => new()
     {

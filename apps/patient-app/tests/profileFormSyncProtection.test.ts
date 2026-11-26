@@ -684,6 +684,49 @@ describe('Issue #233: Profile form stability and background sync dirty-form prot
         await mounted.unmount();
       }
     });
+
+    test('latches dirty state synchronously on first keystroke before React re-renders and blocks mid-save profile-synced reset', async () => {
+      mockObsRow = {
+        id: 'obs-sync-latch',
+        patientId: TEST_PATIENT_ID,
+        ageAtMenarche: 12,
+        cycleLength: 28,
+        gravida: 1,
+      };
+
+      const mounted = mountComponent(React.createElement(ObstetricProfileScreen));
+      try {
+        await act(async () => {
+          await flushMicrotasks();
+        });
+        expect(capturedFields.get('Age at Menarche')?.value).toBe('12');
+
+        // Mutate DB and emit 'profile-synced' IMMEDIATELY after onChangeText without yielding a React re-render
+        mockObsRow = { ...mockObsRow, ageAtMenarche: 99 };
+        await act(async () => {
+          capturedFields.get('Age at Menarche').onChangeText('15');
+          // Synchronous event before React finishes flushing state
+          mockDeviceEventEmitter.emit('profile-synced', { patientId: TEST_PATIENT_ID });
+          await flushMicrotasks();
+        });
+
+        // Synchronous watch latch prevented the stale DB value (99) from wiping '15'
+        expect(capturedFields.get('Age at Menarche')?.value).toBe('15');
+        expect(obsFindFirstCount).toBe(1);
+
+        // Save: flushAndSyncProfile emits 'profile-synced' mid-flight; isObsSavingRef blocks loadObsProfile
+        mockObsRow = { ...mockObsRow, ageAtMenarche: 77 };
+        await act(async () => {
+          await capturedSaveBars.get('Save Obstetric Profile').onSave();
+          await flushMicrotasks();
+        });
+
+        expect(obsFindFirstCount).toBe(1);
+        expect(capturedFields.get('Age at Menarche')?.value).toBe('15');
+      } finally {
+        await mounted.unmount();
+      }
+    });
   });
 
   describe('DentalVisionScreen regression coverage', () => {
@@ -826,6 +869,47 @@ describe('Issue #233: Profile form stability and background sync dirty-form prot
         await mounted.unmount();
       }
     });
+
+    test('latches dirty state synchronously on first change before re-render and protects form during save', async () => {
+      mockDentalRow = {
+        id: 'dv-race',
+        patientId: TEST_PATIENT_ID,
+        dentistName: 'Dr. Initial',
+        dentistClinic: 'Clinic A',
+        orthodonticDevice: '',
+        eyeDoctorName: '',
+        correctiveLenses: 'None',
+      };
+
+      const mounted = mountComponent(React.createElement(DentalVisionScreen));
+      try {
+        await act(async () => {
+          await flushMicrotasks();
+        });
+
+        mockDentalRow = { ...mockDentalRow, dentistName: 'Dr. Stale Overwrite' };
+        await act(async () => {
+          capturedFields.get('Dentist Name').onChangeText('Dr. Edited First Tick');
+          mockDeviceEventEmitter.emit('profile-synced', { patientId: TEST_PATIENT_ID });
+          await flushMicrotasks();
+        });
+
+        expect(capturedFields.get('Dentist Name')?.value).toBe('Dr. Edited First Tick');
+        expect(dentalFindFirstCount).toBe(1);
+
+        // During save, flushAndSyncProfile emits 'profile-synced' while DB might still hold old row
+        mockDentalRow = { ...mockDentalRow, dentistName: 'Dr. Mid-Save Stale' };
+        await act(async () => {
+          await capturedSaveBars.get('Save Changes').onSave();
+          await flushMicrotasks();
+        });
+
+        expect(dentalFindFirstCount).toBe(1);
+        expect(capturedFields.get('Dentist Name')?.value).toBe('Dr. Edited First Tick');
+      } finally {
+        await mounted.unmount();
+      }
+    });
   });
 
   describe('All singleton profile screens static safety invariants', () => {
@@ -874,6 +958,15 @@ describe('Issue #233: Profile form stability and background sync dirty-form prot
           expect(source).toMatch(/useProfileSync\([^,]+,\s*\{\s*isDirtyRef\s*\}\)/);
         } else {
           expect(source).toContain('[patientId, resetObsForm]');
+        }
+
+        // Issue #290: must guard load with isSavingRef / isObsSavingRef and latch dirty synchronously
+        expect(source).toMatch(/const is(?:Obs)?SavingRef = useRef\(false\);/);
+        expect(source).toMatch(/if \(is(?:Obs)?SavingRef\.current\) return;/);
+        if (file === 'NcdQuestionnaire.screen.tsx') {
+          expect(source).toContain('isDirtyRef.current = true;');
+        } else {
+          expect(source).toMatch(/watch(?:Obs)?\(\([^)]+\)\s*=>\s*\{[\s\S]*type === 'change'[\s\S]*is(?:Obs)?DirtyRef\.current = true;/);
         }
       });
     }

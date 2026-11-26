@@ -92,6 +92,7 @@ export default function ObstetricProfileScreen() {
     control: obsControl,
     handleSubmit: handleObsSubmit,
     reset: resetObsForm,
+    watch: watchObs,
     formState: { isDirty: isObsDirty },
   } = useForm<ObsForm>({
     defaultValues: { menarche: '', lastMenstrualPeriod: '', cycleLength: '', cycleDuration: '', dysmenorrhea: '', menopauseAge: '', gravida: '', para: '', abortion: '', living: '' },
@@ -128,14 +129,25 @@ export default function ObstetricProfileScreen() {
   const [hasObsRecord, setHasObsRecord] = useState(false);
   const isObsDirtyRef = useRef(isObsDirty);
   isObsDirtyRef.current = isObsDirty;
+  const isObsSavingRef = useRef(false);
+
+  useEffect(() => {
+    const subscription = watchObs((_value, { type }) => {
+      if (type === 'change') {
+        isObsDirtyRef.current = true;
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watchObs]);
 
   const loadObsProfile = useCallback(async () => {
     if (!patientId || isObsDirtyRef.current) return;
+    if (isObsSavingRef.current) return;
     try {
       const row = await db.query.patientObstetricProfile.findFirst({
         where: eq(patientObstetricProfile.patientId, patientId),
       });
-      if (row && !isObsDirtyRef.current) {
+      if (row && !isObsDirtyRef.current && !isObsSavingRef.current) {
         setHasObsRecord(true);
         resetObsForm({
           menarche: row.ageAtMenarche?.toString() ?? '',
@@ -166,6 +178,7 @@ export default function ObstetricProfileScreen() {
   useProfileSync(load);
 
   const onSaveObs = handleObsSubmit(async (data) => {
+    isObsSavingRef.current = true;
     setSaving(true);
     try {
       const payload = {
@@ -205,6 +218,7 @@ export default function ObstetricProfileScreen() {
 
       const syncResult = await flushAndSyncProfile(patientId, getToken);
       resetObsForm(data);
+      isObsDirtyRef.current = false;
 
       if (syncResult.isOffline) {
         dialog.alert('Saved Offline', 'Obstetric profile saved locally and will sync when you are back online.');
@@ -220,6 +234,7 @@ export default function ObstetricProfileScreen() {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save obstetric profile.');
     } finally {
+      isObsSavingRef.current = false;
       setSaving(false);
     }
   });
