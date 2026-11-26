@@ -37,9 +37,23 @@ concurrency:
 
 jobs:
   test:
-    name: Run Unit & SQL Tests
+    name: Run Unit & PG17 Integration Tests
     runs-on: ubuntu-latest
     environment: Development
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: clinicez_local
+          POSTGRES_PASSWORD: clinicez_local_dev_password
+          POSTGRES_DB: postgres
+        ports:
+          - 5439:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout code
@@ -51,6 +65,11 @@ jobs:
           dotnet-version: '10.0'
 
       - name: Restore & test v1-sync-api
+        env:
+          V1SYNC_TEST_PG_HOST: 127.0.0.1
+          V1SYNC_TEST_PG_PORT: 5439
+          V1SYNC_TEST_PG_USER: clinicez_local
+          V1SYNC_TEST_PG_PASSWORD: clinicez_local_dev_password
         run: dotnet test services/v1-sync-api/ClinicEz.V1Sync.Tests/ClinicEz.V1Sync.Tests.csproj
 
   build:
