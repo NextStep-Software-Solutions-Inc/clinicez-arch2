@@ -1,6 +1,8 @@
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interfaces;
 using MediatR;
 using ClinicEz.Patient.Api.Abstractions;
+using ClinicEz.Patient.Api.Auth;
 using ClinicEz.Patient.Application.Common.DTOs;
 using ClinicEz.Patient.Application.Features.Patients.Queries.GetPatientByClerkId;
 
@@ -12,10 +14,15 @@ public sealed class GetPatientByClerkIdEndpoint : IEndpoint
     {
         app.MapGet("/patients/by-clerk/{clerkUserId}", async (
                 string clerkUserId,
+                HttpContext httpContext,
+                ICurrentUserService currentUser,
                 ISender sender,
                 CancellationToken ct) =>
             {
-                var patient = await sender.Send(new GetPatientByClerkIdQuery(clerkUserId), ct);
+                var verifiedEmails = string.Equals(clerkUserId, currentUser.UserId, StringComparison.Ordinal)
+                    ? ClaimEmailExtractor.ExtractVerifiedEmails(httpContext.User)
+                    : null;
+                var patient = await sender.Send(new GetPatientByClerkIdQuery(clerkUserId, verifiedEmails), ct);
 
                 return patient is null
                     ? Results.NotFound(ApiResponse<object>.Fail($"No patient found for Clerk user '{clerkUserId}'."))

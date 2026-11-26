@@ -15,7 +15,8 @@ public sealed record RedeemPatientShareRequest(
     bool AddToQueue = false,
     string? ChiefComplaint = null,
     string? ClinicEzId = null,
-    string? Code = null);
+    string? Code = null,
+    Guid? TargetPatientId = null);
 
 /// <summary>The redeem request is answered asynchronously; poll the status with this id.</summary>
 public sealed record PatientShareRedeemAccepted(Guid CorrelationId);

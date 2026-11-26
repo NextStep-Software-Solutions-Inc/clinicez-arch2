@@ -1,6 +1,7 @@
 import React from 'react';
 import { IconAlertTriangle, IconTerminal } from '@tabler/icons-react';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
+import { Text } from '@/components/ui';
 
 export function ClerkConfigDiagnosticScreen() {
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '(runtime origin)';
@@ -51,13 +52,21 @@ export function ClerkConfigDiagnosticScreen() {
         </div>
 
         <div className="pt-4 border-t border-border grid grid-cols-2 gap-4 text-[11px] text-text-muted">
-          <div>
-            <span className="font-semibold block text-text-secondary">Origin</span>
-            <code>{currentOrigin}</code>
+          <div className="min-w-0">
+            <Text as="span" variant="label" className="block">
+              Origin
+            </Text>
+            <Text as="div" className="font-mono text-[11px] text-text-muted">
+              <code>{currentOrigin}</code>
+            </Text>
           </div>
-          <div>
-            <span className="font-semibold block text-text-secondary">Target API</span>
-            <code>{apiBase}</code>
+          <div className="min-w-0">
+            <Text as="span" variant="label" className="block">
+              Target API
+            </Text>
+            <Text as="div" className="font-mono text-[11px] text-text-muted">
+              <code>{apiBase}</code>
+            </Text>
           </div>
         </div>
       </div>

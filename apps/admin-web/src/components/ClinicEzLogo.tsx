@@ -78,6 +78,7 @@ export interface ClinicEzLogoProps {
   subtitle?: string;
   subtitleClassName?: string;
   showWordmark?: boolean;
+  wordmarkClassName?: string;
 }
 
 export function ClinicEzLogo({
@@ -88,18 +89,27 @@ export function ClinicEzLogo({
   subtitle,
   subtitleClassName = 'text-[10px] text-text-muted font-semibold uppercase tracking-wider leading-none mt-0.5',
   showWordmark = true,
+  wordmarkClassName,
 }: ClinicEzLogoProps) {
   return (
     <span className={className}>
       <ClinicEzMark variant={variant} className={markClassName} />
       {showWordmark &&
         (subtitle ? (
-          <span className="flex flex-col text-left">
+          <span
+            className={`flex flex-col text-left whitespace-nowrap${
+              wordmarkClassName ? ` ${wordmarkClassName}` : ''
+            }`}
+          >
             <span className={textClassName}>Clinic EZ</span>
             <span className={subtitleClassName}>{subtitle}</span>
           </span>
         ) : (
-          <span className={textClassName}>Clinic EZ</span>
+          <span
+            className={`${textClassName}${wordmarkClassName ? ` ${wordmarkClassName}` : ''}`}
+          >
+            Clinic EZ
+          </span>
         ))}
     </span>
   );

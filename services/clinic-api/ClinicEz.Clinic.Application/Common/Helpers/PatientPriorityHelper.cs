@@ -8,7 +8,7 @@ namespace ClinicEz.Clinic.Application.Common.Helpers;
 public static class PatientPriorityHelper
 {
     public static bool IsSeniorOrPwd(
-        DateOnly dateOfBirth,
+        DateOnly? dateOfBirth,
         string? seniorCitizenId,
         string? pwdId,
         IReadOnlyDictionary<string, object?>? customFields,
@@ -23,8 +23,11 @@ public static class PatientPriorityHelper
         if (customFields != null && HasPriorityCustomFields(customFields))
             return true;
 
+        if (!dateOfBirth.HasValue)
+            return false;
+
         var seniorCutoff = referenceDate.AddYears(-60);
-        return dateOfBirth <= seniorCutoff;
+        return dateOfBirth.Value <= seniorCutoff;
     }
 
     public static bool IsSeniorOrPwd(Patient patient, DateOnly referenceDate)

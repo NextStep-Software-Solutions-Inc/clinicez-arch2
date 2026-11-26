@@ -158,14 +158,18 @@ public sealed class YakapPatientProfileController : ControllerBase
             .FirstOrDefaultAsync(ct);
 
         var asOf = DateTime.UtcNow;
-        var birthDate = patient.DateOfBirth;
-        int ageYears = asOf.Year - birthDate.Year;
-        if (DateOnly.FromDateTime(asOf) < birthDate.AddYears(ageYears))
-            ageYears--;
+        int? ageYears = null;
+        if (patient.DateOfBirth is { } birthDate)
+        {
+            var calcAge = asOf.Year - birthDate.Year;
+            if (DateOnly.FromDateTime(asOf) < birthDate.AddYears(calcAge))
+                calcAge--;
+            ageYears = Math.Max(0, calcAge);
+        }
 
         bool isFemale = patient.Sex == ClinicEz.Clinic.Domain.Enums.BiologicalSex.Female;
-        bool isPediatric = ageYears < 18;
-        bool isSenior = ageYears >= 60;
+        bool isPediatric = ageYears is < 18;
+        bool isSenior = ageYears is >= 60;
 
         string ResolveConditionCode(string? code, string? title)
         {
@@ -220,8 +224,8 @@ public sealed class YakapPatientProfileController : ControllerBase
             : (isDependentDefault ? null : patient.Suffix);
 
         var resolvedMemberBirthDate = relMembership != null
-            ? (isDependentDefault ? relMembership.PrincipalDateOfBirth?.ToString("yyyy-MM-dd") : patient.DateOfBirth.ToString("yyyy-MM-dd"))
-            : (isDependentDefault ? null : patient.DateOfBirth.ToString("yyyy-MM-dd"));
+            ? (isDependentDefault ? relMembership.PrincipalDateOfBirth?.ToString("yyyy-MM-dd") : patient.DateOfBirth?.ToString("yyyy-MM-dd"))
+            : (isDependentDefault ? null : patient.DateOfBirth?.ToString("yyyy-MM-dd"));
 
         var resolvedDependentRelationship = relMembership != null
             ? (isDependentDefault ? relMembership.DependentRelationship?.ToString() : null)
@@ -742,17 +746,21 @@ public sealed class YakapPatientProfileController : ControllerBase
             }
         }
 
-        var updateBirthDate = patient.DateOfBirth;
         var updateAsOf = DateTime.UtcNow;
-        int updateAgeYears = updateAsOf.Year - updateBirthDate.Year;
-        if (DateOnly.FromDateTime(updateAsOf) < updateBirthDate.AddYears(updateAgeYears))
-            updateAgeYears--;
+        int? updateAgeYears = null;
+        if (patient.DateOfBirth is { } updateBirthDate)
+        {
+            var calcAge = updateAsOf.Year - updateBirthDate.Year;
+            if (DateOnly.FromDateTime(updateAsOf) < updateBirthDate.AddYears(calcAge))
+                calcAge--;
+            updateAgeYears = Math.Max(0, calcAge);
+        }
         bool updateIsFemale = patient.Sex == ClinicEz.Clinic.Domain.Enums.BiologicalSex.Female;
-        bool updateIsPediatric = updateAgeYears < 18;
-        bool updateIsSenior = updateAgeYears >= 60;
+        bool updateIsPediatric = updateAgeYears is < 18;
+        bool updateIsSenior = updateAgeYears is >= 60;
 
         await SyncCohort(updatedProfile.ChildImmunizations, "lib_immchild", updateIsPediatric || (updatedProfile.ChildImmunizations != null && updatedProfile.ChildImmunizations.Count > 0));
-        await SyncCohort(updatedProfile.YoungWomanImmunizations, "lib_immyoungw", (updateIsFemale && updateAgeYears >= 9 && updateAgeYears <= 49) || (updatedProfile.YoungWomanImmunizations != null && updatedProfile.YoungWomanImmunizations.Count > 0));
+        await SyncCohort(updatedProfile.YoungWomanImmunizations, "lib_immyoungw", (updateIsFemale && updateAgeYears is >= 9 and <= 49) || (updatedProfile.YoungWomanImmunizations != null && updatedProfile.YoungWomanImmunizations.Count > 0));
         await SyncCohort(updatedProfile.PregnantWomanImmunizations, "lib_immpregw", (updateIsFemale && updateAgeYears >= 9 && updateAgeYears <= 49) || (updatedProfile.PregnantWomanImmunizations != null && updatedProfile.PregnantWomanImmunizations.Count > 0));
         await SyncCohort(updatedProfile.ElderlyImmunizations, "lib_immelderly", updateIsSenior || (updatedProfile.ElderlyImmunizations != null && updatedProfile.ElderlyImmunizations.Count > 0));
         if (updatedProfile.OtherImmunizations is { Count: > 0 })

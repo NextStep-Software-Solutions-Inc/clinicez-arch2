@@ -5,6 +5,7 @@ import { adminService, AdminBlogDto } from '@/services/admin.service';
 import { getPublicSiteUrl } from '@/lib/urls';
 import { useUser } from '@clerk/clerk-react';
 import { toast } from 'sonner';
+import { Button, Chip, SelectField, Tabs, Text } from '@/components/ui';
 import {
   IconArticle,
   IconRefresh,
@@ -223,40 +224,41 @@ function BlogPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={loadBlogs}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
-          <button
-            type="button"
+            Refresh
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleOpenCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs"
+            leadingIcon={<IconPlus className="h-4 w-4" />}
           >
-            <IconPlus className="h-4 w-4" />
-            <span>New Article</span>
-          </button>
+            New Article
+          </Button>
         </div>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="dangerSubtle"
+            size="xs"
             onClick={loadBlogs}
-            className="px-3 py-1 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
+            className="shrink-0"
           >
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -273,18 +275,17 @@ function BlogPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <select
+        <div className="flex items-center gap-2 w-full sm:w-44">
+          <SelectField
+            ariaLabel="Filter articles by category"
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
-          >
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c === 'ALL' ? 'All Categories' : c}
-              </option>
-            ))}
-          </select>
+            onValueChange={setCategoryFilter}
+            align="right"
+            options={categories.map((c) => ({
+              value: c,
+              label: c === 'ALL' ? 'All Categories' : c,
+            }))}
+          />
         </div>
       </div>
 
@@ -324,25 +325,27 @@ function BlogPage() {
           </p>
           <div className="pt-2">
             {search || categoryFilter !== 'ALL' ? (
-              <button
-                type="button"
+              <Button
+                variant="unstyled"
+                size="md"
                 onClick={() => {
                   setSearch('');
                   setCategoryFilter('ALL');
                 }}
-                className="px-4 py-2 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20 transition-colors cursor-pointer"
+                className="px-4 font-semibold text-primary bg-primary-subtle hover:bg-primary/20"
               >
                 Reset Filters
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="lg"
                 onClick={handleOpenCreate}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs"
+                leadingIcon={<IconPlus className="h-4 w-4" />}
+                className="px-5 text-xs"
               >
-                <IconPlus className="h-4 w-4" />
-                <span>Write First Article</span>
-              </button>
+                Write First Article
+              </Button>
             )}
           </div>
         </div>
@@ -355,19 +358,17 @@ function BlogPage() {
               className="p-5 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
             >
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-subtle text-primary border border-primary/20">
+                <div className="flex items-center justify-between gap-2">
+                  <Chip tone="primary" size="xs">
                     {b.category}
-                  </span>
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                      b.status === 'Published'
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                    }`}
+                  </Chip>
+                  <Chip
+                    tone={b.status === 'Published' ? 'success' : 'warning'}
+                    size="xs"
+                    className="shrink-0"
                   >
                     {b.status}
-                  </span>
+                  </Chip>
                 </div>
 
                 <div>
@@ -380,10 +381,10 @@ function BlogPage() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
-                <span className="text-[11px] text-text-muted">By {b.author}</span>
+              <div className="pt-3 border-t border-border flex items-center justify-between gap-2 text-xs">
+                <Text variant="caption">By {b.author}</Text>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <a
                     href={getPublicSiteUrl(`/blogs/${b.slug}`)}
                     target="_blank"
@@ -393,22 +394,26 @@ function BlogPage() {
                   >
                     <IconExternalLink className="h-4 w-4" />
                   </a>
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
                     onClick={() => handleOpenEdit(b)}
-                    className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-muted transition-colors cursor-pointer"
+                    aria-label="Edit Article"
                     title="Edit Article"
+                    className="h-7 w-7 text-text-muted hover:text-text"
                   >
                     <IconEdit className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
                     onClick={() => setBlogToDelete(b)}
-                    className="p-1.5 rounded-lg text-text-muted hover:text-red-600 hover:bg-red-500/10 transition-colors cursor-pointer"
+                    aria-label="Delete Article"
                     title="Delete Article"
+                    className="h-7 w-7 text-text-muted hover:text-red-600 hover:bg-red-500/10"
                   >
                     <IconTrash className="h-4 w-4" />
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -427,25 +432,28 @@ function BlogPage() {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-primary-subtle text-primary">
+            <div className="flex items-center justify-between gap-3 p-5 border-b border-border">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-xl bg-primary-subtle text-primary shrink-0">
                   <IconArticle className="h-5 w-5" />
                 </div>
-                <div>
-                  <h2 className="text-base font-bold text-text">
+                <div className="min-w-0">
+                  <Text as="h2" className="text-base font-bold text-text">
                     {editingBlog ? 'Edit Editorial Article' : 'Author New Blog Article'}
-                  </h2>
+                  </Text>
                   <p className="text-xs text-text-muted">Live Markdown formatting and SEO metadata</p>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={() => setDialogOpen(false)}
-                className="p-1 rounded-lg text-text-muted hover:text-text cursor-pointer"
+                aria-label="Close article editor"
+                tooltip="Close"
+                className="text-text-muted hover:text-text shrink-0"
               >
                 <IconX className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
 
             {/* Form */}
@@ -453,7 +461,7 @@ function BlogPage() {
               <div className="p-6 max-h-[68vh] overflow-y-auto space-y-4 text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Article Title</label>
+                    <Text as="label" className="font-semibold text-text">Article Title</Text>
                     <input
                       type="text"
                       value={title}
@@ -474,7 +482,7 @@ function BlogPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Slug (URL Segment)</label>
+                    <Text as="label" className="font-semibold text-text">Slug (URL Segment)</Text>
                     <input
                       type="text"
                       value={slug}
@@ -489,7 +497,7 @@ function BlogPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Author</label>
+                    <Text as="label" className="font-semibold text-text">Author</Text>
                     <input
                       type="text"
                       value={author}
@@ -500,7 +508,7 @@ function BlogPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Category</label>
+                    <Text as="label" className="font-semibold text-text">Category</Text>
                     <input
                       type="text"
                       value={category}
@@ -511,20 +519,22 @@ function BlogPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Publication Status</label>
-                    <select
+                    <Text as="label" className="font-semibold text-text">Publication Status</Text>
+                    <SelectField
+                      ariaLabel="Publication Status"
                       value={status}
-                      onChange={(e) => setStatus(e.target.value as any)}
-                      className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
-                    >
-                      <option value="Published">Published</option>
-                      <option value="Draft">Draft</option>
-                    </select>
+                      onValueChange={(val) => setStatus(val as 'Published' | 'Draft')}
+                      searchable={false}
+                      options={[
+                        { value: 'Published', label: 'Published' },
+                        { value: 'Draft', label: 'Draft' },
+                      ]}
+                    />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Banner Image URL (Optional)</label>
+                  <Text as="label" className="font-semibold text-text">Banner Image URL (Optional)</Text>
                   <input
                     type="url"
                     value={bannerUrl}
@@ -535,7 +545,7 @@ function BlogPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Article Summary / Excerpt</label>
+                  <Text as="label" className="font-semibold text-text">Article Summary / Excerpt</Text>
                   <textarea
                     value={summary}
                     onChange={(e) => setSummary(e.target.value)}
@@ -547,36 +557,27 @@ function BlogPage() {
 
                 {/* Markdown Editor / Preview Switcher */}
                 <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between border-b border-border pb-1">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('write')}
-                        className={`px-3 py-1 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
-                          activeTab === 'write'
-                            ? 'bg-primary text-white'
-                            : 'text-text-muted hover:text-text'
-                        }`}
-                      >
-                        <IconPencil className="h-3.5 w-3.5" />
-                        <span>Write Markdown</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('preview')}
-                        className={`px-3 py-1 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
-                          activeTab === 'preview'
-                            ? 'bg-primary text-white'
-                            : 'text-text-muted hover:text-text'
-                        }`}
-                      >
-                        <IconEye className="h-3.5 w-3.5" />
-                        <span>Live Preview</span>
-                      </button>
-                    </div>
-                    <span className="text-[11px] text-text-muted">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+                    <Tabs
+                      ariaLabel="Markdown editor mode"
+                      value={activeTab}
+                      onValueChange={setActiveTab}
+                      items={[
+                        {
+                          value: 'write',
+                          label: 'Write Markdown',
+                          icon: <IconPencil className="h-3.5 w-3.5" />,
+                        },
+                        {
+                          value: 'preview',
+                          label: 'Live Preview',
+                          icon: <IconEye className="h-3.5 w-3.5" />,
+                        },
+                      ]}
+                    />
+                    <Text variant="caption">
                       Markdown supported: # H1, ## H2, &gt; quote, - list
-                    </span>
+                    </Text>
                   </div>
 
                   {activeTab === 'write' ? (
@@ -597,22 +598,24 @@ function BlogPage() {
 
               {/* Footer */}
               <div className="p-4 bg-surface-muted border-t border-border flex items-center justify-end gap-3">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={() => setDialogOpen(false)}
                   disabled={submitting}
-                  className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="md"
                   disabled={submitting}
-                  className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  leadingIcon={submitting ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                  className="px-5"
                 >
-                  {submitting && <IconLoader className="h-4 w-4 animate-spin" />}
-                  <span>{editingBlog ? 'Save Article Changes' : 'Publish Article'}</span>
-                </button>
+                  {editingBlog ? 'Save Article Changes' : 'Publish Article'}
+                </Button>
               </div>
             </form>
           </div>
@@ -644,22 +647,23 @@ function BlogPage() {
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="md"
                 onClick={() => setBlogToDelete(null)}
-                className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
                 onClick={handleDelete}
                 disabled={deleteLoading}
-                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                leadingIcon={deleteLoading ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                className="px-5"
               >
-                {deleteLoading && <IconLoader className="h-4 w-4 animate-spin" />}
-                <span>Confirm Delete</span>
-              </button>
+                Confirm Delete
+              </Button>
             </div>
           </div>
         </div>

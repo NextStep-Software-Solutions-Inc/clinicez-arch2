@@ -103,7 +103,9 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
         // The claim QR is what a ClinicEZ laboratory scans to take the order; a routed or local slip falls back to the order number.
         var qrPayload = order.ClaimToken ?? $"CLINICEZ:REQ:{order.OrderNumber}";
 
-        var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 40;
+        var patientAge = patient != null
+            ? (patient.DateOfBirth is { } dob ? Math.Max(0, DateTime.UtcNow.Year - dob.Year) : 0)
+            : 40;
 
         return new LabOrderSlipDto(
             order.Id,

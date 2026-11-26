@@ -15,6 +15,7 @@ import AfterVisitSummaryCard from '../../components/records/AfterVisitSummaryCar
 import HomeHeader from '../../components/home/HomeHeader';
 import HomeSearchBar from '../../components/home/HomeSearchBar';
 import HealthPassCard from '../../components/home/HealthPassCard';
+import LegacyRecordsLinkedBanner from '../../components/home/LegacyRecordsLinkedBanner';
 import WelcomeChecklistBanner from '../../components/home/WelcomeChecklistBanner';
 import QuickActionsGrid, { type QuickActionKey } from '../../components/home/QuickActionsGrid';
 import AppointmentCarouselSection from '../../components/home/AppointmentCarouselSection';
@@ -27,6 +28,11 @@ import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import { db } from '../../db/index';
 import { consultations, type Consultation } from '../../db/schema/consultations';
 import { vitalSigns, type VitalSign } from '../../db/schema/vitalSigns';
+import {
+  dismissLegacyWelcomeBanner,
+  getLegacyWelcomeBannerState,
+  shouldShowLegacyRecordsLinkedBanner,
+} from '../../services/home/legacyWelcomeBanner';
 import {
   checkInPatientAppointment,
   fetchAndCacheHomeDashboard,
@@ -64,6 +70,34 @@ export default function HomeScreenWeb() {
   const [isSavingVitals, setIsSavingVitals] = useState<boolean>(false);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
   const [loggingMedicationId, setLoggingMedicationId] = useState<string | null>(null);
+  const [legacyBannerState, setLegacyBannerState] = useState<{
+    isPending: boolean;
+    isDismissed: boolean;
+  }>({ isPending: false, isDismissed: false });
+
+  useEffect(() => {
+    let active = true;
+    void getLegacyWelcomeBannerState(patientId).then((state) => {
+      if (active) setLegacyBannerState(state);
+    });
+    return () => {
+      active = false;
+    };
+  }, [patientId]);
+
+  const showLegacyBanner = shouldShowLegacyRecordsLinkedBanner({
+    patientId,
+    isLegacyAccountReclaimed: dashboard?.healthPass.isLegacyAccountReclaimed,
+    isPendingFromAuth: legacyBannerState.isPending,
+    isDismissed: legacyBannerState.isDismissed,
+  });
+
+  const handleDismissLegacyBanner = useCallback(async () => {
+    if (patientId) {
+      await dismissLegacyWelcomeBanner(patientId);
+    }
+    setLegacyBannerState({ isPending: false, isDismissed: true });
+  }, [patientId]);
 
   const fallbackUser = useMemo(
     () => ({
@@ -412,6 +446,15 @@ export default function HomeScreenWeb() {
                   <HealthPassCard
                     healthPass={dashboard.healthPass}
                     onViewCardPress={() => navigateToMainRoute('ShareRecordsScreen')}
+                  />
+
+                  <LegacyRecordsLinkedBanner
+                    visible={showLegacyBanner}
+                    onViewRecords={() => {
+                      void handleDismissLegacyBanner();
+                      navigateToTab('RecordsScreen');
+                    }}
+                    onDismiss={() => void handleDismissLegacyBanner()}
                   />
 
                   <WelcomeChecklistBanner

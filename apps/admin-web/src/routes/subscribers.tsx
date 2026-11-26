@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { createRoute } from '@tanstack/react-router';
 import { Route as authRoute } from './_auth';
 import { adminService, AdminNewsletterSubscriberDto } from '@/services/admin.service';
+import { Button, Chip, Text } from '@/components/ui';
 import {
   IconMail,
   IconDownload,
@@ -91,41 +92,42 @@ function SubscribersPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={loadSubscribers}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
-          <button
-            type="button"
+            Refresh
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleExportCSV}
             disabled={subscribers.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+            leadingIcon={<IconDownload className="h-4 w-4" />}
           >
-            <IconDownload className="h-4 w-4" />
-            <span>Export RFC-4180 CSV</span>
-          </button>
+            Export RFC-4180 CSV
+          </Button>
         </div>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="dangerSubtle"
+            size="xs"
             onClick={loadSubscribers}
-            className="px-3 py-1 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
+            className="shrink-0"
           >
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -191,13 +193,14 @@ function SubscribersPage() {
                         : 'No subscribers have opted in to platform marketing newsletters yet.'}
                     </p>
                     {search && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="unstyled"
+                        size="sm"
                         onClick={() => setSearch('')}
-                        className="px-4 py-1.5 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20 transition-colors cursor-pointer"
+                        className="px-4 font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20"
                       >
                         Clear Search
-                      </button>
+                      </Button>
                     )}
                   </td>
                 </tr>
@@ -205,36 +208,37 @@ function SubscribersPage() {
                 /* Active Table */
                 filteredSubscribers.map((sub) => (
                   <tr key={sub.id} className="hover:bg-surface-muted/50 transition-colors">
-                    <td className="px-5 py-4">
-                      <div className="font-medium text-text font-mono flex items-center gap-2">
-                        <span>{sub.email}</span>
-                        <button
-                          type="button"
+                    <td className="px-5 py-4 max-w-[280px]">
+                      <div className="font-medium text-text font-mono flex items-center gap-2 min-w-0">
+                        <Text variant="mono" className="font-medium">
+                          {sub.email}
+                        </Text>
+                        <Button
+                          variant="ghost"
+                          size="custom"
                           onClick={() => {
                             navigator.clipboard.writeText(sub.email);
                             toast.success(`Copied '${sub.email}' to clipboard`);
                           }}
-                          className="text-text-muted hover:text-text cursor-pointer"
+                          aria-label="Copy Email"
                           title="Copy Email"
+                          className="p-1 rounded-md text-text-muted hover:text-text shrink-0"
                         >
                           <IconCopy className="h-3 w-3" />
-                        </button>
+                        </Button>
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-text-secondary">
-                      <span className="capitalize">{sub.source || '—'}</span>
+                    <td className="px-5 py-4 text-text-secondary max-w-[180px]">
+                      <Text className="capitalize">{sub.source || '—'}</Text>
                     </td>
                     <td className="px-5 py-4">
                       {sub.status ? (
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                            sub.status === 'Active'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                              : 'bg-surface-muted text-text-muted border-border'
-                          }`}
+                        <Chip
+                          tone={sub.status === 'Active' ? 'success' : 'neutral'}
+                          size="xs"
                         >
                           {sub.status}
-                        </span>
+                        </Chip>
                       ) : (
                         <span className="text-text-muted">—</span>
                       )}

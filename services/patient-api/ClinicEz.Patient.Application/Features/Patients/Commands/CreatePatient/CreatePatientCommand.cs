@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MediatR;
 
 namespace ClinicEz.Patient.Application.Features.Patients.Commands.CreatePatient;
@@ -10,4 +11,5 @@ public sealed record CreatePatientCommand(
     string? Suffix,
     string? Sex,
     DateOnly? DateOfBirth,
-    string? Nationality) : IRequest<Guid>;
+    string? Nationality,
+    IReadOnlyList<string>? VerifiedEmails = null) : IRequest<Guid>;

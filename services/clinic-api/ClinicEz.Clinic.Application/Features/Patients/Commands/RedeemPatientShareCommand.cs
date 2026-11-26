@@ -20,7 +20,8 @@ public sealed record RedeemPatientShareCommand(
     bool AddToQueue = false,
     string? ChiefComplaint = null,
     string? ClinicEzId = null,
-    string? Code = null) : IRequest<PatientShareRedeemAccepted>;
+    string? Code = null,
+    Guid? TargetPatientId = null) : IRequest<PatientShareRedeemAccepted>;
 
 public sealed class RedeemPatientShareCommandValidator : AbstractValidator<RedeemPatientShareCommand>
 {
@@ -43,6 +44,9 @@ public sealed class RedeemPatientShareCommandValidator : AbstractValidator<Redee
             .WithMessage("Provide either a scanned share token, or the patient's Clinic EZ ID with their one-time code.");
         RuleFor(x => x.Purpose).MaximumLength(100);
         RuleFor(x => x.ChiefComplaint).MaximumLength(500);
+        RuleFor(x => x.TargetPatientId)
+            .Must(id => !id.HasValue || id.Value != Guid.Empty)
+            .WithMessage("TargetPatientId must be a valid non-empty patient ID when provided.");
     }
 }
 
@@ -76,7 +80,8 @@ public sealed class RedeemPatientShareCommandHandler : IRequestHandler<RedeemPat
                 code,
                 purpose,
                 request.AddToQueue,
-                chiefComplaint),
+                chiefComplaint,
+                request.TargetPatientId),
             cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

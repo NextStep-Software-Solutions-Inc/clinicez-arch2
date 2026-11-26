@@ -1445,13 +1445,14 @@ public sealed class PatientInteropFlowTests
         h.Provider.GetRequiredService<InteropHandlerRegistry>().RegisteredTypes.Should().BeEquivalentTo(
             InteropTypes.FacilityDirectoryUpdated,
             InteropTypes.PractitionerIdentityUpdated, InteropTypes.PractitionerVerificationRevoked,
-            InteropTypes.ClinicRecordVerified, InteropTypes.ClinicAppointmentUpdated,
+            InteropTypes.ClinicRecordVerified, InteropTypes.ClinicLinkResolved, InteropTypes.ClinicAppointmentUpdated,
             InteropTypes.PatientShareRedeem, InteropTypes.PatientDocumentIssued, InteropTypes.LabOrderStatusChanged,
             InteropTypes.RxStatusChanged, InteropTypes.LabResultReviewed, InteropTypes.ClinicalImmunizationAdministered,
             InteropTypes.PatientQueueAlert, InteropTypes.PatientAppointmentAlert,
             InteropTypes.CommsMessageReplicate, InteropTypes.CommsMessageReceived,
             InteropTypes.CommsThreadStateChanged, InteropTypes.CommsEligibilitySynced,
-            InteropTypes.CommsCallStateChanged);
+            InteropTypes.CommsCallStateChanged,
+            InteropTypes.PatientIdentityDirectoryRequested, InteropTypes.PatientIdentityReconcileRequested);
     }
 
     [Fact]

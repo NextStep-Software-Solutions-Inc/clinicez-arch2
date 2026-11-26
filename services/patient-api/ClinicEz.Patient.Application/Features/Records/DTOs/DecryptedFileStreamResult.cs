@@ -5,5 +5,6 @@ namespace ClinicEz.Patient.Application.Features.Records.DTOs;
 public sealed record DecryptedFileStreamResult(
     Stream Stream,
     string ContentType,
-    string FileName
+    string FileName,
+    string? ExternalRedirectUrl = null
 );

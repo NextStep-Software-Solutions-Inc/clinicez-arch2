@@ -3,6 +3,7 @@ import { createRoute } from '@tanstack/react-router';
 import { Route as authRoute } from './_auth';
 import { adminService, AdminSystemSettingDto } from '@/services/admin.service';
 import { toast } from 'sonner';
+import { Button, SelectField, TabButton, TabList, Text } from '@/components/ui';
 import {
   IconRefresh,
   IconBuildingBank,
@@ -229,32 +230,28 @@ function SettingsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={loadSettings}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
+            Refresh
+          </Button>
         </div>
       </div>
 
       {/* Error Banner */}
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
-            onClick={loadSettings}
-            className="px-3 py-1 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
-          >
+          <Button variant="dangerSubtle" size="xs" onClick={loadSettings} className="shrink-0">
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -262,26 +259,36 @@ function SettingsPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
         {/* Category Sidebar Navigation */}
         <div className="p-3 bg-surface border border-border rounded-2xl space-y-1">
-          <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          <Text
+            as="div"
+            className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-text-muted"
+          >
             Canonical Categories
-          </div>
-          {CANONICAL_SETTINGS_CATEGORIES.map((cat) => {
-            const isSelected = activeCategory === cat;
-            return (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setActiveCategory(cat)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left text-xs font-semibold transition-colors cursor-pointer ${
-                  isSelected
-                    ? 'bg-primary text-white shadow-xs'
-                    : 'text-text-secondary hover:bg-surface-muted hover:text-text'
-                }`}
-              >
-                <span>{cat}</span>
-              </button>
-            );
-          })}
+          </Text>
+          <TabList
+            ariaLabel="Settings categories"
+            aria-orientation="vertical"
+            fullWidthUntil="always"
+            className="flex-col items-stretch p-0 bg-transparent border-0 rounded-none gap-1"
+          >
+            {CANONICAL_SETTINGS_CATEGORIES.map((cat) => {
+              const isSelected = activeCategory === cat;
+              return (
+                <TabButton
+                  key={cat}
+                  active={isSelected}
+                  onClick={() => setActiveCategory(cat)}
+                  className={
+                    isSelected
+                      ? 'w-full justify-between px-3.5 py-2.5 rounded-xl text-left bg-primary text-white shadow-xs'
+                      : 'w-full justify-between px-3.5 py-2.5 rounded-xl text-left text-text-secondary hover:bg-surface-muted hover:text-text'
+                  }
+                >
+                  {cat}
+                </TabButton>
+              );
+            })}
+          </TabList>
         </div>
 
         {/* Category Settings Form */}
@@ -317,22 +324,19 @@ function SettingsPage() {
                       When active, clinics can settle subscriptions via automated online checkout. When disabled, offline manual bank settlement is enforced.
                     </div>
                   </div>
-                  <button
-                    type="button"
+                  <Button
+                    variant={formData['Billing:IsOnlinePaymentReady'] === 'true' ? 'primary' : 'secondary'}
+                    size="md"
                     onClick={() =>
                       handleFieldChange(
                         'Billing:IsOnlinePaymentReady',
                         formData['Billing:IsOnlinePaymentReady'] === 'true' ? 'false' : 'true'
                       )
                     }
-                    className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
-                      formData['Billing:IsOnlinePaymentReady'] === 'true'
-                        ? 'bg-primary text-white'
-                        : 'bg-surface border border-border text-text-muted hover:text-text'
-                    }`}
+                    className="px-4 shrink-0"
                   >
                     {formData['Billing:IsOnlinePaymentReady'] === 'true' ? 'Gateway Active' : 'Gateway Offline'}
-                  </button>
+                  </Button>
                 </div>
 
                 {/* BIR Tax Exempt Switch */}
@@ -343,28 +347,27 @@ function SettingsPage() {
                       Toggle whether issued invoices and receipts are exempt from Value Added Tax (`Billing:BirTaxExempt`).
                     </div>
                   </div>
-                  <button
-                    type="button"
+                  <Button
+                    variant={formData['Billing:BirTaxExempt'] === 'true' ? 'primary' : 'secondary'}
+                    size="md"
                     onClick={() =>
                       handleFieldChange(
                         'Billing:BirTaxExempt',
                         formData['Billing:BirTaxExempt'] === 'true' ? 'false' : 'true'
                       )
                     }
-                    className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
-                      formData['Billing:BirTaxExempt'] === 'true'
-                        ? 'bg-primary text-white'
-                        : 'bg-surface border border-border text-text-muted hover:text-text'
-                    }`}
+                    className="px-4 shrink-0"
                   >
                     {formData['Billing:BirTaxExempt'] === 'true' ? 'Tax Exempt' : 'VAT Taxable'}
-                  </button>
+                  </Button>
                 </div>
 
                 {/* Corporate & Tax Settings */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">BIR VAT Percentage (%)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      BIR VAT Percentage (%)
+                    </Text>
                     <input
                       type="number"
                       value={formData['Billing:BirTaxPercentage'] ?? ''}
@@ -378,7 +381,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Corporate TIN</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Corporate TIN
+                    </Text>
                     <input
                       type="text"
                       value={formData['Billing:CorporateTin'] ?? ''}
@@ -389,7 +394,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Corporate Legal Name</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Corporate Legal Name
+                    </Text>
                     <input
                       type="text"
                       value={formData['Billing:CorporateName'] ?? ''}
@@ -400,7 +407,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Billing Support Email</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Billing Support Email
+                    </Text>
                     <input
                       type="email"
                       value={formData['Billing:SupportEmail'] ?? ''}
@@ -411,7 +420,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="font-semibold text-text">Corporate Registered Address</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Corporate Registered Address
+                    </Text>
                     <input
                       type="text"
                       value={formData['Billing:CorporateAddress'] ?? ''}
@@ -422,7 +433,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Trial Duration (Days)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Trial Duration (Days)
+                    </Text>
                     <input
                       type="number"
                       value={formData['Billing:TrialDays'] ?? ''}
@@ -435,7 +448,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Default Plan Slug</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Default Plan Slug
+                    </Text>
                     <input
                       type="text"
                       value={formData['Billing:DefaultPlanSlug'] ?? ''}
@@ -446,39 +461,47 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Default Billing Cadence</label>
-                    <select
+                    <Text as="label" className="font-semibold text-text">
+                      Default Billing Cadence
+                    </Text>
+                    <SelectField
+                      ariaLabel="Default Billing Cadence"
                       value={formData['Billing:DefaultBillingCadence'] ?? ''}
-                      onChange={(e) => handleFieldChange('Billing:DefaultBillingCadence', e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text text-xs focus:outline-hidden"
-                    >
-                      <option value="">Select cadence...</option>
-                      <option value="monthly">Monthly</option>
-                      <option value="annually">Annually</option>
-                    </select>
+                      onValueChange={(val) =>
+                        handleFieldChange('Billing:DefaultBillingCadence', val)
+                      }
+                      placeholder="Select cadence..."
+                      searchable={false}
+                      options={[
+                        { value: '', label: 'Select cadence...' },
+                        { value: 'monthly', label: 'Monthly' },
+                        { value: 'annually', label: 'Annually' },
+                      ]}
+                    />
                   </div>
                 </div>
 
                 {/* N-Bank JSON CRUD Builder */}
                 <div className="space-y-3 pt-3 border-t border-border">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
                       <h3 className="font-bold text-text flex items-center gap-2">
-                        <IconBuildingBank className="h-4 w-4 text-primary" />
+                        <IconBuildingBank className="h-4 w-4 text-primary shrink-0" />
                         <span>N-Bank Corporate Accounts Builder ({bankAccounts.length})</span>
                       </h3>
                       <p className="text-[11px] text-text-muted mt-0.5">
                         Accounts presented to tenant clinics for offline bank transfer & QR settlements.
                       </p>
                     </div>
-                    <button
-                      type="button"
+                    <Button
+                      variant="primary"
+                      size="sm"
                       onClick={handleAddBankAccount}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer"
+                      leadingIcon={<IconPlus className="h-3.5 w-3.5" />}
+                      className="rounded-xl shrink-0"
                     >
-                      <IconPlus className="h-3.5 w-3.5" />
-                      <span>Add Bank Account</span>
-                    </button>
+                      Add Bank Account
+                    </Button>
                   </div>
 
                   {bankAccounts.length === 0 ? (
@@ -495,11 +518,11 @@ function SettingsPage() {
                           key={acc.id || idx}
                           className="p-4 rounded-xl bg-surface-muted border border-border space-y-3"
                         >
-                          <div className="flex items-center justify-between pb-2 border-b border-border">
-                            <span className="font-semibold text-text">
+                          <div className="flex items-center justify-between pb-2 border-b border-border gap-3">
+                            <Text as="span" className="font-semibold text-text">
                               Account #{idx + 1}: {acc.institution || 'Untitled Institution'}
-                            </span>
-                            <div className="flex items-center gap-3">
+                            </Text>
+                            <div className="flex items-center gap-3 shrink-0">
                               <label className="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer">
                                 <input
                                   type="checkbox"
@@ -509,20 +532,24 @@ function SettingsPage() {
                                 />
                                 <span>Active</span>
                               </label>
-                              <button
-                                type="button"
+                              <Button
+                                variant="ghost"
+                                size="iconSm"
                                 onClick={() => handleRemoveBankAccount(idx)}
-                                className="text-red-600 hover:text-red-700 p-1 rounded cursor-pointer"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-500/10"
                                 title="Remove Account"
+                                aria-label="Remove Account"
                               >
                                 <IconTrash className="h-4 w-4" />
-                              </button>
+                              </Button>
                             </div>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
-                              <label className="text-[11px] font-semibold text-text-muted">Institution Name</label>
+                              <Text as="label" className="text-[11px] font-semibold text-text-muted">
+                                Institution Name
+                              </Text>
                               <input
                                 type="text"
                                 value={acc.institution}
@@ -533,7 +560,9 @@ function SettingsPage() {
                             </div>
 
                             <div className="space-y-1">
-                              <label className="text-[11px] font-semibold text-text-muted">Account Number</label>
+                              <Text as="label" className="text-[11px] font-semibold text-text-muted">
+                                Account Number
+                              </Text>
                               <input
                                 type="text"
                                 value={acc.accountNumber}
@@ -544,7 +573,9 @@ function SettingsPage() {
                             </div>
 
                             <div className="space-y-1">
-                              <label className="text-[11px] font-semibold text-text-muted">Account Name</label>
+                              <Text as="label" className="text-[11px] font-semibold text-text-muted">
+                                Account Name
+                              </Text>
                               <input
                                 type="text"
                                 value={acc.accountName}
@@ -555,7 +586,9 @@ function SettingsPage() {
                             </div>
 
                             <div className="space-y-1">
-                              <label className="text-[11px] font-semibold text-text-muted">Branch / Channel</label>
+                              <Text as="label" className="text-[11px] font-semibold text-text-muted">
+                                Branch / Channel
+                              </Text>
                               <input
                                 type="text"
                                 value={acc.branch || ''}
@@ -593,27 +626,26 @@ function SettingsPage() {
                       When enabled, workspaces with 0 patients and no activity past the threshold are auto-purged.
                     </div>
                   </div>
-                  <button
-                    type="button"
+                  <Button
+                    variant={formData['Workspace:OrphanAutoPurgeEnabled'] === 'true' ? 'primary' : 'secondary'}
+                    size="md"
                     onClick={() =>
                       handleFieldChange(
                         'Workspace:OrphanAutoPurgeEnabled',
                         formData['Workspace:OrphanAutoPurgeEnabled'] === 'true' ? 'false' : 'true'
                       )
                     }
-                    className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
-                      formData['Workspace:OrphanAutoPurgeEnabled'] === 'true'
-                        ? 'bg-primary text-white'
-                        : 'bg-surface border border-border text-text-muted hover:text-text'
-                    }`}
+                    className="px-4 shrink-0"
                   >
                     {formData['Workspace:OrphanAutoPurgeEnabled'] === 'true' ? 'Enabled' : 'Disabled'}
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Inactivity Threshold (Days)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Inactivity Threshold (Days)
+                    </Text>
                     <input
                       type="number"
                       value={formData['Workspace:OrphanInactivityDaysThreshold'] ?? ''}
@@ -628,7 +660,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Grace Notification Period (Days)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Grace Notification Period (Days)
+                    </Text>
                     <input
                       type="number"
                       value={formData['Workspace:OrphanAutoPurgeGraceDays'] ?? ''}
@@ -660,7 +694,9 @@ function SettingsPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">License Token TTL (Days)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      License Token TTL (Days)
+                    </Text>
                     <input
                       type="number"
                       value={formData['Licensing:TtlDays'] ?? ''}
@@ -673,7 +709,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Offline Grace Window (Days)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Offline Grace Window (Days)
+                    </Text>
                     <input
                       type="number"
                       value={formData['Licensing:GraceDays'] ?? ''}
@@ -686,7 +724,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Renew Before Expiry (Days)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Renew Before Expiry (Days)
+                    </Text>
                     <input
                       type="number"
                       value={formData['Licensing:RenewBeforeDays'] ?? ''}
@@ -699,7 +739,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Max Workspaces Owned Per User</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Max Workspaces Owned Per User
+                    </Text>
                     <input
                       type="number"
                       value={formData['Workspace:MaxOwnedPerUser'] ?? ''}
@@ -712,7 +754,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Join Claim Token TTL (Hours)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Join Claim Token TTL (Hours)
+                    </Text>
                     <input
                       type="number"
                       value={formData['JoinClaim:TtlHours'] ?? ''}
@@ -725,7 +769,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Apple App Store URL</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Apple App Store URL
+                    </Text>
                     <input
                       type="url"
                       value={formData['PatientApp:AppleAppStoreUrl'] ?? ''}
@@ -736,7 +782,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="font-semibold text-text">Google Play Store URL</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Google Play Store URL
+                    </Text>
                     <input
                       type="url"
                       value={formData['PatientApp:GooglePlayStoreUrl'] ?? ''}
@@ -764,7 +812,9 @@ function SettingsPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Max Upload File Size (Bytes)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Max Upload File Size (Bytes)
+                    </Text>
                     <input
                       type="number"
                       value={formData['Storage:LabUploadMaxFileBytes'] ?? ''}
@@ -776,7 +826,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Rate Limit Permits</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Rate Limit Permits
+                    </Text>
                     <input
                       type="number"
                       value={formData['Storage:LabUploadRateLimitPermits'] ?? ''}
@@ -788,7 +840,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Rate Limit Window (Minutes)</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Rate Limit Window (Minutes)
+                    </Text>
                     <input
                       type="number"
                       value={formData['Storage:LabUploadRateLimitWindowMinutes'] ?? ''}
@@ -817,7 +871,9 @@ function SettingsPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">SMTP Host</label>
+                    <Text as="label" className="font-semibold text-text">
+                      SMTP Host
+                    </Text>
                     <input
                       type="text"
                       value={formData['Mailer:SmtpHost'] ?? ''}
@@ -828,7 +884,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">SMTP Port</label>
+                    <Text as="label" className="font-semibold text-text">
+                      SMTP Port
+                    </Text>
                     <input
                       type="number"
                       value={formData['Mailer:SmtpPort'] ?? ''}
@@ -841,21 +899,28 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Transport Security</label>
-                    <select
+                    <Text as="label" className="font-semibold text-text">
+                      Transport Security
+                    </Text>
+                    <SelectField
+                      ariaLabel="Transport Security"
                       value={formData['Mailer:SmtpSecurity'] ?? ''}
-                      onChange={(e) => handleFieldChange('Mailer:SmtpSecurity', e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text text-xs focus:outline-hidden"
-                    >
-                      <option value="">Select security mode...</option>
-                      <option value="None">None</option>
-                      <option value="StartTls">StartTls</option>
-                      <option value="Tls">Tls</option>
-                    </select>
+                      onValueChange={(val) => handleFieldChange('Mailer:SmtpSecurity', val)}
+                      placeholder="Select security mode..."
+                      searchable={false}
+                      options={[
+                        { value: '', label: 'Select security mode...' },
+                        { value: 'None', label: 'None' },
+                        { value: 'StartTls', label: 'StartTls' },
+                        { value: 'Tls', label: 'Tls' },
+                      ]}
+                    />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Sender Display Name</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Sender Display Name
+                    </Text>
                     <input
                       type="text"
                       value={formData['Mailer:SmtpFromName'] ?? ''}
@@ -866,7 +931,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Sender Email Address</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Sender Email Address
+                    </Text>
                     <input
                       type="email"
                       value={formData['Mailer:SmtpFromEmail'] ?? ''}
@@ -877,7 +944,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Reply-To Address</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Reply-To Address
+                    </Text>
                     <input
                       type="email"
                       value={formData['Mailer:SmtpReplyTo'] ?? ''}
@@ -888,7 +957,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="font-semibold text-text">Contact Inquiry Inbox</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Contact Inquiry Inbox
+                    </Text>
                     <input
                       type="email"
                       value={formData['Mailer:ContactInbox'] ?? ''}
@@ -916,7 +987,9 @@ function SettingsPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Support Email</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Support Email
+                    </Text>
                     <input
                       type="email"
                       value={formData['Contact:SupportEmail'] ?? ''}
@@ -927,7 +1000,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Sales Email</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Sales Email
+                    </Text>
                     <input
                       type="email"
                       value={formData['Contact:SalesEmail'] ?? ''}
@@ -938,7 +1013,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Phone Number</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Phone Number
+                    </Text>
                     <input
                       type="text"
                       value={formData['Contact:PhoneNumber'] ?? ''}
@@ -949,7 +1026,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Operating Hours</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Operating Hours
+                    </Text>
                     <input
                       type="text"
                       value={formData['Contact:OperatingHours'] ?? ''}
@@ -960,7 +1039,9 @@ function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="font-semibold text-text">Headquarters Address</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Headquarters Address
+                    </Text>
                     <input
                       type="text"
                       value={formData['Contact:HeadquartersAddress'] ?? ''}
@@ -980,7 +1061,9 @@ function SettingsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {extraCategorySettings.map((item) => (
                     <div key={item.key} className="space-y-1.5">
-                      <label className="font-semibold text-text font-mono">{item.key}</label>
+                      <Text as="label" className="font-semibold text-text font-mono">
+                        {item.key}
+                      </Text>
                       {item.description && (
                         <div className="text-[11px] text-text-muted">{item.description}</div>
                       )}
@@ -998,14 +1081,16 @@ function SettingsPage() {
 
             {/* Submit Action */}
             <div className="flex items-center justify-end gap-3 pt-2">
-              <button
+              <Button
                 type="submit"
+                variant="primary"
+                size="lg"
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                leadingIcon={saving ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                className="px-6 text-xs"
               >
-                {saving && <IconLoader className="h-4 w-4 animate-spin" />}
-                <span>Save System Settings</span>
-              </button>
+                Save System Settings
+              </Button>
             </div>
           </form>
         )}

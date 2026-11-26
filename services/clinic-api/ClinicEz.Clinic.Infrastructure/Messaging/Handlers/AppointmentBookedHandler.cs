@@ -195,13 +195,71 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
                 LastName = !string.IsNullOrWhiteSpace(message.PatientLastName) ? message.PatientLastName : message.PatientId.ToString()[..8],
                 MiddleName = message.PatientMiddleName,
                 Suffix = message.PatientSuffix,
-                DateOfBirth = message.DateOfBirth ?? new DateOnly(2000, 1, 1),
+                DateOfBirth = message.DateOfBirth,
                 Sex = ClinicEz.Clinic.Application.Features.Patients.Commands.RegisterClinicPatientCommandHandler.ParseBiologicalSex(message.Gender),
                 ContactNumber = !string.IsNullOrWhiteSpace(message.ContactNumber) ? message.ContactNumber : "N/A",
                 Email = message.Email,
                 PhilHealthNumber = PhilHealthPinNormalizer.Normalize(message.PhilHealthNumber),
                 CustomFields = new Dictionary<string, object?>()
             };
+
+            // Booking Duplicate Safety Net: detect probable unlinked historical charts (never auto-merge blindly)
+            var msgEmailLower = message.Email?.Trim().ToLowerInvariant();
+            var msgLastLower = message.PatientLastName?.Trim().ToLowerInvariant();
+            var msgFirstLower = message.PatientFirstName?.Trim().ToLowerInvariant();
+            if (!string.IsNullOrEmpty(msgEmailLower) || (!string.IsNullOrEmpty(msgLastLower) && !string.IsNullOrEmpty(msgFirstLower)))
+            {
+                var unlinkedCandidates = await _dbContext.Patients
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Where(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && p.CloudPatientId == null &&
+                        ((!string.IsNullOrEmpty(msgEmailLower) && p.Email != null && p.Email.ToLower() == msgEmailLower) ||
+                         (!string.IsNullOrEmpty(msgLastLower) && !string.IsNullOrEmpty(msgFirstLower) &&
+                          p.LastName.ToLower() == msgLastLower && p.FirstName.ToLower() == msgFirstLower &&
+                          (!message.DateOfBirth.HasValue || !p.DateOfBirth.HasValue || p.DateOfBirth == message.DateOfBirth.Value))))
+                    .Select(p => new { p.Id, p.PatientCode })
+                    .Take(5)
+                    .ToListAsync(ct);
+
+                if (unlinkedCandidates.Count > 0)
+                {
+                    var nowUtc = DateTime.UtcNow;
+                    clinicPatient.CustomFields["potential_historical_chart_matches"] =
+                        string.Join(", ", unlinkedCandidates.Select(c => $"{c.PatientCode}:{c.Id}"));
+                    await _dbContext.PatientAlerts.AddAsync(new PatientAlert
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinic.ClinicId,
+                        PatientId = clinicPatient.Id,
+                        Category = PatientAlertCategory.Administrative,
+                        Title = "Potential Historical Chart Match — Verify & Link",
+                        Severity = PatientAlertSeverity.Info,
+                        Status = PatientAlertStatus.Active,
+                        Notes = $"Unlinked historical chart candidate(s): {string.Join(", ", unlinkedCandidates.Select(c => c.PatientCode))}. Verify identity before merging or linking.",
+                        CreatedAt = nowUtc,
+                        CreatedBy = "System:BookingDuplicateGuard"
+                    }, ct);
+
+                    foreach (var candidate in unlinkedCandidates)
+                    {
+                        await _dbContext.PatientAlerts.AddAsync(new PatientAlert
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinic.ClinicId,
+                            PatientId = candidate.Id,
+                            Category = PatientAlertCategory.Administrative,
+                            Title = "Potential Duplicate Booking Chart Created — Verify & Link",
+                            Severity = PatientAlertSeverity.Info,
+                            Status = PatientAlertStatus.Active,
+                            Notes = $"A new booking created chart {clinicPatient.PatientCode} ({clinicPatient.Id}) that may match this unlinked historical chart. Verify identity before merging or linking.",
+                            CreatedAt = nowUtc,
+                            CreatedBy = "System:BookingDuplicateGuard"
+                        }, ct);
+                    }
+                }
+            }
         }
         else
         {

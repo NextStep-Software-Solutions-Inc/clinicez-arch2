@@ -45,6 +45,7 @@ import {
   VerificationKindBadge,
   VerificationStatusBadge,
 } from "./VerificationStatusBadge";
+import { Button, Chip, TabList, TabButton, Text } from "@/components/ui";
 
 export const DEFAULT_VISIBLE_SERVICES = 9;
 
@@ -247,7 +248,9 @@ function CandidateCard({
     <div className="rounded-xl border border-border bg-surface p-3 space-y-2 text-xs">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="font-semibold text-text truncate">{fullName}</div>
+          <Text as="div" className="font-semibold text-text">
+            {fullName}
+          </Text>
           <div className="text-[11px] text-text-muted">
             {candidate.professionKind} • PRC{" "}
             <span className="font-mono text-text">{candidate.normalizedPrcLicenseNo}</span> •{" "}
@@ -256,15 +259,12 @@ function CandidateCard({
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <VerificationStatusBadge status={candidate.verificationStatus} />
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${
-              candidate.isCompatibleNameMatch
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-            }`}
+          <Chip
+            tone={candidate.isCompatibleNameMatch ? "success" : "warning"}
+            size="xs"
           >
             {candidate.isCompatibleNameMatch ? "Name Match" : "Name Mismatch"}
-          </span>
+          </Chip>
         </div>
       </div>
 
@@ -284,35 +284,41 @@ function CandidateCard({
 
       {canRevoke && candidate.verificationStatus === "Verified" ? (
         <div className="pt-1 flex justify-end">
-          <button
-            type="button"
+          <Button
+            variant="unstyled"
+            size="xs"
             disabled={suspendingId === candidate.practitionerId}
             onClick={() => onRequestSuspend(candidate)}
-            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold text-red-600 dark:text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-50"
+            leadingIcon={
+              suspendingId === candidate.practitionerId ? (
+                <IconLoader className="h-3 w-3 animate-spin" />
+              ) : (
+                <IconBan className="h-3 w-3" />
+              )
+            }
+            className="gap-1 font-semibold text-red-600 dark:text-red-400 border border-red-500/30 hover:bg-red-500/10"
           >
-            {suspendingId === candidate.practitionerId ? (
-              <IconLoader className="h-3 w-3 animate-spin" />
-            ) : (
-              <IconBan className="h-3 w-3" />
-            )}
-            <span>Suspend Practitioner</span>
-          </button>
+            Suspend Practitioner
+          </Button>
         </div>
       ) : canRevoke && candidate.verificationStatus === "Suspended" ? (
         <div className="pt-1 flex justify-end">
-          <button
-            type="button"
+          <Button
+            variant="unstyled"
+            size="xs"
             disabled={reinstatingId === candidate.practitionerId}
             onClick={() => onRequestReinstate(candidate)}
-            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold text-primary border border-primary/30 hover:bg-primary-subtle transition-colors cursor-pointer disabled:opacity-50"
+            leadingIcon={
+              reinstatingId === candidate.practitionerId ? (
+                <IconLoader className="h-3 w-3 animate-spin" />
+              ) : (
+                <IconShieldCheck className="h-3 w-3" />
+              )
+            }
+            className="gap-1 font-semibold text-primary border border-primary/30 hover:bg-primary-subtle"
           >
-            {reinstatingId === candidate.practitionerId ? (
-              <IconLoader className="h-3 w-3 animate-spin" />
-            ) : (
-              <IconShieldCheck className="h-3 w-3" />
-            )}
-            <span>Reinstate Practitioner</span>
-          </button>
+            Reinstate Practitioner
+          </Button>
         </div>
       ) : null}
     </div>
@@ -322,8 +328,10 @@ function CandidateCard({
 function FieldUpdatedPill({ change }: { change?: FieldChangeDto }) {
   if (!change) return null;
   return (
-    <span
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.warning}`}
+    <Chip
+      tone="unstyled"
+      size="custom"
+      className={`px-1.5 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.warning}`}
       title={
         change.previousValue
           ? `Previous: ${change.previousValue}`
@@ -331,7 +339,7 @@ function FieldUpdatedPill({ change }: { change?: FieldChangeDto }) {
       }
     >
       Updated
-    </span>
+    </Chip>
   );
 }
 
@@ -373,18 +381,22 @@ function ResubmissionDiffSummaryCard({ diff }: { diff: ResubmissionDiffDto }) {
       {hasAnyProofUpdate ? (
         <div className="flex flex-wrap items-center gap-1.5">
           {diff.ltoProofUpdated ? (
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TONE_BADGE_CLASSES.warning}`}
+            <Chip
+              tone="unstyled"
+              size="custom"
+              className={`px-2 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.warning}`}
             >
               DOH LTO Proof Updated
-            </span>
+            </Chip>
           ) : null}
           {diff.prcProofUpdated ? (
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TONE_BADGE_CLASSES.warning}`}
+            <Chip
+              tone="unstyled"
+              size="custom"
+              className={`px-2 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.warning}`}
             >
               PRC Proof Updated
-            </span>
+            </Chip>
           ) : null}
         </div>
       ) : null}
@@ -398,11 +410,13 @@ function ResubmissionDiffSummaryCard({ diff }: { diff: ResubmissionDiffDto }) {
             >
               <div className="flex items-center gap-1.5 font-semibold text-text">
                 <span>{change.label}</span>
-                <span
-                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${TONE_BADGE_CLASSES.info}`}
+                <Chip
+                  tone="unstyled"
+                  size="custom"
+                  className={`px-1.5 py-0.5 text-[9px] border ${TONE_BADGE_CLASSES.info}`}
                 >
                   {change.changeKind}
-                </span>
+                </Chip>
               </div>
               <div className="text-text-secondary">
                 <span className="text-text-muted">
@@ -484,18 +498,22 @@ function ChildPractitionerRow({
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-semibold text-text">{fullName}</span>
               {isUpdated ? (
-                <span
-                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.warning}`}
+                <Chip
+                  tone="unstyled"
+                  size="custom"
+                  className={`px-1.5 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.warning}`}
                 >
                   Updated
-                </span>
+                </Chip>
               ) : null}
               {isProofUpdated ? (
-                <span
-                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.info}`}
+                <Chip
+                  tone="unstyled"
+                  size="custom"
+                  className={`px-1.5 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.info}`}
                 >
                   PRC Proof Updated
-                </span>
+                </Chip>
               ) : null}
             </div>
             <div className="text-[11px] text-text-muted flex flex-wrap items-center gap-1.5">
@@ -505,11 +523,13 @@ function ChildPractitionerRow({
                 {prcExpiryDisplay ? ` • Exp ${prcExpiryDisplay.dateText}` : ""}
               </span>
               {prcExpiryDisplay?.badgeLabel && prcExpiryDisplay.badgeClassName ? (
-                <span
-                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold border whitespace-nowrap ${prcExpiryDisplay.badgeClassName}`}
+                <Chip
+                  tone="unstyled"
+                  size="custom"
+                  className={`px-1.5 py-0.5 text-[9px] border ${prcExpiryDisplay.badgeClassName}`}
                 >
                   {prcExpiryDisplay.badgeLabel}
-                </span>
+                </Chip>
               ) : null}
             </div>
             {child.specialty ? (
@@ -525,18 +545,15 @@ function ChildPractitionerRow({
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-text-muted">
         <span>Schedule: {formatScheduleSummary(child.availabilities)}</span>
         {!renderInlineProof && child.prcEvidenceObjectKey && onInspectProof ? (
-          <button
-            type="button"
+          <Button
+            variant={isProofActive ? "primary" : "secondary"}
+            size="xs"
             onClick={() => onInspectProof(child.id)}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
-              isProofActive
-                ? "bg-primary text-white border-primary"
-                : "bg-surface text-text border-border hover:bg-surface-muted"
-            }`}
+            leadingIcon={<IconFileText className="h-3 w-3" />}
+            className={`gap-1 ${isProofActive ? "border border-primary" : "text-text font-semibold"}`}
           >
-            <IconFileText className="h-3 w-3" />
-            <span>{isProofActive ? "Viewing PRC Proof" : "Inspect PRC Proof"}</span>
-          </button>
+            {isProofActive ? "Viewing PRC Proof" : "Inspect PRC Proof"}
+          </Button>
         ) : null}
       </div>
 
@@ -1236,11 +1253,13 @@ function VerificationDetailMetadataAndActions({
               <div className="flex items-center gap-1.5 flex-wrap font-mono font-semibold text-text">
                 <span>{prcExpiryDisplay.dateText}</span>
                 {prcExpiryDisplay.badgeLabel && prcExpiryDisplay.badgeClassName ? (
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-sans font-semibold border whitespace-nowrap ${prcExpiryDisplay.badgeClassName}`}
+                  <Chip
+                    tone="unstyled"
+                    size="custom"
+                    className={`px-2 py-0.5 text-[10px] font-sans border ${prcExpiryDisplay.badgeClassName}`}
                   >
                     {prcExpiryDisplay.badgeLabel}
-                  </span>
+                  </Chip>
                 ) : null}
               </div>
               <FieldPreviousValueCaption change={practitionerPrcExpiryChange} />
@@ -1265,11 +1284,13 @@ function VerificationDetailMetadataAndActions({
               <div className="flex items-center gap-1.5 flex-wrap font-mono font-semibold text-text">
                 <span>{ltoExpiryDisplay.dateText}</span>
                 {ltoExpiryDisplay.badgeLabel && ltoExpiryDisplay.badgeClassName ? (
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-sans font-semibold border whitespace-nowrap ${ltoExpiryDisplay.badgeClassName}`}
+                  <Chip
+                    tone="unstyled"
+                    size="custom"
+                    className={`px-2 py-0.5 text-[10px] font-sans border ${ltoExpiryDisplay.badgeClassName}`}
                   >
                     {ltoExpiryDisplay.badgeLabel}
-                  </span>
+                  </Chip>
                 ) : null}
               </div>
               <FieldPreviousValueCaption change={dohLtoExpiryChange} />
@@ -1344,15 +1365,17 @@ function VerificationDetailMetadataAndActions({
                 <FieldUpdatedPill change={philHealthChange} />
               </div>
               <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${
+                <Chip
+                  tone="unstyled"
+                  size="custom"
+                  className={`px-2 py-0.5 text-[10px] border ${
                     isPhilHealthAccredited
                       ? TONE_BADGE_CLASSES.success
                       : TONE_BADGE_CLASSES.neutral
                   }`}
                 >
                   {isPhilHealthAccredited ? "Accredited" : "Not Accredited"}
-                </span>
+                </Chip>
                 {philHealthNo ? (
                   <span className="font-mono font-semibold text-text">{philHealthNo}</span>
                 ) : null}
@@ -1368,25 +1391,31 @@ function VerificationDetailMetadataAndActions({
               </div>
               <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                 {resolvedInPerson ? (
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.info}`}
+                  <Chip
+                    tone="unstyled"
+                    size="custom"
+                    className={`px-2 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.info}`}
                   >
                     In-Person
-                  </span>
+                  </Chip>
                 ) : null}
                 {resolvedTeleconsult ? (
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.info}`}
+                  <Chip
+                    tone="unstyled"
+                    size="custom"
+                    className={`px-2 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.info}`}
                   >
                     Teleconsult
-                  </span>
+                  </Chip>
                 ) : null}
                 {!resolvedInPerson && !resolvedTeleconsult ? (
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.neutral}`}
+                  <Chip
+                    tone="unstyled"
+                    size="custom"
+                    className={`px-2 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.neutral}`}
                   >
                     None specified
-                  </span>
+                  </Chip>
                 ) : null}
               </div>
               <FieldPreviousValueCaption change={consultationModeChange} />
@@ -1444,27 +1473,30 @@ function VerificationDetailMetadataAndActions({
                 <FieldUpdatedPill change={servicesChange} />
               </div>
               {hasMoreServices ? (
-                <button
-                  type="button"
+                <Button
+                  variant="unstyled"
+                  size="xs"
                   aria-expanded={showAllServices}
                   onClick={() => setShowAllServices((prev) => !prev)}
-                  className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold text-primary bg-primary-subtle hover:bg-primary/20 transition-colors cursor-pointer"
+                  className="font-semibold text-primary bg-primary-subtle hover:bg-primary/20"
                 >
                   {showAllServices
                     ? "Show fewer"
                     : `Show all ${services.length} services (+${hiddenCount} more)`}
-                </button>
+                </Button>
               ) : null}
             </div>
             <FieldPreviousValueCaption change={servicesChange} />
             <div className="flex flex-wrap gap-1.5">
               {visibleServices.map((svc, idx) => (
-                <span
+                <Chip
                   key={`${svc.name ?? "svc"}-${idx}`}
-                  className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] bg-surface border border-border text-text-secondary"
+                  tone="unstyled"
+                  size="custom"
+                  className="px-2 py-0.5 rounded-md text-[11px] font-normal bg-surface border border-border text-text-secondary"
                 >
                   {svc.name || "Service"}
-                </span>
+                </Chip>
               ))}
             </div>
           </div>
@@ -1674,9 +1706,9 @@ function VerificationDetailMetadataAndActions({
         {allowVerify && (canApprove || canReject) ? (
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <label htmlFor="reviewer-notes" className="block text-xs font-semibold text-text">
+              <Text as="label" htmlFor="reviewer-notes" className="text-xs font-semibold text-text">
                 Reviewer Notes (Optional)
-              </label>
+              </Text>
               <textarea
                 id="reviewer-notes"
                 value={reviewNotes}
@@ -1689,9 +1721,9 @@ function VerificationDetailMetadataAndActions({
 
             {canReject ? (
               <div className="space-y-1.5">
-                <label htmlFor="reject-reason" className="block text-xs font-semibold text-text">
+                <Text as="label" htmlFor="reject-reason" className="text-xs font-semibold text-text">
                   Clinical / Compliance Rejection Reason *
-                </label>
+                </Text>
                 <textarea
                   id="reject-reason"
                   value={rejectReason}
@@ -1729,35 +1761,41 @@ function VerificationDetailMetadataAndActions({
 
             <div className="flex flex-wrap items-center gap-2 pt-1">
               {canApprove ? (
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="md"
                   disabled={submittingAction !== null || isPractitionerSuspended}
                   onClick={handleApprove}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-primary hover:bg-primary-hover transition-colors shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  leadingIcon={
+                    submittingAction === "approve" ? (
+                      <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <IconCheck className="h-3.5 w-3.5" />
+                    )
+                  }
+                  className="flex-1"
                 >
-                  {submittingAction === "approve" ? (
-                    <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <IconCheck className="h-3.5 w-3.5" />
-                  )}
-                  <span>Approve Request</span>
-                </button>
+                  Approve Request
+                </Button>
               ) : null}
 
               {canReject ? (
-                <button
-                  type="button"
+                <Button
+                  variant="danger"
+                  size="md"
                   disabled={submittingAction !== null}
                   onClick={handleReject}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                  leadingIcon={
+                    submittingAction === "reject" ? (
+                      <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <IconX className="h-3.5 w-3.5" />
+                    )
+                  }
+                  className="flex-1"
                 >
-                  {submittingAction === "reject" ? (
-                    <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <IconX className="h-3.5 w-3.5" />
-                  )}
-                  <span>Reject Request</span>
-                </button>
+                  Reject Request
+                </Button>
               ) : null}
             </div>
           </div>
@@ -1776,9 +1814,9 @@ function VerificationDetailMetadataAndActions({
                 This practitioner&apos;s directory verification is currently suspended across affiliated clinics. Reinstate verification only after compliance clearance.
               </p>
               <div className="space-y-1.5">
-                <label htmlFor="reinstate-reason" className="block text-xs font-semibold text-text">
+                <Text as="label" htmlFor="reinstate-reason" className="text-xs font-semibold text-text">
                   Compliance Reinstatement Reason *
-                </label>
+                </Text>
                 <textarea
                   id="reinstate-reason"
                   value={reinstateReason}
@@ -1800,8 +1838,9 @@ function VerificationDetailMetadataAndActions({
                   </p>
                 ) : null}
               </div>
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="md"
                 disabled={reinstatingId === practitionerGovernanceTarget.practitionerId}
                 onClick={() =>
                   requestReinstateFromPanel(
@@ -1809,15 +1848,17 @@ function VerificationDetailMetadataAndActions({
                     practitionerGovernanceTarget.displayName || practitionerName || "Practitioner",
                   )
                 }
-                className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-50"
+                leadingIcon={
+                  reinstatingId === practitionerGovernanceTarget.practitionerId ? (
+                    <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <IconShieldCheck className="h-3.5 w-3.5" />
+                  )
+                }
+                className="w-full"
               >
-                {reinstatingId === practitionerGovernanceTarget.practitionerId ? (
-                  <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <IconShieldCheck className="h-3.5 w-3.5" />
-                )}
-                <span>Reinstate Practitioner Across Clinics</span>
-              </button>
+                Reinstate Practitioner Across Clinics
+              </Button>
             </div>
           ) : (
             <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-3 space-y-2.5">
@@ -1828,9 +1869,9 @@ function VerificationDetailMetadataAndActions({
                 <VerificationStatusBadge status="Verified" />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="suspend-reason" className="block text-xs font-semibold text-text">
+                <Text as="label" htmlFor="suspend-reason" className="text-xs font-semibold text-text">
                   Compliance Suspension Reason *
-                </label>
+                </Text>
                 <textarea
                   id="suspend-reason"
                   value={suspendReason}
@@ -1852,8 +1893,9 @@ function VerificationDetailMetadataAndActions({
                   </p>
                 ) : null}
               </div>
-              <button
-                type="button"
+              <Button
+                variant="danger"
+                size="md"
                 disabled={suspendingId === practitionerGovernanceTarget.practitionerId}
                 onClick={() =>
                   requestSuspendFromPanel(
@@ -1861,15 +1903,17 @@ function VerificationDetailMetadataAndActions({
                     practitionerGovernanceTarget.displayName || practitionerName || "Practitioner",
                   )
                 }
-                className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-50"
+                leadingIcon={
+                  suspendingId === practitionerGovernanceTarget.practitionerId ? (
+                    <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <IconBan className="h-3.5 w-3.5" />
+                  )
+                }
+                className="w-full"
               >
-                {suspendingId === practitionerGovernanceTarget.practitionerId ? (
-                  <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <IconBan className="h-3.5 w-3.5" />
-                )}
-                <span>Suspend Practitioner Across Clinics</span>
-              </button>
+                Suspend Practitioner Across Clinics
+              </Button>
             </div>
           )
         ) : null}
@@ -1926,11 +1970,11 @@ function VerificationDetailMetadataAndActions({
             </p>
 
             <div className="space-y-1.5">
-              <label htmlFor="governance-confirm-reason" className="block text-xs font-semibold text-text">
+              <Text as="label" htmlFor="governance-confirm-reason" className="text-xs font-semibold text-text">
                 {governanceConfirmDialog.mode === "suspend"
                   ? "Compliance Suspension Reason *"
                   : "Compliance Reinstatement Reason *"}
-              </label>
+              </Text>
               <textarea
                 id="governance-confirm-reason"
                 value={governanceConfirmDialog.reason}
@@ -1961,37 +2005,34 @@ function VerificationDetailMetadataAndActions({
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="md"
                 disabled={Boolean(suspendingId || reinstatingId)}
                 onClick={() => setGovernanceConfirmDialog(null)}
-                className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant={governanceConfirmDialog.mode === "suspend" ? "danger" : "primary"}
+                size="md"
                 disabled={Boolean(suspendingId || reinstatingId)}
                 onClick={() => void confirmGovernanceAction()}
-                className={`inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50 ${
-                  governanceConfirmDialog.mode === "suspend"
-                    ? "bg-red-600 hover:bg-red-700"
-                    : "bg-primary hover:bg-primary-hover"
-                }`}
+                leadingIcon={
+                  suspendingId || reinstatingId ? (
+                    <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                  ) : governanceConfirmDialog.mode === "suspend" ? (
+                    <IconBan className="h-3.5 w-3.5" />
+                  ) : (
+                    <IconShieldCheck className="h-3.5 w-3.5" />
+                  )
+                }
+                className="px-5"
               >
-                {suspendingId || reinstatingId ? (
-                  <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                ) : governanceConfirmDialog.mode === "suspend" ? (
-                  <IconBan className="h-3.5 w-3.5" />
-                ) : (
-                  <IconShieldCheck className="h-3.5 w-3.5" />
-                )}
-                <span>
-                  {governanceConfirmDialog.mode === "suspend"
-                    ? "Confirm Suspension"
-                    : "Confirm Reinstatement"}
-                </span>
-              </button>
+                {governanceConfirmDialog.mode === "suspend"
+                  ? "Confirm Suspension"
+                  : "Confirm Reinstatement"}
+              </Button>
             </div>
           </div>
         </div>
@@ -2130,15 +2171,16 @@ export function VerificationDetailWorkspace({
             <span>Back to Directory Verifications</span>
           </a>
 
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={loading}
             onClick={() => void loadDetail()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+            leadingIcon={<IconRefresh className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />}
+            className="rounded-xl"
           >
-            <IconRefresh className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            <span>Refresh</span>
-          </button>
+            Refresh
+          </Button>
         </div>
 
         {detail ? (
@@ -2156,9 +2198,9 @@ export function VerificationDetailWorkspace({
                   <VerificationStatusBadge status="Suspended" />
                 ) : null}
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-text truncate">
+              <Text as="h1" className="text-2xl font-bold tracking-tight text-text">
                 {detail.facilityName}
-              </h1>
+              </Text>
               <div className="flex items-center gap-1.5 flex-wrap text-xs text-text-muted">
                 <span>Workspace:</span>
                 {detail.tenantSlug ? (
@@ -2209,13 +2251,13 @@ export function VerificationDetailWorkspace({
             >
               Return to Queue
             </a>
-            <button
-              type="button"
+            <Button
+              variant="dangerSubtle"
+              size="xs"
               onClick={() => void loadDetail()}
-              className="px-3.5 py-1.5 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
             >
               Retry
-            </button>
+            </Button>
           </div>
         </div>
       ) : detail ? (
@@ -2247,38 +2289,31 @@ export function VerificationDetailWorkspace({
             </div>
 
             {proofTabs.length > 1 ? (
-              <div
-                className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-surface-muted border border-border"
-                role="tablist"
-                aria-label="Select credential proof document"
-              >
+              <TabList ariaLabel="Select credential proof document">
                 {proofTabs.map((tab) => {
                   const active = activeProofTab?.id === tab.id;
                   return (
-                    <button
+                    <TabButton
                       key={tab.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
+                      active={active}
                       onClick={() => setSelectedProofTabId(tab.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                        active
-                          ? "bg-surface text-text shadow-xs"
-                          : "text-text-muted hover:text-text"
-                      }`}
+                      badge={
+                        tab.isUpdated ? (
+                          <Chip
+                            tone="unstyled"
+                            size="custom"
+                            className={`px-1.5 py-0.5 text-[9px] border ${TONE_BADGE_CLASSES.warning}`}
+                          >
+                            Updated
+                          </Chip>
+                        ) : undefined
+                      }
                     >
-                      <span>{tab.tabLabel}</span>
-                      {tab.isUpdated ? (
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.warning}`}
-                        >
-                          Updated
-                        </span>
-                      ) : null}
-                    </button>
+                      {tab.tabLabel}
+                    </TabButton>
                   );
                 })}
-              </div>
+              </TabList>
             ) : null}
 
             {activeProofTab ? (
@@ -2353,7 +2388,9 @@ export function VerificationReviewDrawer({
                   <VerificationStatusBadge status="Suspended" />
                 ) : null}
               </div>
-              <h2 className="text-base font-bold text-text truncate">{detail.facilityName}</h2>
+              <Text as="h2" className="text-base font-bold text-text">
+                {detail.facilityName}
+              </Text>
               <div className="flex items-center gap-1.5 flex-wrap text-xs text-text-muted">
                 <span>Workspace:</span>
                 {detail.tenantSlug ? (
@@ -2377,14 +2414,15 @@ export function VerificationReviewDrawer({
             <div className="text-sm font-bold text-text">Verification Review</div>
           )}
         </div>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="iconSm"
           onClick={onClose}
           aria-label="Close review drawer"
-          className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-text-muted hover:text-text hover:bg-surface-muted transition-colors cursor-pointer shrink-0"
+          className="text-text-muted hover:text-text shrink-0"
         >
           <IconX className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
 
       {/* Body */}
@@ -2399,13 +2437,13 @@ export function VerificationReviewDrawer({
           <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400 text-xs space-y-2">
             <div className="font-bold">Unable to load verification request</div>
             <p>{error}</p>
-            <button
-              type="button"
+            <Button
+              variant="dangerSubtle"
+              size="xs"
               onClick={loadDetail}
-              className="px-3 py-1.5 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
             >
               Retry
-            </button>
+            </Button>
           </div>
         ) : detail ? (
           <VerificationDetailMetadataAndActions

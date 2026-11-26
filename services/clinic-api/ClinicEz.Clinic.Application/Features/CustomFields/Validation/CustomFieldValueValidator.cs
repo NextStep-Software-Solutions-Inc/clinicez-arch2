@@ -24,7 +24,9 @@ public sealed record PatientStaticContext(
     public static PatientStaticContext FromPatient(Patient patient)
     {
         var today = CustomFieldValueValidator.GetTodayInClinic();
-        var age = CalculateAge(patient.DateOfBirth, today);
+        var age = patient.DateOfBirth.HasValue
+            ? CalculateAge(patient.DateOfBirth.Value, today)
+            : (int?)null;
         return new PatientStaticContext(
             Sex: patient.Sex.ToString(),
             CivilStatus: patient.CivilStatus?.ToString(),

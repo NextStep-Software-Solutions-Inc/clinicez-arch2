@@ -162,6 +162,7 @@ GitHub Actions Vercel deployment workflows (`deploy-admin-web-dev.yml` / `deploy
 | Variable | Purpose |
 |---|---|
 | `VITE_PORTAL_API_URL` | Portal API base URL (`https://portal-api.<base domain>/api/v1`). |
+| `VITE_V1_SYNC_API_URL` | Optional Classic (v1) → v2 Migration & Sync API base URL (e.g. `https://v1-sync.api.<base domain>`). Automatically derived from `VITE_PORTAL_API_URL` (`portal.*` → `v1-sync.*`) when omitted. |
 | `VITE_BASE_DOMAIN` | Platform base domain (`<base domain>`) used to construct external tenant workspace (`https://<slug>.<base domain>`) and public blog links (`https://<base domain>/blogs/<slug>`). |
 | `VITE_PORTAL_WEB_URL` | Optional explicit Tenant Portal origin override for local dev (default `http://localhost:3000`). |
 | `VITE_MARKETING_WEB_URL` | Optional explicit Public Marketing Web origin override for local dev (default `http://localhost:3002`). |

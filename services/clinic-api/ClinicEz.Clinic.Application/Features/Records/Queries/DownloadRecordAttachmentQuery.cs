@@ -12,13 +12,24 @@ namespace ClinicEz.Clinic.Application.Features.Records.Queries;
 public sealed record DownloadRecordAttachmentResult(
     byte[] FileBytes,
     string ContentType,
-    string FileName
+    string FileName,
+    string? ExternalRedirectUrl = null
 );
 
 public sealed record DownloadRecordAttachmentQuery(Guid AttachmentId) : IRequest<DownloadRecordAttachmentResult?>;
 
 public sealed class DownloadRecordAttachmentQueryHandler : IRequestHandler<DownloadRecordAttachmentQuery, DownloadRecordAttachmentResult?>
 {
+    private static readonly System.Collections.Generic.HashSet<string> AllowedLegacyExternalHosts =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "clinicezstorage.blob.core.windows.net",
+            "clinicez.blob.core.windows.net",
+            "drive.google.com",
+            "docs.google.com",
+            "lh3.googleusercontent.com"
+        };
+
     private readonly IRepository<RecordAttachment> _attachmentRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IClinicEncryptionService _encryptionService;
@@ -48,6 +59,17 @@ public sealed class DownloadRecordAttachmentQueryHandler : IRequestHandler<Downl
         if (_clinicContext.ClinicId != Guid.Empty && attachment.ClinicId != _clinicContext.ClinicId)
         {
             return null;
+        }
+
+        // Legacy external URL passthrough (EncryptionAlgorithm == "NONE" on allowlisted HTTPS hosts)
+        if (IsAllowedLegacyExternalUrl(attachment.EncryptionAlgorithm, attachment.StorageUri))
+        {
+            return new DownloadRecordAttachmentResult(
+                Array.Empty<byte>(),
+                string.IsNullOrWhiteSpace(attachment.ContentType) ? "application/octet-stream" : attachment.ContentType,
+                attachment.FileName,
+                attachment.StorageUri.Trim()
+            );
         }
 
         // Check if file exists in storage
@@ -87,5 +109,22 @@ public sealed class DownloadRecordAttachmentQueryHandler : IRequestHandler<Downl
             string.IsNullOrWhiteSpace(attachment.ContentType) ? "application/octet-stream" : attachment.ContentType,
             attachment.FileName
         );
+    }
+
+    public static bool IsAllowedLegacyExternalUrl(string? encryptionAlgorithm, string? storageUri)
+    {
+        if (!string.Equals(encryptionAlgorithm, "NONE", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(storageUri))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(storageUri.Trim(), UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+               && AllowedLegacyExternalHosts.Contains(uri.Host);
     }
 }

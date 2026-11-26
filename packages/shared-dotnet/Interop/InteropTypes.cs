@@ -77,6 +77,10 @@ public static class InteropTypes
     public const string ClinicalImmunizationAdministered = "clinical.immunization.administered";
     /// <summary>Portal -> clinic. Payload: <c>PatientJoinRequestedPayload</c> (public join link registration request with document quarantine).</summary>
     public const string PatientJoinRequested = "patient.join.requested";
+    /// <summary>Patient-api -> clinic. Payload: <c>PatientLinkRequestedPayload</c> (staff-verified patient-to-clinic chart linkage request).</summary>
+    public const string PatientLinkRequested = "patient.link.requested";
+    /// <summary>Clinic -> patient-api. Payload: <c>ClinicLinkResolvedPayload</c> (staff approval or rejection of a chart linkage request).</summary>
+    public const string ClinicLinkResolved = "clinic.link.resolved";
     /// <summary>Clinic -> patient-api. Payload: <c>PatientQueueAlertPayload</c> (called to room or approaching turn queue alert).</summary>
     public const string PatientQueueAlert = "patient.queue.alert";
     /// <summary>Clinic -> patient-api. Payload: <c>PatientAppointmentAlertPayload</c> (appointment lifecycle and reminder push alert).</summary>
@@ -132,6 +136,16 @@ public static class InteropTypes
     public const string YakapSubmissionRequested = "yakap.submission.requested";
     /// <summary>Clinic -> portal. Payload: <c>YakapSubmissionRespondedPayload</c>.</summary>
     public const string YakapSubmissionResponded = "yakap.submission.responded";
+
+    // Patient Identity Directory (Portal <-> Patient-api request/reply through the hub — non-clinical metadata only)
+    /// <summary>Portal -> patient-api. Payload: <c>PatientIdentityDirectoryRequestedPayload</c>. Reply type: <see cref="PatientIdentityDirectoryResponded"/>.</summary>
+    public const string PatientIdentityDirectoryRequested = "patient.identity.directory.requested";
+    /// <summary>Patient-api -> portal. Payload: <c>PatientIdentityDirectoryRespondedPayload</c>.</summary>
+    public const string PatientIdentityDirectoryResponded = "patient.identity.directory.responded";
+    /// <summary>Portal -> patient-api. Payload: <c>PatientIdentityReconcileRequestedPayload</c>. Reply type: <see cref="PatientIdentityReconcileResponded"/>.</summary>
+    public const string PatientIdentityReconcileRequested = "patient.identity.reconcile.requested";
+    /// <summary>Patient-api -> portal. Payload: <c>PatientIdentityReconcileRespondedPayload</c>.</summary>
+    public const string PatientIdentityReconcileResponded = "patient.identity.reconcile.responded";
 
     // Communications (comms-api <-> facilities / patient-api / portal-api)
     /// <summary>Facility service -> comms. Payload: <c>CommsEligibilityGrantedPayload</c>.</summary>

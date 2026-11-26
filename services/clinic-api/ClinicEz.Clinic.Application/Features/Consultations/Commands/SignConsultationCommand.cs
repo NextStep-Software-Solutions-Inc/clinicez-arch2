@@ -630,8 +630,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
                 FullName = encounter.PatientName,
                 PhilHealthPin = patient.PhilHealthNumber,
                 NationalId = patient.SeniorCitizenId ?? patient.PwdId,
-                DateOfBirth = patient.DateOfBirth.ToString("yyyy-MM-dd"),
-                Age = PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)),
+                DateOfBirth = patient.DateOfBirth?.ToString("yyyy-MM-dd") ?? string.Empty,
+                Age = patient.DateOfBirth.HasValue ? PatientAge.InYears(patient.DateOfBirth.Value, DateOnly.FromDateTime(DateTime.UtcNow)) : 0,
                 Gender = patient.Sex.ToString(),
                 Allergies = patient.Allergies != null && patient.Allergies.Count > 0
                     ? string.Join(", ", patient.Allergies.Select(a => a.Allergen))
@@ -807,8 +807,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
                                     FullName = order.PatientName,
                                     PhilHealthPin = patient.PhilHealthNumber,
                                     NationalId = patient.SeniorCitizenId ?? patient.PwdId,
-                                    DateOfBirth = patient.DateOfBirth.ToString("yyyy-MM-dd"),
-                                    Age = PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)),
+                                    DateOfBirth = patient.DateOfBirth?.ToString("yyyy-MM-dd") ?? string.Empty,
+                                    Age = patient.DateOfBirth.HasValue ? PatientAge.InYears(patient.DateOfBirth.Value, DateOnly.FromDateTime(DateTime.UtcNow)) : 0,
                                     Gender = patient.Sex.ToString(),
                                     ContactNumber = patient.ContactNumber
                                 },

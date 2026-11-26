@@ -137,10 +137,10 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
         {
             var patient = await _patientRepository.Query(p => p.Id == queueItem.PatientId && p.ClinicId == _clinicContext.ClinicId)
                 .FirstOrDefaultAsync(cancellationToken);
-            if (patient != null)
+            if (patient?.DateOfBirth is { } dob)
             {
                 var evaluation = _zScoreCalculator.Calculate(
-                    patient.DateOfBirth,
+                    dob,
                     patient.Sex.ToString(),
                     effectiveLengthHeight.Value,
                     request.WeightKg.Value,

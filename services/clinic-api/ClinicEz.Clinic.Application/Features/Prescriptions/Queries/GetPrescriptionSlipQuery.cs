@@ -99,7 +99,9 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
         var uploadUrl = rxVerifyUrl;
         var qrPayload = rxVerifyUrl;
 
-        var patientAge = patient != null ? Math.Max(0, DateTime.UtcNow.Year - patient.DateOfBirth.Year) : 35;
+        var patientAge = patient != null
+            ? (patient.DateOfBirth is { } dob ? Math.Max(0, DateTime.UtcNow.Year - dob.Year) : 0)
+            : 35;
 
         return new PrescriptionSlipDto(
             encounter.Id,

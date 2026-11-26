@@ -80,7 +80,7 @@ public sealed class YakapFpeWireBuilder : IYakapWireBuilder<YakapFpeContext, str
             errors.Add("Patient first name is required.");
         }
 
-        if (context.Patient.DateOfBirth == default || context.Patient.DateOfBirth > DateOnly.FromDateTime(DateTime.UtcNow))
+        if (!context.Patient.DateOfBirth.HasValue || context.Patient.DateOfBirth.Value == default || context.Patient.DateOfBirth.Value > DateOnly.FromDateTime(DateTime.UtcNow))
         {
             errors.Add("Patient date of birth must be a valid past date.");
         }
@@ -103,7 +103,7 @@ public sealed class YakapFpeWireBuilder : IYakapWireBuilder<YakapFpeContext, str
             ["pPatientFName"] = p.FirstName.Trim(),
             ["pPatientMName"] = p.MiddleName?.Trim() ?? string.Empty,
             ["pPatientExtName"] = p.Suffix?.Trim() ?? string.Empty,
-            ["pPatientDob"] = p.DateOfBirth.ToString("yyyy-MM-dd"),
+            ["pPatientDob"] = p.DateOfBirth?.ToString("yyyy-MM-dd") ?? string.Empty,
             ["pPatientSex"] = MapSexToStatutory(p.Sex),
             ["pCivilStatus"] = MapCivilStatusToStatutory(p.CivilStatus),
             ["pContactNo"] = p.ContactNumber?.Trim() ?? p.AlternateContactNumber?.Trim() ?? string.Empty,

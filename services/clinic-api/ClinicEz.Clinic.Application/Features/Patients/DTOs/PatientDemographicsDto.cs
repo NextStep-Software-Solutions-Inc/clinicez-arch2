@@ -6,8 +6,8 @@ namespace ClinicEz.Clinic.Application.Features.Patients.DTOs;
 /// Verified demographics and statutory identification badges for the glanceable patient summary spine and full chart.
 /// </summary>
 public sealed record PatientDemographicsDto(
-    DateOnly Dob,
-    int Age,
+    DateOnly? Dob,
+    int? Age,
     string Sex,
     string? CivilStatus,
     string ContactNumber,
@@ -34,7 +34,7 @@ public sealed record PatientDemographicsDto(
 )
 {
     /// <summary>Parity alias for full date of birth property naming.</summary>
-    public DateOnly DateOfBirth => Dob;
+    public DateOnly? DateOfBirth => Dob;
 
     /// <summary>Parity alias for PhilHealth ATC property naming.</summary>
     public string? Atc => PhilHealthAtc;

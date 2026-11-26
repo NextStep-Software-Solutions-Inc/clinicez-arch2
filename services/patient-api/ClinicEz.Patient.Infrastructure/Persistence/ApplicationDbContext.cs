@@ -181,7 +181,14 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext, IDataPr
                     break;
                 case EntityState.Modified:
                     entry.Entity.UpdatedAt = utcNow;
-                    entry.Entity.UpdatedBy = actor;
+                    var updatedByProp = entry.Property(e => e.UpdatedBy);
+                    var hasExplicitActorOverride = updatedByProp.IsModified
+                        && !string.IsNullOrWhiteSpace(entry.Entity.UpdatedBy)
+                        && !string.Equals(updatedByProp.OriginalValue, entry.Entity.UpdatedBy, StringComparison.Ordinal);
+                    if (!hasExplicitActorOverride)
+                    {
+                        entry.Entity.UpdatedBy = actor;
+                    }
                     break;
             }
         }

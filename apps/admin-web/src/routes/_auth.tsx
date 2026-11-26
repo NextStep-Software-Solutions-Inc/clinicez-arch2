@@ -5,6 +5,7 @@ import { Route as rootRoute } from './__root';
 import { MfaGate } from '@/components/MfaGate';
 import { CommandPalette } from '@/components/CommandPalette';
 import { ClinicEzLogo, ClinicEzMark } from '@/components/ClinicEzLogo';
+import { Button, Chip, Text } from '@/components/ui';
 import { setupAxiosInterceptors } from '@/lib/api';
 import { getEnvironmentBadge, readRuntimeEnvironmentSignals } from '@/lib/envBadge';
 import { hasVerifiedMfa } from '@/lib/mfaGuard';
@@ -20,10 +21,13 @@ import {
   IconShieldOff,
   IconUserShield,
   IconSettings,
+  IconDatabaseImport,
+  IconId,
   IconSun,
   IconMoon,
   IconLogout,
   IconChevronRight,
+  IconLayoutSidebarLeftExpand,
   IconShield,
   IconMenu2,
   IconX,
@@ -73,6 +77,8 @@ export const SIDEBAR_GROUPS: NavGroup[] = [
     items: [
       { label: 'Roles & Access', to: '/roles', icon: IconShieldCheck },
       { label: 'Admin Users', to: '/users', icon: IconUserShield },
+      { label: 'Patient Identities', to: '/patient-identities', icon: IconId },
+      { label: 'v1 Migration & Sync', to: '/v1-sync', icon: IconDatabaseImport },
       { label: 'Settings', to: '/settings', icon: IconSettings },
     ],
   },
@@ -205,12 +211,17 @@ function AuthLayout() {
   const currentPath = location.pathname;
 
   // Breadcrumbs calculation
+  const BREADCRUMB_LABELS: Record<string, string> = {
+    'patient-identities': 'Patient Identities',
+    'v1-sync': 'v1 Migration & Sync',
+  };
   const pathSegments = currentPath.split('/').filter(Boolean);
   const breadcrumbItems = [
     { label: 'Workstation', to: '/' },
     ...pathSegments.map((segment, index) => {
       const url = `/${pathSegments.slice(0, index + 1).join('/')}`;
-      const title = segment.charAt(0).toUpperCase() + segment.slice(1);
+      const title =
+        BREADCRUMB_LABELS[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1);
       return { label: title, to: url };
     }),
   ];
@@ -226,48 +237,68 @@ function AuthLayout() {
 
         {/* Desktop Sidebar */}
         <aside
-          className={`hidden md:flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200 z-30 ${
+          className={`hidden md:flex flex-col shrink-0 sticky top-0 h-screen self-start overflow-hidden border-r border-sidebar-border bg-sidebar transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] z-30 ${
             sidebarOpen ? 'w-64' : 'w-20'
           }`}
         >
           {/* Logo / Workstation Header */}
-          <div
-            className={`h-16 flex items-center justify-between border-b border-sidebar-border ${
-              sidebarOpen ? 'px-4' : 'px-2.5'
-            }`}
-          >
-            <Link to="/" className="flex items-center min-w-0">
+          <div className="h-16 shrink-0 flex items-center border-b border-sidebar-border pl-[21.5px] pr-3 overflow-hidden">
+            <Link
+              to="/"
+              className="flex items-center min-w-0 flex-1 overflow-hidden"
+              title={!sidebarOpen ? 'Clinic EZ Governance' : undefined}
+            >
               <ClinicEzLogo
                 variant="squircle"
-                markClassName={`${sidebarOpen ? 'h-9 w-9' : 'h-8 w-8'} shrink-0 drop-shadow-xs`}
-                textClassName="font-bold text-sm tracking-tight text-text leading-tight"
+                className="inline-flex items-center gap-2.5 min-w-0"
+                markClassName="h-9 w-9 shrink-0 drop-shadow-xs"
+                textClassName="font-bold text-sm tracking-tight whitespace-nowrap text-text leading-tight"
                 subtitle="Governance"
-                showWordmark={sidebarOpen}
-              />
-            </Link>
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-text-muted hover:text-text p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
-              aria-label="Toggle sidebar"
-            >
-              <IconChevronRight
-                className={`h-4 w-4 transition-transform duration-200 ${
-                  sidebarOpen ? 'rotate-180' : ''
+                showWordmark={true}
+                wordmarkClassName={`transition-opacity duration-200 ${
+                  sidebarOpen ? 'opacity-100 delay-75' : 'opacity-0 pointer-events-none'
                 }`}
               />
-            </button>
+            </Link>
+            <Button
+              variant="unstyled"
+              size="custom"
+              onClick={() => setSidebarOpen(false)}
+              disabled={!sidebarOpen}
+              tabIndex={sidebarOpen ? 0 : -1}
+              aria-hidden={!sidebarOpen}
+              className={`h-7 rounded-lg text-text-muted hover:text-text hover:bg-surface-muted transition-[width,opacity,margin] duration-200 shrink-0 ${
+                sidebarOpen ? 'w-7 opacity-100 ml-2' : 'w-0 opacity-0 ml-0 pointer-events-none'
+              }`}
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              <IconChevronRight className="h-4 w-4 rotate-180 shrink-0" />
+            </Button>
           </div>
 
           {/* Grouped Nav Items */}
-          <nav className="flex-1 overflow-y-auto p-3 space-y-4">
-            {SIDEBAR_GROUPS.map((group) => (
+          <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2.5 px-5 space-y-2.5">
+            {SIDEBAR_GROUPS.map((group, groupIdx) => (
               <div key={group.name} className="space-y-1">
-                {sidebarOpen && (
-                  <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                <div className="relative h-5 flex items-center overflow-hidden">
+                  <span
+                    aria-hidden={!sidebarOpen}
+                    className={`pl-3 text-[10px] font-bold uppercase tracking-wider text-text-muted whitespace-nowrap transition-opacity duration-200 ${
+                      sidebarOpen ? 'opacity-100 delay-75' : 'opacity-0 pointer-events-none'
+                    }`}
+                  >
                     {group.name}
-                  </div>
-                )}
+                  </span>
+                  {groupIdx > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute inset-x-1 top-1/2 -translate-y-1/2 h-px bg-sidebar-border/80 transition-opacity duration-200 ${
+                        sidebarOpen ? 'opacity-0' : 'opacity-100 delay-75'
+                      }`}
+                    />
+                  )}
+                </div>
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive =
@@ -279,15 +310,25 @@ function AuthLayout() {
                     <Link
                       key={item.to}
                       to={item.to}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                      className={`flex items-center h-9 w-full rounded-xl text-xs font-medium overflow-hidden transition-colors duration-150 ${
                         isActive
                           ? 'bg-primary text-white shadow-xs'
                           : 'text-text-secondary hover:bg-surface-muted hover:text-text'
                       }`}
                       title={!sidebarOpen ? item.label : undefined}
+                      aria-label={!sidebarOpen ? item.label : undefined}
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      {sidebarOpen && <span>{item.label}</span>}
+                      <span className="w-[39px] h-9 shrink-0 flex items-center justify-center">
+                        <Icon className="h-4 w-4 shrink-0" />
+                      </span>
+                      <span
+                        aria-hidden={!sidebarOpen}
+                        className={`whitespace-nowrap pr-3 transition-opacity duration-200 ${
+                          sidebarOpen ? 'opacity-100 delay-75' : 'opacity-0'
+                        }`}
+                      >
+                        {item.label}
+                      </span>
                     </Link>
                   );
                 })}
@@ -296,16 +337,30 @@ function AuthLayout() {
           </nav>
 
           {/* Footer Environment & Security Status */}
-          <div className="p-4 border-t border-sidebar-border space-y-2">
-            {sidebarOpen ? (
-              <div className="flex items-center justify-between text-[11px] text-text-muted">
+          <div className="h-12 shrink-0 px-5 border-t border-sidebar-border flex items-center overflow-hidden">
+            <div className="relative w-full h-full flex items-center">
+              <div
+                aria-hidden={!sidebarOpen}
+                className={`w-full flex items-center justify-between text-[11px] text-text-muted whitespace-nowrap transition-opacity duration-200 ${
+                  sidebarOpen ? 'opacity-100 delay-75' : 'opacity-0 pointer-events-none'
+                }`}
+              >
                 <span>Security Engine</span>
                 <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   Active
                 </span>
               </div>
-            ) : null}
+              <div
+                aria-hidden={sidebarOpen}
+                title="Security Engine: Active"
+                className={`absolute left-0 inset-y-0 w-[39px] flex items-center justify-center transition-opacity duration-200 ${
+                  sidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100 delay-75'
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full bg-emerald-500 ring-4 ring-emerald-500/15" />
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -324,13 +379,15 @@ function AuthLayout() {
                   textClassName="font-bold text-sm tracking-tight text-text leading-tight"
                   subtitle="Governance"
                 />
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="iconSm"
                   onClick={() => setMobileDrawerOpen(false)}
-                  className="p-1.5 rounded-lg text-text-muted hover:text-text"
+                  aria-label="Close mobile menu"
+                  title="Close menu"
                 >
                   <IconX className="h-5 w-5" />
-                </button>
+                </Button>
               </div>
               <nav className="flex-1 overflow-y-auto space-y-4">
                 {SIDEBAR_GROUPS.map((group) => (
@@ -369,117 +426,194 @@ function AuthLayout() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Sticky Command Bar */}
-          <header className="h-16 sticky top-0 z-20 bg-surface/80 backdrop-blur-md border-b border-border flex items-center justify-between px-6">
-            <div className="flex items-center gap-4 min-w-0">
-              <button
-                type="button"
+          <header className="h-16 sticky top-0 z-20 bg-surface/80 backdrop-blur-md border-b border-border flex items-center justify-between gap-3 px-4 lg:px-6">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <Button
+                variant="unstyled"
+                size="custom"
                 onClick={() => setMobileDrawerOpen(true)}
-                className="md:hidden p-2 rounded-xl text-text-muted hover:text-text hover:bg-surface-muted"
+                className="md:hidden p-2 rounded-xl text-text-muted hover:text-text hover:bg-surface-muted shrink-0"
                 aria-label="Open mobile menu"
+                title="Open menu"
               >
                 <IconMenu2 className="h-5 w-5" />
-              </button>
+              </Button>
 
-              {/* Dynamic Breadcrumbs Trail */}
-              <nav className="hidden sm:flex items-center gap-1.5 text-xs text-text-muted truncate">
-                {breadcrumbItems.map((item, idx) => (
-                  <React.Fragment key={item.to}>
-                    {idx > 0 && <span className="text-text-muted/60">/</span>}
-                    <Link
-                      to={item.to}
-                      className={`truncate ${
-                        idx === breadcrumbItems.length - 1
-                          ? 'font-semibold text-text'
-                          : 'hover:text-text'
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  </React.Fragment>
-                ))}
-              </nav>
+              <div className="flex items-center min-w-0 shrink-0">
+                <Button
+                  variant="unstyled"
+                  size="custom"
+                  onClick={() => setSidebarOpen(true)}
+                  disabled={sidebarOpen}
+                  tabIndex={sidebarOpen ? -1 : 0}
+                  aria-hidden={sidebarOpen}
+                  className={`hidden md:inline-flex h-8 rounded-xl text-text-muted hover:text-text hover:bg-surface-muted border border-transparent hover:border-border transition-[width,opacity,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] shrink-0 ${
+                    sidebarOpen
+                      ? 'w-0 opacity-0 mr-0 border-0 pointer-events-none'
+                      : 'w-8 opacity-100 mr-3'
+                  }`}
+                  aria-label="Expand sidebar"
+                  title="Expand sidebar"
+                >
+                  <IconLayoutSidebarLeftExpand className="h-4 w-4 shrink-0" />
+                </Button>
 
-              {/* ⌘K Command Palette Quick Trigger */}
-              <button
-                type="button"
+                {/* Dynamic Breadcrumbs Trail */}
+                <nav
+                  className="hidden sm:flex items-center gap-1.5 text-xs text-text-muted min-w-0 shrink-0 max-w-[170px] xl:max-w-[260px]"
+                  aria-label="Breadcrumb"
+                >
+                  {breadcrumbItems.map((item, idx) => {
+                    const isLast = idx === breadcrumbItems.length - 1;
+                    return (
+                      <React.Fragment key={item.to}>
+                        {idx > 0 && (
+                          <span
+                            className={`text-text-muted/60 shrink-0 ${
+                              idx === 1 && breadcrumbItems.length > 1 ? 'hidden xl:inline' : ''
+                            }`}
+                          >
+                            /
+                          </span>
+                        )}
+                        <Link
+                          to={item.to}
+                          title={item.label}
+                          className={`truncate whitespace-nowrap ${
+                            isLast
+                              ? 'font-semibold text-text'
+                              : 'hover:text-text hidden xl:inline'
+                          }`}
+                        >
+                          {item.label}
+                        </Link>
+                      </React.Fragment>
+                    );
+                  })}
+                </nav>
+              </div>
+
+              {/* ⌘K Command Palette Quick Trigger — flexes cleanly across available header space */}
+              <Button
+                variant="unstyled"
+                size="custom"
                 onClick={() => setCommandPaletteOpen(true)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-muted border border-border text-xs text-text-muted hover:text-text hover:border-primary/40 transition-colors cursor-pointer"
+                title="Search or jump to any section (⌘K)"
+                aria-label="Search or jump to any section"
+                className="flex-1 max-w-md justify-between gap-2 h-8 px-3 rounded-xl bg-surface-muted border border-border text-xs text-text-muted hover:text-text hover:border-primary/40"
               >
-                <IconSearch className="h-3.5 w-3.5" />
-                <span className="hidden lg:inline">Search or jump to...</span>
-                <span className="lg:hidden">Search</span>
-                <kbd className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-surface border border-border">
+                <span className="flex items-center gap-2 min-w-0">
+                  <IconSearch className="h-3.5 w-3.5 shrink-0" />
+                  <Text className="text-inherit" tooltip={false}>
+                    Search or jump to...
+                  </Text>
+                </span>
+                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-surface border border-border shrink-0">
                   <IconCommand className="h-3 w-3 inline" />
                   <span>K</span>
                 </kbd>
-              </button>
+              </Button>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Dynamic Environment Badge */}
               {envBadge === 'LOCAL' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <Chip
+                  tone="success"
+                  size="custom"
+                  dot
+                  title="Local environment"
+                  className="h-8 px-2.5 text-[11px] shrink-0"
+                >
                   LOCAL
-                </span>
+                </Chip>
               )}
               {envBadge === 'DEV' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                <Chip
+                  tone="warning"
+                  size="custom"
+                  dot
+                  title="Development environment"
+                  className="h-8 px-2.5 text-[11px] shrink-0"
+                >
                   DEV
-                </span>
+                </Chip>
               )}
               {envBadge === 'PROD' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary-subtle text-primary border border-primary/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                <Chip
+                  tone="primary"
+                  size="custom"
+                  dot
+                  title="Production environment"
+                  className="h-8 px-2.5 text-[11px] shrink-0"
+                >
                   PROD
-                </span>
+                </Chip>
               )}
 
               {/* Dynamic MFA / Session Status Indicator */}
               {hasVerifiedMfa(user) ? (
-                <div
-                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-surface-muted border border-border text-text-secondary"
-                  title="Admin session authenticated with MFA protection"
+                <Chip
+                  tone="neutral"
+                  size="custom"
+                  className="justify-center h-8 w-8 xl:w-auto xl:px-2.5 text-[11px] font-medium bg-surface-muted border-border text-text-secondary shrink-0"
+                  title="MFA Active — Admin session authenticated with MFA protection"
+                  aria-label="MFA Active"
+                  leadingIcon={<IconShieldCheck className="h-4 w-4 text-primary" />}
                 >
-                  <IconShieldCheck className="h-3.5 w-3.5 text-primary" />
-                  <span>MFA Active</span>
-                </div>
+                  <span className="hidden xl:inline">MFA Active</span>
+                </Chip>
               ) : (
-                <div
-                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-surface-muted border border-border text-text-muted"
-                  title="Session active without MFA factor enrolled"
+                <Chip
+                  tone="neutral"
+                  size="custom"
+                  className="justify-center h-8 w-8 xl:w-auto xl:px-2.5 text-[11px] font-medium bg-surface-muted border-border text-text-muted shrink-0"
+                  title="MFA Inactive — Session active without MFA factor enrolled"
+                  aria-label="MFA Inactive"
+                  leadingIcon={<IconShieldOff className="h-4 w-4 text-text-muted" />}
                 >
-                  <IconShieldOff className="h-3.5 w-3.5 text-text-muted" />
-                  <span>MFA Inactive</span>
-                </div>
+                  <span className="hidden xl:inline">MFA Inactive</span>
+                </Chip>
               )}
 
               {/* Theme Toggle */}
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={toggleTheme}
-                className="p-2 rounded-xl text-text-muted hover:text-text hover:bg-surface-muted transition-colors cursor-pointer"
+                className="rounded-xl shrink-0"
                 aria-label="Toggle theme"
+                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDarkMode ? (
                   <IconSun className="h-4 w-4 text-amber-400" />
                 ) : (
                   <IconMoon className="h-4 w-4" />
                 )}
-              </button>
+              </Button>
 
-              {/* User profile & Sign Out */}
+              {/* User profile (full name on xl+; compact monogram on smaller screens) */}
               {user && (
-                <div className="hidden sm:flex items-center gap-2 text-xs text-text-secondary pl-2 border-l border-border">
-                  <span className="font-medium text-text">
-                    {user.fullName || user.primaryEmailAddress?.emailAddress}
+                <div
+                  className="hidden sm:flex items-center gap-2 text-xs text-text-secondary pl-2 border-l border-border shrink-0"
+                  title={user.fullName || user.primaryEmailAddress?.emailAddress || ''}
+                >
+                  <span className="xl:hidden inline-flex items-center justify-center h-7 w-7 rounded-full bg-primary-subtle text-primary border border-primary/20 text-[11px] font-bold">
+                    {(user.fullName || user.primaryEmailAddress?.emailAddress || 'A')
+                      .trim()
+                      .charAt(0)
+                      .toUpperCase()}
                   </span>
+                  <Text className="hidden xl:inline font-medium text-text max-w-[150px]">
+                    {user.fullName || user.primaryEmailAddress?.emailAddress}
+                  </Text>
                 </div>
               )}
 
-              <button
-                type="button"
+              {/* Sign Out (icon-only on small/medium screens, icon + text on xl+) */}
+              <Button
+                variant="unstyled"
+                size="custom"
                 onClick={async () => {
                   try {
                     await signOut();
@@ -488,12 +622,13 @@ function AuthLayout() {
                   }
                   window.location.href = '/sign-in';
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-red-600 rounded-lg transition-colors cursor-pointer"
+                className="h-8 w-8 xl:w-auto xl:px-2.5 text-xs font-medium shrink-0 text-text-secondary hover:text-red-600 hover:bg-surface-muted rounded-xl"
                 title="Sign Out"
+                aria-label="Sign Out"
+                leadingIcon={<IconLogout className="h-4 w-4" />}
               >
-                <IconLogout className="h-4 w-4" />
-                <span className="hidden sm:inline">Sign Out</span>
-              </button>
+                <span className="hidden xl:inline">Sign Out</span>
+              </Button>
             </div>
           </header>
 

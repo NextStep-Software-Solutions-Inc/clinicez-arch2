@@ -69,7 +69,9 @@ public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublic
         var staffDoctor = await _staffRepo.Query(s => s.Id == encounter.DoctorId).FirstOrDefaultAsync(cancellationToken);
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
 
-        var patientAge = patient != null ? Math.Max(0, DateTime.UtcNow.Year - patient.DateOfBirth.Year) : 35;
+        var patientAge = patient != null
+            ? (patient.DateOfBirth is { } dob ? Math.Max(0, DateTime.UtcNow.Year - dob.Year) : 0)
+            : 35;
         var isAlreadyDispensed = encounter.RxDispenseStatus == PrescriptionDispenseStatus.DispensedAtPartnerPharmacy ||
                                  encounter.RxDispenseStatus == PrescriptionDispenseStatus.DispensedExternally;
 

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { setupV1SyncAxiosInterceptors } from './v1SyncApi';
 
 export function ensureApiPrefix(url?: string | null, prefix: string = '/api/v1'): string {
   const trimmed = (url ?? '').trim().replace(/\/+$/, '');
@@ -53,6 +54,7 @@ async function resolveAuthToken(): Promise<string | null> {
  */
 export const setupAxiosInterceptors = (getToken: () => Promise<string | null>) => {
   currentTokenGetter = getToken;
+  setupV1SyncAxiosInterceptors(getToken);
 
   if (isInterceptorSetup) return;
 

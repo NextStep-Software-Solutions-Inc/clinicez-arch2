@@ -252,9 +252,13 @@ internal static class HealthScreeningHelper
             warnings.Add("Complete Step 3: Physical Exam before doctor sign-off.");
         }
 
-        int ageYears = referenceDate.Year - patient.DateOfBirth.Year;
-        if (patient.DateOfBirth > referenceDate.AddYears(-ageYears)) ageYears--;
-        bool isAdult = ageYears >= 20;
+        bool isAdult = false;
+        if (patient.DateOfBirth is { } dob)
+        {
+            int ageYears = referenceDate.Year - dob.Year;
+            if (dob > referenceDate.AddYears(-ageYears)) ageYears--;
+            isAdult = ageYears >= 20;
+        }
         bool hasNcdAssessment = !isAdult || ncdAssessment != null;
         if (isAdult && ncdAssessment == null)
         {

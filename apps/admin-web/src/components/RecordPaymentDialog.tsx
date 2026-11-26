@@ -6,6 +6,7 @@ import {
   RecordManualPaymentResult,
 } from '@/services/admin.service';
 import { toast } from 'sonner';
+import { Button, Chip, SelectField, Tabs, Text } from '@/components/ui';
 import {
   IconLoader,
   IconCheck,
@@ -231,25 +232,30 @@ export function RecordPaymentDialog({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary-subtle text-primary">
+        <div className="flex items-center justify-between gap-3 p-5 border-b border-border">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2.5 rounded-xl bg-primary-subtle text-primary shrink-0">
               <IconCreditCard className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-text">Record Offline Manual Payment</h2>
-              <p className="text-xs text-text-muted mt-0.5">
+            <div className="min-w-0">
+              <Text as="h2" className="text-base font-bold text-text">
+                Record Offline Manual Payment
+              </Text>
+              <Text as="p" variant="muted" className="mt-0.5">
                 {clinicName} ({tenantSlug})
-              </p>
+              </Text>
             </div>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="iconSm"
             onClick={onClose}
-            className="p-1 rounded-lg text-text-muted hover:text-text cursor-pointer"
+            aria-label="Close payment dialog"
+            tooltip="Close"
+            className="text-text-muted hover:text-text shrink-0"
           >
             <IconX className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Content Body */}
@@ -305,26 +311,28 @@ export function RecordPaymentDialog({
               </div>
 
               <div className="pt-2 flex justify-end gap-3">
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="md"
                   onClick={() => {
                     navigator.clipboard.writeText(
                       `Invoice: ${successResult.invoiceNumber}\nReceipt: ${successResult.receiptNumber}\nReference: ${transactionReference || '—'}\nGross: ₱${amount}`
                     );
                     toast.success('Receipt details copied to clipboard');
                   }}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+                  leadingIcon={<IconCopy className="h-4 w-4" />}
+                  className="px-4"
                 >
-                  <IconCopy className="h-4 w-4" />
-                  <span>Copy Receipt Summary</span>
-                </button>
-                <button
-                  type="button"
+                  Copy Receipt Summary
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
                   onClick={onClose}
-                  className="px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer"
+                  className="px-5"
                 >
                   Close
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -333,71 +341,58 @@ export function RecordPaymentDialog({
               {/* Plan & Cycle Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Subscription Tier</label>
-                  <select
+                  <Text as="label" className="font-semibold text-text">Subscription Tier</Text>
+                  <SelectField
+                    ariaLabel="Subscription Tier"
                     value={planSlug}
-                    onChange={(e) => handlePlanChange(e.target.value)}
+                    onValueChange={handlePlanChange}
                     disabled={loadingPlans || submitting}
-                    className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
-                  >
-                    {plans.map((p) => (
-                      <option key={p.slug} value={p.slug}>
-                        {p.name} (Rank {p.rank})
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Select subscription tier..."
+                    searchable={false}
+                    options={plans.map((p) => ({
+                      value: p.slug,
+                      label: `${p.name} (Rank ${p.rank})`,
+                    }))}
+                  />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Billing Cadence</label>
-                  <div className="grid grid-cols-2 p-1 bg-surface-muted rounded-xl border border-border text-xs font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => handleCycleChange(false)}
-                      className={`py-1.5 rounded-lg transition-all cursor-pointer ${
-                        !isAnnual
-                          ? 'bg-surface text-text shadow-xs'
-                          : 'text-text-muted hover:text-text'
-                      }`}
-                    >
-                      Monthly
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCycleChange(true)}
-                      className={`py-1.5 rounded-lg transition-all cursor-pointer ${
-                        isAnnual
-                          ? 'bg-surface text-text shadow-xs'
-                          : 'text-text-muted hover:text-text'
-                      }`}
-                    >
-                      Annual
-                    </button>
-                  </div>
+                  <Text as="label" className="font-semibold text-text">Billing Cadence</Text>
+                  <Tabs
+                    ariaLabel="Billing Cadence"
+                    fullWidthUntil="always"
+                    value={isAnnual ? 'annual' : 'monthly'}
+                    onValueChange={(val) => handleCycleChange(val === 'annual')}
+                    items={[
+                      { value: 'monthly', label: 'Monthly' },
+                      { value: 'annual', label: 'Annual' },
+                    ]}
+                  />
                 </div>
               </div>
 
               {/* Payment Method Selector */}
               <div className="space-y-1.5">
-                <label className="font-semibold text-text">Payment Channel / Instrument</label>
+                <Text as="label" className="font-semibold text-text">Payment Channel / Instrument</Text>
                 <div className="grid grid-cols-1 gap-2">
                   {PAYMENT_METHODS.map((pm) => {
                     const Icon = pm.icon;
                     const isSelected = paymentMethod === pm.value;
                     return (
-                      <button
+                      <Button
                         key={pm.value}
-                        type="button"
+                        variant="unstyled"
+                        size="custom"
                         onClick={() => handlePaymentMethodChange(pm.value)}
-                        className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                        leadingIcon={<Icon className="h-4 w-4" />}
+                        className={`w-full justify-start gap-3 p-3 rounded-xl border text-left ${
                           isSelected
                             ? 'border-primary bg-primary-subtle text-primary'
                             : 'border-border bg-surface hover:bg-surface-muted text-text'
                         }`}
                       >
-                        <Icon className="h-4 w-4 shrink-0" />
                         <span className="font-medium">{pm.label}</span>
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -406,7 +401,7 @@ export function RecordPaymentDialog({
               {/* Amount & Reference */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Gross Amount (PHP)</label>
+                  <Text as="label" className="font-semibold text-text">Gross Amount (PHP)</Text>
                   <input
                     type="number"
                     value={amount}
@@ -419,9 +414,9 @@ export function RecordPaymentDialog({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">
+                  <Text as="label" className="font-semibold text-text">
                     Transaction / Check Ref # {paymentMethod !== "Cash" && paymentMethod !== "Promotional" && <span className="text-destructive">*</span>}
-                  </label>
+                  </Text>
                   <input
                     type="text"
                     value={transactionReference}
@@ -440,15 +435,15 @@ export function RecordPaymentDialog({
 
               {/* BIR VAT Breakdown (driven by live System Settings) */}
               <div className="p-3.5 rounded-xl bg-surface-muted border border-border text-[11px] space-y-1.5">
-                <div className="font-semibold text-text flex items-center justify-between pb-1 border-b border-border">
+                <div className="font-semibold text-text flex items-center justify-between gap-2 pb-1 border-b border-border">
                   <span>
                     {isTaxExempt || effectiveVatRate === 0
                       ? 'BIR Tax Calculation (Tax Exempt)'
                       : `BIR ${effectiveVatRate}% Value Added Tax Calculation`}
                   </span>
-                  <span className="text-text-muted">
+                  <Chip tone="neutral" size="xs" className="bg-surface text-text-muted shrink-0">
                     {isTaxExempt || effectiveVatRate === 0 ? 'Exempt (0%)' : 'VAT-Inclusive'}
-                  </span>
+                  </Chip>
                 </div>
                 <div className="flex justify-between text-text-secondary">
                   <span>Net Amount:</span>
@@ -467,7 +462,7 @@ export function RecordPaymentDialog({
               {/* Payment Date & Notes */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Payment Execution Date</label>
+                  <Text as="label" className="font-semibold text-text">Payment Execution Date</Text>
                   <input
                     type="date"
                     value={paymentDate}
@@ -478,7 +473,7 @@ export function RecordPaymentDialog({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Administrative Notes</label>
+                  <Text as="label" className="font-semibold text-text">Administrative Notes</Text>
                   <input
                     type="text"
                     value={notes}
@@ -492,22 +487,24 @@ export function RecordPaymentDialog({
 
               {/* Submit Buttons */}
               <div className="pt-3 border-t border-border flex items-center justify-end gap-3">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={onClose}
                   disabled={submitting}
-                  className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="md"
                   disabled={submitting || loadingPlans}
-                  className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  leadingIcon={submitting ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                  className="px-5"
                 >
-                  {submitting && <IconLoader className="h-4 w-4 animate-spin" />}
-                  <span>Record & Generate Invoice</span>
-                </button>
+                  Record & Generate Invoice
+                </Button>
               </div>
             </form>
           )}

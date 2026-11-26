@@ -3,6 +3,7 @@ import { useUser, useClerk } from '@clerk/clerk-react';
 import { IconShieldLock, IconArrowRight, IconLogout } from '@tabler/icons-react';
 import { isAdminMfaRequired, hasVerifiedMfa } from '@/lib/mfaGuard';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
+import { Button } from '@/components/ui';
 
 interface MfaGateProps {
   children: React.ReactNode;
@@ -71,31 +72,33 @@ export function MfaGate({ children }: MfaGateProps) {
         </div>
 
         <div className="space-y-2 pt-2">
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="lg"
             onClick={() => {
               if (openUserProfile) {
                 // Open Clerk User Profile security section
                 openUserProfile();
               }
             }}
-            className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-sm"
+            trailingIcon={<IconArrowRight className="h-4 w-4" />}
+            className="w-full text-xs shadow-sm"
           >
-            <span>Configure Two-Factor Authentication</span>
-            <IconArrowRight className="h-4 w-4" />
-          </button>
+            Configure Two-Factor Authentication
+          </Button>
 
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="md"
             onClick={async () => {
               await signOut();
               window.location.href = '/sign-in';
             }}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium text-text-muted hover:text-text rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconLogout className="h-4 w-4" />}
+            className="w-full text-text-muted hover:text-text"
           >
-            <IconLogout className="h-4 w-4" />
-            <span>Sign Out</span>
-          </button>
+            Sign Out
+          </Button>
         </div>
       </div>
     </div>

@@ -181,7 +181,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
             query = query.Where(p =>
                 (!string.IsNullOrWhiteSpace(p.SeniorCitizenId) && p.SeniorCitizenId.Trim().Length > 0) ||
                 (!string.IsNullOrWhiteSpace(p.PwdId) && p.PwdId.Trim().Length > 0) ||
-                p.DateOfBirth <= seniorCutoff);
+                (p.DateOfBirth.HasValue && p.DateOfBirth.Value <= seniorCutoff));
         }
 
         if (!string.IsNullOrWhiteSpace(request.VerificationStatus) && Enum.TryParse<PatientVerificationStatus>(request.VerificationStatus, true, out var filterVs))
@@ -518,8 +518,13 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
         var today = localToday;
         return projected.Select(p =>
         {
-            var age = today.Year - p.DateOfBirth.Year;
-            if (p.DateOfBirth > today.AddYears(-age)) age--;
+            int? age = null;
+            if (p.DateOfBirth is { } dob)
+            {
+                var calcAge = today.Year - dob.Year;
+                if (dob > today.AddYears(-calcAge)) calcAge--;
+                age = Math.Max(0, calcAge);
+            }
 
             var middleInitial = !string.IsNullOrWhiteSpace(p.MiddleName) ? $" {p.MiddleName[0]}." : "";
             var suffix = !string.IsNullOrWhiteSpace(p.Suffix) ? $" {p.Suffix}" : "";

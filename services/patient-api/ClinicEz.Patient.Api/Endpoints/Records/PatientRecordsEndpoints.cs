@@ -213,6 +213,11 @@ public sealed class StreamPatientRecordEndpoint : IEndpoint
                 CancellationToken ct) =>
             {
                 var result = await sender.Send(new StreamPatientRecordQuery(patientId, fileId), ct);
+                if (!string.IsNullOrWhiteSpace(result.ExternalRedirectUrl))
+                {
+                    return Results.Redirect(result.ExternalRedirectUrl, permanent: false);
+                }
+
                 return Results.File(
                     fileStream: result.Stream,
                     contentType: result.ContentType,

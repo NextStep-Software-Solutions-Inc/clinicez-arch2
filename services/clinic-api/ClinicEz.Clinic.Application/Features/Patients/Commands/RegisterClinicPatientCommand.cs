@@ -617,8 +617,13 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     public static ClinicPatientDto MapToDto(Patient p, string? activeQueueTicket, Guid? activeQueueItemId, string? allergiesOverride)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var age = today.Year - p.DateOfBirth.Year;
-        if (p.DateOfBirth > today.AddYears(-age)) age--;
+        int? age = null;
+        if (p.DateOfBirth is { } dob)
+        {
+            var calcAge = today.Year - dob.Year;
+            if (dob > today.AddYears(-calcAge)) calcAge--;
+            age = Math.Max(0, calcAge);
+        }
 
         var middleInitial = !string.IsNullOrWhiteSpace(p.MiddleName) ? $" {p.MiddleName[0]}." : "";
         var suffix = !string.IsNullOrWhiteSpace(p.Suffix) ? $" {p.Suffix}" : "";

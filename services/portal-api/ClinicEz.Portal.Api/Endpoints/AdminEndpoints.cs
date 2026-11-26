@@ -19,6 +19,8 @@ using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Requests;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -82,6 +84,35 @@ public class AdminEndpoints : IEndpoint
         })
         .WithName("GetAdminTenants")
         .WithDescription("Lists all registered tenants with their subscription statuses.")
+        .WithTags("Admin");
+
+        // 3b. GET /admin/clinics
+        group.MapGet("/clinics", async (HttpContext httpContext, ISender sender, IApplicationDbContext db, CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ViewTenants, httpContext, sender)
+                ?? await CheckPermissionAsync(Permissions.ManageMigrations, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var clinics = await db.Facilities
+                .AsNoTracking()
+                .Include(f => f.Tenant)
+                .Where(f => !f.IsDeleted && f.FacilityType == ClinicEz.Shared.Common.FacilityType.Clinic && !f.Tenant.IsDeleted)
+                .OrderBy(f => f.Tenant.Name)
+                .ThenBy(f => f.Name)
+                .Select(f => new
+                {
+                    id = f.Id,
+                    name = f.Name,
+                    tenantId = f.TenantId.ToString(),
+                    tenantSlug = f.Tenant.TenantSlug,
+                    facilitySlug = f.Slug
+                })
+                .ToListAsync(ct);
+
+            return Results.Ok(clinics);
+        })
+        .WithName("GetAdminClinics")
+        .WithDescription("Lists all registered Clinic facilities grouped by tenant for migration destination mapping.")
         .WithTags("Admin");
 
         // 4. GET /admin/leads
@@ -1166,6 +1197,160 @@ public class AdminEndpoints : IEndpoint
         .WithName("ResetAdminUserPassword")
         .WithDescription("Resets a platform user's password via email reset link, copyable reset link, or direct temporary password.")
         .WithTags("Admin");
+
+        // Permanent Platform-Wide Patient Identity Directory (strictly routed through Interop Hub -> patient-api)
+        group.MapGet("/patient-identities", async (
+            string? search,
+            string? status,
+            int? limit,
+            int? offset,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckAnyPermissionAsync(
+                httpContext, sender, Permissions.ManageMigrations, Permissions.ManageAdmins);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var interopClient = httpContext.RequestServices.GetService<IInteropRequestClient>();
+            if (interopClient == null)
+            {
+                return Results.Json(
+                    new { Message = "Interop Hub messaging is not configured for patient identity lookup." },
+                    statusCode: 503);
+            }
+
+            try
+            {
+                var reply = await interopClient.RequestAsync<PatientIdentityDirectoryRequestedPayload, PatientIdentityDirectoryRespondedPayload>(
+                    InteropTypes.PatientIdentityDirectoryRequested,
+                    InteropTypes.PatientIdentityDirectoryResponded,
+                    Party.Portal,
+                    Party.PatientPlane,
+                    new PatientIdentityDirectoryRequestedPayload
+                    {
+                        Search = search,
+                        StatusFilter = status,
+                        Limit = Math.Clamp(limit ?? 25, 1, 100),
+                        Offset = Math.Max(0, offset ?? 0)
+                    },
+                    TimeSpan.FromSeconds(15),
+                    ct);
+
+                if (!reply.Succeeded)
+                {
+                    return reply.ErrorCode switch
+                    {
+                        "UNAUTHORIZED" => Results.Json(new { Message = reply.Error ?? "Unauthorized." }, statusCode: 403),
+                        "VALIDATION_ERROR" => Results.BadRequest(new { Message = reply.Error ?? "Invalid request." }),
+                        _ => Results.Json(new { Message = reply.Error ?? "Patient identity lookup failed." }, statusCode: 502)
+                    };
+                }
+
+                return Results.Ok(reply);
+            }
+            catch (InteropRequestTimeoutException)
+            {
+                return Results.Json(
+                    new { Message = "Patient identity service did not respond in time via Interop Hub. Verify patient-api and interop-hub connectivity." },
+                    statusCode: 503);
+            }
+        })
+        .WithName("GetAdminPatientIdentities")
+        .WithDescription("Lists non-clinical patient account identity statuses (ClerkLinked, Unlinked, Reclaimed, AmbiguousEmail) via Interop Hub.")
+        .WithTags("Admin");
+
+        group.MapPost("/patient-identities/{patientId:guid}/reconcile", async (
+            Guid patientId,
+            ReconcilePatientIdentityHttpRequest request,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckAnyPermissionAsync(
+                httpContext, sender, Permissions.ManageMigrations, Permissions.ManageAdmins);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var interopClient = httpContext.RequestServices.GetService<IInteropRequestClient>();
+            if (interopClient == null)
+            {
+                return Results.Json(
+                    new { Message = "Interop Hub messaging is not configured for patient identity reconciliation." },
+                    statusCode: 503);
+            }
+
+            var actor = !string.IsNullOrWhiteSpace(admin.Email)
+                ? admin.Email
+                : (httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "platform-admin");
+
+            try
+            {
+                var reply = await interopClient.RequestAsync<PatientIdentityReconcileRequestedPayload, PatientIdentityReconcileRespondedPayload>(
+                    InteropTypes.PatientIdentityReconcileRequested,
+                    InteropTypes.PatientIdentityReconcileResponded,
+                    Party.Portal,
+                    Party.PatientPlane,
+                    new PatientIdentityReconcileRequestedPayload
+                    {
+                        PatientId = patientId,
+                        Action = request.Action,
+                        ClerkUserId = request.ClerkUserId,
+                        Actor = actor,
+                        Reason = request.Reason
+                    },
+                    TimeSpan.FromSeconds(15),
+                    ct);
+
+                if (!reply.Succeeded)
+                {
+                    return reply.ErrorCode switch
+                    {
+                        "VALIDATION_ERROR" => Results.BadRequest(new { Message = reply.Error ?? "Invalid reconciliation request." }),
+                        "NOT_FOUND" => Results.NotFound(new { Message = reply.Error ?? "Patient account not found." }),
+                        "CONFLICT" => Results.Conflict(new { Message = reply.Error ?? "Clerk user ID is already bound to another patient." }),
+                        "UNAUTHORIZED" => Results.Json(new { Message = reply.Error ?? "Unauthorized." }, statusCode: 403),
+                        _ => Results.Json(new { Message = reply.Error ?? "Reconciliation failed." }, statusCode: 502)
+                    };
+                }
+
+                return Results.Ok(reply);
+            }
+            catch (InteropRequestTimeoutException)
+            {
+                return Results.Json(
+                    new { Message = "Patient identity service did not respond in time via Interop Hub." },
+                    statusCode: 503);
+            }
+        })
+        .WithName("ReconcileAdminPatientIdentity")
+        .WithDescription("Reconciles (binds or unbinds) a verified Clerk user ID on a primary patient account via Interop Hub.")
+        .WithTags("Admin");
+    }
+
+    private static async Task<AdminMeResponse?> CheckAnyPermissionAsync(
+        HttpContext httpContext,
+        ISender sender,
+        params string[] allowedPermissions)
+    {
+        var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var email = httpContext.User.FindFirst("emails")?.Value
+                    ?? httpContext.User.FindFirst(ClaimTypes.Email)?.Value
+                    ?? httpContext.User.FindFirst("email")?.Value;
+
+        if (string.IsNullOrEmpty(clerkUserId)) return null;
+
+        var admin = await sender.Send(new GetAdminMeQuery(clerkUserId, email));
+        if (admin == null) return null;
+
+        foreach (var perm in allowedPermissions)
+        {
+            if (admin.Permissions.Contains(perm))
+            {
+                return admin;
+            }
+        }
+
+        return null;
     }
 
     private static async Task<AdminMeResponse?> CheckPermissionAsync(
@@ -1251,5 +1436,11 @@ public record ResetPortalPasswordRequest(
     bool SendResetEmail = false,
     bool GenerateResetLink = false,
     string? DeliveryMode = null
+);
+
+public record ReconcilePatientIdentityHttpRequest(
+    string Action,
+    string? ClerkUserId = null,
+    string? Reason = null
 );
 

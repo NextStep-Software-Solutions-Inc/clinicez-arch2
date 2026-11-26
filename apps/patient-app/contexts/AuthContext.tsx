@@ -15,6 +15,7 @@ import { refreshDocumentTypes } from '../services/files/filesShared';
 import { refreshOrganizationsFromApi, refreshClinicsFromApi } from '../services/discovery/discoveryService';
 import { pullDocumentChanges } from '../services/sync/documentsSyncService';
 import { clearNetworkDirectoryCache, refreshNetworkDirectory } from '../services/search/networkDirectory';
+import { markLegacyWelcomeBannerPending } from '../services/home/legacyWelcomeBanner';
 import { useNetworkOnline } from '../hooks/useNetworkOnline';
 import { computeIsSessionExpired } from '../utils/sessionExpiry';
 
@@ -394,6 +395,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             await upsertPatientSummary(patient, userId).catch((err) =>
               console.warn('[AuthContext] Failed to cache patient summary:', err)
             );
+
+            if (patient.isLegacyAccountReclaimed) {
+              await markLegacyWelcomeBannerPending(patient.id);
+            }
 
             await SecureStore.setItemAsync(INTERNAL_PATIENT_ID_KEY, patient.id);
             await SecureStore.setItemAsync(BOOTSTRAP_COMPLETE_KEY, 'true');

@@ -191,6 +191,7 @@ public static class DependencyInjection
             .Handle<PractitionerIdentityUpdatedPayload, PractitionerIdentityUpdatedInteropHandler>(InteropTypes.PractitionerIdentityUpdated)
             .Handle<PractitionerVerificationRevokedPayload, PractitionerVerificationRevokedInteropHandler>(InteropTypes.PractitionerVerificationRevoked)
             .Handle<ClinicRecordVerifiedEvent, ClinicRecordVerifiedInteropHandler>(InteropTypes.ClinicRecordVerified)
+            .Handle<ClinicLinkResolvedPayload, ClinicLinkResolvedInteropHandler>(InteropTypes.ClinicLinkResolved)
             .Handle<ClinicAppointmentUpdatedEvent, ClinicAppointmentUpdatedInteropHandler>(InteropTypes.ClinicAppointmentUpdated)
             .Handle<PatientShareRedeemPayload, PatientShareRedeemInteropHandler>(InteropTypes.PatientShareRedeem)
             .Handle<PatientDocumentIssuedPayload, PatientDocumentIssuedInteropHandler>(InteropTypes.PatientDocumentIssued)
@@ -204,7 +205,11 @@ public static class DependencyInjection
             .Handle<CommsMessageReceivedPayload, CommsMessageReceivedInteropHandler>(InteropTypes.CommsMessageReceived)
             .Handle<CommsThreadStateChangedPayload, CommsThreadStateChangedInteropHandler>(InteropTypes.CommsThreadStateChanged)
             .Handle<CommsEligibilitySyncedPayload, CommsEligibilitySyncedInteropHandler>(InteropTypes.CommsEligibilitySynced)
-            .Handle<CommsCallStateChangedPayload, CommsCallStateChangedInteropHandler>(InteropTypes.CommsCallStateChanged));
+            .Handle<CommsCallStateChangedPayload, CommsCallStateChangedInteropHandler>(InteropTypes.CommsCallStateChanged)
+            .Respond<PatientIdentityDirectoryRequestedPayload, PatientIdentityDirectoryRespondedPayload, PatientIdentityDirectoryResponder>(
+                InteropTypes.PatientIdentityDirectoryRequested, InteropTypes.PatientIdentityDirectoryResponded)
+            .Respond<PatientIdentityReconcileRequestedPayload, PatientIdentityReconcileRespondedPayload, PatientIdentityReconcileResponder>(
+                InteropTypes.PatientIdentityReconcileRequested, InteropTypes.PatientIdentityReconcileResponded));
 
     public static IServiceCollection AddClerkAuthentication(
         this IServiceCollection services,

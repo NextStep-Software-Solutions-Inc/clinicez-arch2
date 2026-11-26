@@ -364,8 +364,13 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             patientName = $"{patient.LastName}, {patient.FirstName}{middleInitial}{suffix}";
 
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var age = today.Year - patient.DateOfBirth.Year;
-            if (patient.DateOfBirth > today.AddYears(-age)) age--;
+            int? age = null;
+            if (patient.DateOfBirth is { } dob)
+            {
+                var calcAge = today.Year - dob.Year;
+                if (dob > today.AddYears(-calcAge)) calcAge--;
+                age = Math.Max(0, calcAge);
+            }
 
             var activeCaseNo = enlistmentDtos?.FirstOrDefault(e => e.Status == "Active")?.CaseNo
                 ?? ResolveActiveCaseNo(patient)

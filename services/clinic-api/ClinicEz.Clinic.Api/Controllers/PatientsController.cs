@@ -115,7 +115,7 @@ public sealed class PatientsController : ControllerBase
     {
         var result = await _sender.Send(
             new RedeemPatientShareCommand(
-                request.ShareToken, request.Purpose, request.AddToQueue, request.ChiefComplaint, request.ClinicEzId, request.Code), ct);
+                request.ShareToken, request.Purpose, request.AddToQueue, request.ChiefComplaint, request.ClinicEzId, request.Code, request.TargetPatientId), ct);
         return Accepted(ApiResponse<PatientShareRedeemAccepted>.Success(result, "Share request sent. Waiting for the patient record."));
     }
 
@@ -127,6 +127,41 @@ public sealed class PatientsController : ControllerBase
     {
         var result = await _sender.Send(new GetShareImportStatusQuery(correlationId), ct);
         return Ok(ApiResponse<ShareImportStatusDto>.Success(result));
+    }
+
+    /// <summary>Lists patient-initiated chart linkage requests pending clinic staff identity verification.</summary>
+    [HttpGet("link-requests")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<List<PatientLinkRequestDto>>>> GetLinkRequests(
+        [FromQuery] string? status = "PendingReview",
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new GetPatientLinkRequestsQuery(status), ct);
+        return Ok(ApiResponse<List<PatientLinkRequestDto>>.Success(result));
+    }
+
+    /// <summary>Staff approves a patient link request and binds the cloud account onto a verified unlinked historical chart.</summary>
+    [HttpPost("link-requests/{id:guid}/approve")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientLinkRequestDto>>> ApproveLinkRequest(
+        Guid id,
+        [FromBody] ApprovePatientLinkBody body,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ApprovePatientLinkRequestCommand(id, body.TargetPatientId), ct);
+        return Ok(ApiResponse<PatientLinkRequestDto>.Success(result, "Patient cloud account linked to verified clinic chart."));
+    }
+
+    /// <summary>Staff rejects a patient link request with a reason, notifying the patient app via Interop Hub.</summary>
+    [HttpPost("link-requests/{id:guid}/reject")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientLinkRequestDto>>> RejectLinkRequest(
+        Guid id,
+        [FromBody] RejectPatientLinkBody body,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new RejectPatientLinkRequestCommand(id, body.Reason), ct);
+        return Ok(ApiResponse<PatientLinkRequestDto>.Success(result, "Patient link request rejected."));
     }
 
     [HttpPut("{id:guid}")]
@@ -665,12 +700,15 @@ public sealed record UpsertPhilHealthMembershipRequest(
     string? PrincipalMemberMobileNumber = null,
     string? PrincipalMemberEmail = null);
 
+public sealed record ApprovePatientLinkBody(Guid TargetPatientId);
+public sealed record RejectPatientLinkBody(string Reason);
+
 public sealed record UpdatePatientRequest(
     string FirstName,
     string LastName,
     string? MiddleName,
     string? Suffix,
-    DateOnly DateOfBirth,
+    DateOnly? DateOfBirth,
     string Sex,
     string? CivilStatus,
     string ContactNumber,

@@ -207,6 +207,11 @@ public sealed class YakapReferralWireBuilder : IYakapWireBuilder<YakapReferralCo
             }
         }
 
+        if (!context.Patient.DateOfBirth.HasValue || context.Patient.DateOfBirth.Value == default)
+        {
+            errors.Add("Patient date of birth is required for PhilHealth referral wire payloads.");
+        }
+
         if (errors.Count > 0)
         {
             return Result<string>.Failure(errors);
@@ -225,7 +230,7 @@ public sealed class YakapReferralWireBuilder : IYakapWireBuilder<YakapReferralCo
         var caseNo = ResolveCaseNo(context, accreNo!, asOfDate);
         var soapTransNo = ResolveSoapTransNo(context, accreNo!, asOfDate);
         var refTransNo = ResolveReferralTransNo(context, accreNo!, asOfDate);
-        var patientAge = FormatPhilHealthAge(context.Patient.DateOfBirth, asOfDate);
+        var patientAge = FormatPhilHealthAge(context.Patient.DateOfBirth!.Value, asOfDate);
         var doctorDesignation = context.DoctorDesignation ?? refLetter.ReferringDoctorDesignation ?? "Attending Physician";
         var serviceDelivery = context.MethodOfServiceDelivery ?? (context.Encounter != null ? ((int)context.Encounter.ServiceDeliveryMethod).ToString() : "1");
 

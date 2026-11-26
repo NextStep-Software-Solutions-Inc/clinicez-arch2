@@ -69,10 +69,13 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
             string? gender = null;
             if (patient != null)
             {
-                var today = DateOnly.FromDateTime(DateTime.UtcNow);
-                int calcAge = today.Year - patient.DateOfBirth.Year;
-                if (patient.DateOfBirth > today.AddYears(-calcAge)) calcAge--;
-                age = calcAge;
+                if (patient.DateOfBirth is { } dob)
+                {
+                    var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                    int calcAge = today.Year - dob.Year;
+                    if (dob > today.AddYears(-calcAge)) calcAge--;
+                    age = calcAge;
+                }
                 gender = patient.Sex.ToString();
             }
 

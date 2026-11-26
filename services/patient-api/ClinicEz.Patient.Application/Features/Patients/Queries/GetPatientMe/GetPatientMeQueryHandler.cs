@@ -1,23 +1,58 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediatR;
 using ClinicEz.Patient.Application.Common.DTOs;
+using ClinicEz.Patient.Application.Common.Helpers;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Patient.Domain.Interfaces;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Patient.Application.Features.Patients.Queries.GetPatientMe;
 
 public sealed class GetPatientMeQueryHandler : IRequestHandler<GetPatientMeQuery, PatientMeDto?>
 {
     private readonly IPatientRepository _patientRepository;
+    private readonly IUnitOfWork? _unitOfWork;
 
-    public GetPatientMeQueryHandler(IPatientRepository patientRepository) => _patientRepository = patientRepository;
+    public GetPatientMeQueryHandler(IPatientRepository patientRepository, IUnitOfWork? unitOfWork = null)
+    {
+        _patientRepository = patientRepository;
+        _unitOfWork = unitOfWork;
+    }
 
     public async Task<PatientMeDto?> Handle(GetPatientMeQuery request, CancellationToken cancellationToken)
     {
+        var reclaimedNow = false;
         var patient = await _patientRepository.GetForMeByClerkUserIdAsync(request.ClerkUserId, cancellationToken);
+        if (patient is null && _unitOfWork is not null && request.VerifiedEmails is { Count: > 0 })
+        {
+            var unlinked = await _patientRepository.GetSingleUnlinkedByVerifiedEmailsAsync(
+                request.VerifiedEmails, cancellationToken);
+            if (unlinked is not null)
+            {
+                unlinked.ClerkUserId = request.ClerkUserId;
+                unlinked.UpdatedAt = DateTime.UtcNow;
+                unlinked.UpdatedBy = "System:ClerkEmailReclaim";
+                _patientRepository.Update(unlinked);
+                try
+                {
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                    reclaimedNow = true;
+                }
+                catch (DbUpdateException ex) when (ClerkReclaimConcurrencyHelper.IsUniqueOrConcurrencyConflict(ex))
+                {
+                    _unitOfWork.ClearChangeTracker();
+                    patient = await _patientRepository.GetForMeByClerkUserIdAsync(request.ClerkUserId, cancellationToken);
+                    if (patient is null)
+                        throw;
+                }
+
+                patient ??= await _patientRepository.GetForMeByClerkUserIdAsync(request.ClerkUserId, cancellationToken);
+            }
+        }
+
         if (patient is null) return null;
 
         var addresses = patient.Addresses
@@ -63,7 +98,8 @@ public sealed class GetPatientMeQueryHandler : IRequestHandler<GetPatientMeQuery
             Addresses: addresses,
             PhilHealthPin: philHealthPin,
             GovernmentIds: governmentIds,
-            Allergies: allergies
+            Allergies: allergies,
+            IsLegacyAccountReclaimed: reclaimedNow || string.Equals(patient.UpdatedBy, "System:ClerkEmailReclaim", StringComparison.Ordinal)
         );
     }
 

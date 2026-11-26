@@ -141,8 +141,13 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
             .FirstOrDefaultAsync(p => p.Id == appointment.PatientId && p.ClinicId == _clinicContext.ClinicId, ct)
             ?? throw new NotFoundException($"Patient record {appointment.PatientId} not found.");
 
-        var dobString = patient.DateOfBirth.ToString("yyyy-MM-dd");
-        var dobHint = $"{patient.DateOfBirth.Year}-**-**";
+        if (!patient.DateOfBirth.HasValue)
+        {
+            throw new BadRequestException("Patient date of birth is required to generate a teleconsultation guest invite.");
+        }
+
+        var dobString = patient.DateOfBirth.Value.ToString("yyyy-MM-dd");
+        var dobHint = $"{patient.DateOfBirth.Value.Year}-**-**";
         var cacheKey = (_clinicContext.ClinicId, appointment.Id, callId);
 
         if (!request.ForceRegenerate &&

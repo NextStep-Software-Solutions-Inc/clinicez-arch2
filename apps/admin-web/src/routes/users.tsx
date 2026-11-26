@@ -14,6 +14,7 @@ import {
 } from '@/lib/selfActionGuard';
 import { useUser } from '@clerk/clerk-react';
 import { toast } from 'sonner';
+import { Button, Chip, SelectField, Tabs, Text } from '@/components/ui';
 import {
   IconUserShield,
   IconPlus,
@@ -279,40 +280,36 @@ function UsersPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={loadData}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
-          <button
-            type="button"
+            Refresh
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleOpenInvite}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs"
+            leadingIcon={<IconPlus className="h-4 w-4" />}
           >
-            <IconPlus className="h-4 w-4" />
-            <span>Invite Admin</span>
-          </button>
+            Invite Admin
+          </Button>
         </div>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
-            onClick={loadData}
-            className="px-3 py-1 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
-          >
+          <Button variant="dangerSubtle" size="xs" onClick={loadData} className="shrink-0">
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -329,19 +326,20 @@ function UsersPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <select
+        <div className="flex items-center gap-2 w-full sm:w-44">
+          <SelectField
+            ariaLabel="Filter administrators by role"
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
-          >
-            <option value="ALL">All Roles</option>
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={setRoleFilter}
+            align="right"
+            options={[
+              { value: 'ALL', label: 'All Roles' },
+              ...roles.map((r) => ({
+                value: r.id,
+                label: r.name,
+              })),
+            ]}
+          />
         </div>
       </div>
 
@@ -395,14 +393,15 @@ function UsersPage() {
                         : 'No platform administrators have been provisioned yet.'}
                     </p>
                     <div className="pt-2">
-                      <button
-                        type="button"
+                      <Button
+                        variant="primary"
+                        size="md"
                         onClick={handleOpenInvite}
-                        className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs"
+                        leadingIcon={<IconPlus className="h-4 w-4" />}
+                        className="px-5"
                       >
-                        <IconPlus className="h-4 w-4" />
-                        <span>Invite Administrator</span>
-                      </button>
+                        Invite Administrator
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -422,104 +421,125 @@ function UsersPage() {
 
                   return (
                     <tr key={admin.id} className="hover:bg-surface-muted/50 transition-colors">
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-text">{admin.fullName}</span>
+                      <td className="px-5 py-4 max-w-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Text as="span" className="font-semibold text-text">
+                            {admin.fullName}
+                          </Text>
                           {isSelf && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary-subtle text-primary border border-primary/20">
+                            <Chip tone="primary" size="xs" className="shrink-0">
                               You
-                            </span>
+                            </Chip>
                           )}
                           <input type="hidden" disabled={isEditingSelf} value="self-guard" />
                         </div>
-                        <div className="text-[11px] text-text-muted font-mono mt-0.5 flex items-center gap-1.5">
-                          <span>{admin.email}</span>
-                          <button
-                            type="button"
+                        <div className="text-[11px] text-text-muted font-mono mt-0.5 flex items-center gap-1.5 min-w-0">
+                          <Text as="span" className="font-mono text-[11px] text-text-muted">
+                            {admin.email}
+                          </Text>
+                          <Button
+                            variant="ghost"
+                            size="custom"
                             onClick={() => {
                               navigator.clipboard.writeText(admin.email);
                               toast.success(`Copied '${admin.email}'`);
                             }}
-                            className="text-text-muted hover:text-text cursor-pointer"
+                            className="p-0.5 rounded text-text-muted hover:text-text shrink-0"
                             title="Copy Email"
+                            aria-label="Copy Email"
                           >
                             <IconCopy className="h-3 w-3" />
-                          </button>
+                          </Button>
                         </div>
                       </td>
 
                       <td className="px-5 py-4">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-muted border border-border text-text">
+                        <Chip tone="neutral" size="xs" className="text-text">
                           {resolveRoleName(admin) || '—'}
-                        </span>
+                        </Chip>
                       </td>
 
                       <td className="px-5 py-4">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                        <Chip
+                          tone={
                             isActive
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                              ? 'success'
                               : isInvited
-                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                              ? 'info'
                               : isSuspended || isRevoked || isExpired
-                              ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
-                              : 'bg-surface-muted text-text-muted border-border'
-                          }`}
+                              ? 'danger'
+                              : 'neutral'
+                          }
+                          size="xs"
                         >
                           {displayStatus}
-                        </span>
+                        </Chip>
                       </td>
 
                       <td className="px-5 py-4 text-text-muted font-mono text-[11px]">
-                        {admin.createdAt
-                          ? new Date(admin.createdAt).toLocaleDateString()
-                          : '—'}
+                        <Text as="span" className="font-mono text-[11px] text-text-muted">
+                          {admin.createdAt
+                            ? new Date(admin.createdAt).toLocaleDateString()
+                            : '—'}
+                        </Text>
                       </td>
 
                       <td className="px-5 py-4 text-right">
                         <div className="inline-flex items-center gap-1">
                           {/* 3-Mode Password Reset */}
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
                             onClick={() => handleOpenResetPassword(admin)}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-primary hover:bg-surface-muted transition-colors cursor-pointer"
+                            className="text-text-muted hover:text-primary"
                             title="3-Mode Password Reset"
+                            aria-label="3-Mode Password Reset"
                           >
                             <IconKey className="h-4 w-4" />
-                          </button>
+                          </Button>
 
                           {/* Invite Actions if Invited */}
                           {isInvited && (
                             <>
-                              <button
-                                type="button"
+                              <Button
+                                variant="ghost"
+                                size="iconSm"
                                 onClick={() => handleResendInvite(admin)}
                                 disabled={actionLoadingId === admin.id}
-                                className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-muted transition-colors cursor-pointer"
+                                className="text-text-muted hover:text-text"
                                 title="Resend Invitation"
+                                aria-label="Resend Invitation"
                               >
                                 <IconMailForward className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="iconSm"
                                 onClick={() => handleRevokeInvite(admin)}
                                 disabled={!restriction.canRevoke || actionLoadingId === admin.id}
-                                className="p-1.5 rounded-lg text-text-muted hover:text-red-600 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-40"
+                                className="text-text-muted hover:text-red-600 hover:bg-red-500/10 disabled:opacity-40"
                                 title={!restriction.canRevoke ? SELF_ACTION_MESSAGES.adminRevoke : 'Revoke Invitation'}
+                                aria-label={!restriction.canRevoke ? SELF_ACTION_MESSAGES.adminRevoke : 'Revoke Invitation'}
                               >
                                 <IconBan className="h-4 w-4" />
-                              </button>
+                              </Button>
                             </>
                           )}
 
                           {/* Suspend / Reactivate for non-invited */}
                           {!isInvited && !isRevoked && (
-                            <button
-                              type="button"
+                            <Button
+                              variant="ghost"
+                              size="iconSm"
                               onClick={() => handleToggleSuspend(admin)}
                               disabled={!restriction.canSuspend || isEditingSelf || actionLoadingId === admin.id}
-                              className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-muted transition-colors cursor-pointer disabled:opacity-40"
+                              className="text-text-muted hover:text-text disabled:opacity-40"
                               title={
+                                !restriction.canSuspend
+                                  ? SELF_ACTION_MESSAGES.adminSuspend
+                                  : (admin.isActive ? 'Suspend Administrator' : 'Reactivate Administrator')
+                              }
+                              aria-label={
                                 !restriction.canSuspend
                                   ? SELF_ACTION_MESSAGES.adminSuspend
                                   : (admin.isActive ? 'Suspend Administrator' : 'Reactivate Administrator')
@@ -530,19 +550,21 @@ function UsersPage() {
                               ) : (
                                 <IconPlayerPlay className="h-4 w-4 text-success" />
                               )}
-                            </button>
+                            </Button>
                           )}
 
                           {/* Delete Account */}
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
                             onClick={() => setUserToDelete(admin)}
                             disabled={!restriction.canDelete}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-red-600 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-40"
+                            className="text-text-muted hover:text-red-600 hover:bg-red-500/10 disabled:opacity-40"
                             title={!restriction.canDelete ? restriction.deleteTooltip : 'Delete Administrator Account'}
+                            aria-label={!restriction.canDelete ? restriction.deleteTooltip : 'Delete Administrator Account'}
                           >
                             <IconTrash className="h-4 w-4" />
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -574,13 +596,15 @@ function UsersPage() {
                   <p className="text-xs text-text-muted">Issue invitation token or direct onboarding link</p>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={() => setInviteModalOpen(false)}
-                className="p-1 rounded-lg text-text-muted hover:text-text cursor-pointer"
+                className="text-text-muted hover:text-text shrink-0"
+                aria-label="Close invite modal"
               >
                 <IconX className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
 
             {generatedInviteUrl ? (
@@ -597,7 +621,9 @@ function UsersPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Direct Invitation URL</label>
+                  <Text as="label" className="font-semibold text-text">
+                    Direct Invitation URL
+                  </Text>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
@@ -605,27 +631,29 @@ function UsersPage() {
                       value={generatedInviteUrl}
                       className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text font-mono text-xs focus:outline-hidden"
                     />
-                    <button
-                      type="button"
+                    <Button
+                      variant="primary"
+                      size="md"
                       onClick={() => {
                         navigator.clipboard.writeText(generatedInviteUrl);
                         toast.success('Invitation link copied to clipboard');
                       }}
-                      className="px-3 py-2 bg-primary text-white font-semibold rounded-xl hover:bg-primary-hover shrink-0 cursor-pointer"
+                      className="shrink-0"
                     >
                       Copy
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
                 <div className="pt-2 flex justify-end">
-                  <button
-                    type="button"
+                  <Button
+                    variant="primary"
+                    size="md"
                     onClick={() => setInviteModalOpen(false)}
-                    className="px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer"
+                    className="px-5"
                   >
                     Done
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
@@ -633,37 +661,33 @@ function UsersPage() {
               <form onSubmit={handleCreateInvite} className="p-6 space-y-4 text-xs">
                 {/* Delivery Mode Toggle */}
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Delivery Mode</label>
-                  <div className="grid grid-cols-2 p-1 bg-surface-muted rounded-xl border border-border font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => setInviteMode('email')}
-                      className={`py-2 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                        inviteMode === 'email'
-                          ? 'bg-surface text-text shadow-xs'
-                          : 'text-text-muted hover:text-text'
-                      }`}
-                    >
-                      <IconMail className="h-4 w-4" />
-                      <span>Email Delivery</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setInviteMode('link')}
-                      className={`py-2 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                        inviteMode === 'link'
-                          ? 'bg-surface text-text shadow-xs'
-                          : 'text-text-muted hover:text-text'
-                      }`}
-                    >
-                      <IconLink className="h-4 w-4" />
-                      <span>Direct Link Mode</span>
-                    </button>
-                  </div>
+                  <Text as="label" className="font-semibold text-text">
+                    Delivery Mode
+                  </Text>
+                  <Tabs
+                    ariaLabel="Invitation delivery mode"
+                    fullWidthUntil="always"
+                    value={inviteMode}
+                    onValueChange={setInviteMode}
+                    items={[
+                      {
+                        value: 'email',
+                        label: 'Email Delivery',
+                        icon: <IconMail className="h-4 w-4" />,
+                      },
+                      {
+                        value: 'link',
+                        label: 'Direct Link Mode',
+                        icon: <IconLink className="h-4 w-4" />,
+                      },
+                    ]}
+                  />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Full Name</label>
+                  <Text as="label" className="font-semibold text-text">
+                    Full Name
+                  </Text>
                   <input
                     type="text"
                     value={inviteFullName}
@@ -674,7 +698,9 @@ function UsersPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Work Email Address</label>
+                  <Text as="label" className="font-semibold text-text">
+                    Work Email Address
+                  </Text>
                   <input
                     type="email"
                     value={inviteEmail}
@@ -685,37 +711,42 @@ function UsersPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Assigned Administrative Role</label>
-                  <select
+                  <Text as="label" className="font-semibold text-text">
+                    Assigned Administrative Role
+                  </Text>
+                  <SelectField
+                    ariaLabel="Assigned Administrative Role"
                     value={inviteRoleId}
-                    onChange={(e) => setInviteRoleId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
-                  >
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={setInviteRoleId}
+                    placeholder="Select an administrative role..."
+                    searchable={false}
+                    options={roles.map((r) => ({
+                      value: r.id,
+                      label: r.name,
+                      description: r.description,
+                    }))}
+                  />
                 </div>
 
                 <div className="pt-3 border-t border-border flex items-center justify-end gap-3">
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="md"
                     onClick={() => setInviteModalOpen(false)}
                     disabled={inviting}
-                    className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
+                    variant="primary"
+                    size="md"
                     disabled={inviting}
-                    className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                    leadingIcon={inviting ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                    className="px-5"
                   >
-                    {inviting && <IconLoader className="h-4 w-4 animate-spin" />}
-                    <span>{inviteMode === 'link' ? 'Generate Link' : 'Send Invitation Email'}</span>
-                  </button>
+                    {inviteMode === 'link' ? 'Generate Link' : 'Send Invitation Email'}
+                  </Button>
                 </div>
               </form>
             )}
@@ -733,23 +764,29 @@ function UsersPage() {
             className="w-full max-w-md bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col text-text"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-5 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-primary-subtle text-primary">
+            <div className="flex items-center justify-between p-5 border-b border-border gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-xl bg-primary-subtle text-primary shrink-0">
                   <IconKey className="h-5 w-5" />
                 </div>
-                <div>
-                  <h2 className="text-base font-bold text-text">Administrative Password Reset</h2>
-                  <p className="text-xs text-text-muted">{resetModalUser.fullName}</p>
+                <div className="min-w-0">
+                  <Text as="h2" className="text-base font-bold text-text">
+                    Administrative Password Reset
+                  </Text>
+                  <Text as="p" className="text-xs text-text-muted">
+                    {resetModalUser.fullName}
+                  </Text>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={() => setResetModalUser(null)}
-                className="p-1 rounded-lg text-text-muted hover:text-text cursor-pointer"
+                className="text-text-muted hover:text-text shrink-0"
+                aria-label="Close password reset modal"
               >
                 <IconX className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
 
             <div className="p-6 space-y-4 text-xs">
@@ -771,7 +808,9 @@ function UsersPage() {
 
                   {resetResult.resetUrl && (
                     <div className="space-y-1.5">
-                      <label className="font-semibold text-text">Direct Reset URL</label>
+                      <Text as="label" className="font-semibold text-text">
+                        Direct Reset URL
+                      </Text>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
@@ -779,23 +818,26 @@ function UsersPage() {
                           value={resetResult.resetUrl}
                           className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text font-mono text-xs focus:outline-hidden"
                         />
-                        <button
-                          type="button"
+                        <Button
+                          variant="primary"
+                          size="md"
                           onClick={() => {
                             navigator.clipboard.writeText(resetResult.resetUrl!);
                             toast.success('Reset URL copied to clipboard');
                           }}
-                          className="px-3 py-2 bg-primary text-white font-semibold rounded-xl hover:bg-primary-hover shrink-0 cursor-pointer"
+                          className="shrink-0"
                         >
                           Copy
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   )}
 
                   {resetResult.temporaryPassword && (
                     <div className="space-y-1.5">
-                      <label className="font-semibold text-text">Temporary Generated Password</label>
+                      <Text as="label" className="font-semibold text-text">
+                        Temporary Generated Password
+                      </Text>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
@@ -803,28 +845,30 @@ function UsersPage() {
                           value={resetResult.temporaryPassword}
                           className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text font-mono text-xs focus:outline-hidden font-bold"
                         />
-                        <button
-                          type="button"
+                        <Button
+                          variant="primary"
+                          size="md"
                           onClick={() => {
                             navigator.clipboard.writeText(resetResult.temporaryPassword!);
                             toast.success('Temporary password copied');
                           }}
-                          className="px-3 py-2 bg-primary text-white font-semibold rounded-xl hover:bg-primary-hover shrink-0 cursor-pointer"
+                          className="shrink-0"
                         >
                           Copy
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   )}
 
                   <div className="pt-2 flex justify-end">
-                    <button
-                      type="button"
+                    <Button
+                      variant="primary"
+                      size="md"
                       onClick={() => setResetModalUser(null)}
-                      className="px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer"
+                      className="px-5"
                     >
                       Done
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -853,39 +897,45 @@ function UsersPage() {
                         desc: 'Generates an immediate temporary password requiring reset upon login',
                       },
                     ].map((m) => (
-                      <button
+                      <Button
                         key={m.mode}
-                        type="button"
+                        variant="unstyled"
+                        size="custom"
+                        multiline
+                        tooltip={m.title}
                         onClick={() => setResetMode(m.mode)}
-                        className={`w-full p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                        className={`w-full p-3 rounded-xl border text-left ${
                           resetMode === m.mode
                             ? 'border-primary bg-primary-subtle text-primary font-semibold'
                             : 'border-border bg-surface hover:bg-surface-muted text-text'
                         }`}
                       >
-                        <div className="font-semibold">{m.title}</div>
+                        <Text as="div" className="font-semibold">
+                          {m.title}
+                        </Text>
                         <div className="text-[11px] text-text-muted mt-0.5">{m.desc}</div>
-                      </button>
+                      </Button>
                     ))}
                   </div>
 
                   <div className="pt-3 border-t border-border flex items-center justify-end gap-3">
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="md"
                       onClick={() => setResetModalUser(null)}
-                      className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
                     >
                       Cancel
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="md"
                       onClick={handleExecutePasswordReset}
                       disabled={resetting}
-                      className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                      leadingIcon={resetting ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                      className="px-5"
                     >
-                      {resetting && <IconLoader className="h-4 w-4 animate-spin" />}
-                      <span>Execute Recovery</span>
-                    </button>
+                      Execute Recovery
+                    </Button>
                   </div>
                 </div>
               )}
@@ -920,22 +970,23 @@ function UsersPage() {
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="md"
                 onClick={() => setUserToDelete(null)}
-                className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
                 onClick={handleDeleteUser}
                 disabled={deleting}
-                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                leadingIcon={deleting ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                className="px-5"
               >
-                {deleting && <IconLoader className="h-4 w-4 animate-spin" />}
-                <span>Confirm Delete</span>
-              </button>
+                Confirm Delete
+              </Button>
             </div>
           </div>
         </div>

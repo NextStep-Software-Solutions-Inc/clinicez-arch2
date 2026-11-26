@@ -13,6 +13,7 @@ export const ADMIN_PERMISSIONS = {
   MANAGE_ROLES: "manage:roles",
   MANAGE_ADMINS: "manage:admins",
   MANAGE_SETTINGS: "manage:settings",
+  MANAGE_MIGRATIONS: "manage:migrations",
   MANAGE_PLANS: "manage:plans",
   VIEW_VERIFICATIONS: "view:verifications",
   VERIFY_DIRECTORY: "verify:directory",
@@ -61,4 +62,11 @@ export function canRevokeDirectoryVerification(
   profile: { permissions?: readonly string[] | null } | null | undefined,
 ): boolean {
   return hasAdminPermission(profile, ADMIN_PERMISSIONS.REVOKE_DIRECTORY_VERIFICATION);
+}
+
+export function canManageMigrations(
+  profile: { permissions?: readonly string[] | null; isSuperAdmin?: boolean } | null | undefined,
+): boolean {
+  if (profile?.isSuperAdmin) return true;
+  return hasAdminPermission(profile, ADMIN_PERMISSIONS.MANAGE_MIGRATIONS);
 }

@@ -508,17 +508,19 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
 
             // Age calculation
             var visitDate = DateOnly.FromDateTime(q.CheckInTime);
-            int age = 0;
-            if (patient != null)
+            int? calculatedAge = null;
+            if (patient?.DateOfBirth is { } dob)
             {
-                age = visitDate.Year - patient.DateOfBirth.Year;
-                if (patient.DateOfBirth > visitDate.AddYears(-age)) age--;
+                var calcAge = visitDate.Year - dob.Year;
+                if (dob > visitDate.AddYears(-calcAge)) calcAge--;
+                calculatedAge = Math.Max(0, calcAge);
             }
+            int age = calculatedAge ?? 0;
 
             // Classification
             var classList = new List<string>();
-            if (age < 18) classList.Add("Pediatric");
-            if (age >= 60 || (patient != null && !string.IsNullOrWhiteSpace(patient.SeniorCitizenId))) classList.Add("Senior");
+            if (calculatedAge is < 18) classList.Add("Pediatric");
+            if (calculatedAge is >= 60 || (patient != null && !string.IsNullOrWhiteSpace(patient.SeniorCitizenId))) classList.Add("Senior");
             if (patient != null && !string.IsNullOrWhiteSpace(patient.PwdId)) classList.Add("PWD");
             if (patient != null && (!string.IsNullOrWhiteSpace(patient.PhilHealthNumber) || patient.PhilHealthMembership != null)) classList.Add("PhilHealth");
             var classification = classList.Count > 0 ? string.Join(", ", classList) : "Regular";

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { createRoute, Link } from '@tanstack/react-router';
 import { Route as authRoute } from './_auth';
 import { adminService, AdminAnalyticsDto } from '@/services/admin.service';
+import { Button, Chip, Tabs, Text } from '@/components/ui';
 import {
   IconBuildingHospital,
   IconUsers,
@@ -149,39 +150,43 @@ function OverviewDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={loadData}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
+            Refresh
+          </Button>
           <Link
             to="/users"
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors shadow-xs"
+            title="Invite Admin"
+            className="inline-flex items-center gap-2 h-9 px-4 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors shadow-xs whitespace-nowrap"
           >
-            <IconPlus className="h-4 w-4" />
-            <span>Invite Admin</span>
+            <IconPlus className="h-4 w-4 shrink-0" />
+            <Text className="text-white" tooltip={false}>
+              Invite Admin
+            </Text>
           </Link>
         </div>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="dangerSubtle"
+            size="xs"
             onClick={loadData}
-            className="px-3 py-1 text-xs font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
+            className="shrink-0"
           >
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -288,22 +293,16 @@ function OverviewDashboard() {
           </div>
 
           {/* Window Toggles */}
-          <div className="inline-flex p-1 rounded-xl bg-surface-muted border border-border text-xs">
-            {(['7d', '14d', '30d'] as const).map((w) => (
-              <button
-                key={w}
-                type="button"
-                onClick={() => setTimeWindow(w)}
-                className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
-                  timeWindow === w
-                    ? 'bg-surface text-text shadow-xs font-semibold'
-                    : 'text-text-muted hover:text-text'
-                }`}
-              >
-                {w}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            ariaLabel="Registration velocity window"
+            value={timeWindow}
+            onValueChange={setTimeWindow}
+            items={[
+              { value: '7d', label: '7d' },
+              { value: '14d', label: '14d' },
+              { value: '30d', label: '30d' },
+            ]}
+          />
         </div>
 
         {/* Chart Viewport consuming CSS variables */}
@@ -325,9 +324,12 @@ function OverviewDashboard() {
                         }}
                         title={`${trend.date}: ${trend.count} registrations`}
                       />
-                      <span className="text-[9px] text-text-muted truncate w-full text-center font-mono">
+                      <Text
+                        className="text-[9px] text-text-muted w-full text-center font-mono"
+                        title={`${trend.date}: ${trend.count} registrations`}
+                      >
                         {trend.date.split('-').slice(1).join('/')}
-                      </span>
+                      </Text>
                     </div>
                   );
                 })}
@@ -358,9 +360,9 @@ function OverviewDashboard() {
                 <p className="text-[11px] text-text-muted">Latest lifecycle and governance events</p>
               </div>
             </div>
-            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-surface-muted text-text-muted">
+            <Chip tone="neutral" size="xs" className="font-mono text-text-muted border-0">
               Live Feed
-            </span>
+            </Chip>
           </div>
 
           <div className="divide-y divide-border">
@@ -373,10 +375,14 @@ function OverviewDashboard() {
                 <div key={evt.id} className="py-3 flex items-start justify-between gap-3 text-xs">
                   <div className="flex items-start gap-2.5">
                     <div className="mt-0.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                    <div>
-                      <div className="font-semibold text-text">{evt.title}</div>
-                      <div className="text-[11px] text-text-muted mt-0.5">{evt.detail}</div>
-                    </div>
+                      <div className="min-w-0">
+                        <Text as="div" className="font-semibold text-text">
+                          {evt.title}
+                        </Text>
+                        <Text as="div" className="text-[11px] text-text-muted mt-0.5">
+                          {evt.detail}
+                        </Text>
+                      </div>
                   </div>
                   <div className="text-[10px] text-text-muted font-mono shrink-0 flex items-center gap-1">
                     <IconClock className="h-3 w-3" />
@@ -411,9 +417,9 @@ function OverviewDashboard() {
                   to={qa.destination}
                   className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-surface-muted hover:bg-primary hover:text-white text-text text-xs font-semibold transition-colors border border-border group"
                 >
-                  <div className="flex items-center gap-3">
-                    <Icon className="h-4 w-4 text-primary group-hover:text-white transition-colors" />
-                    <span>{qa.label}</span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Icon className="h-4 w-4 shrink-0 text-primary group-hover:text-white transition-colors" />
+                    <Text className="text-inherit">{qa.label}</Text>
                   </div>
                   <span className="text-[11px] text-text-muted group-hover:text-white/80">→</span>
                 </Link>

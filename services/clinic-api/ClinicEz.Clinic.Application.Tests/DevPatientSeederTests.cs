@@ -58,7 +58,8 @@ public class DevPatientSeederTests
             Assert.False(string.IsNullOrWhiteSpace(p.PhilHealthNumber));
             Assert.Contains(p.Sex, new[] { BiologicalSex.Male, BiologicalSex.Female, BiologicalSex.Unknown });
             Assert.True(p.BloodType.HasValue);
-            Assert.True(p.DateOfBirth < DateOnly.FromDateTime(DateTime.UtcNow));
+            Assert.True(p.DateOfBirth.HasValue);
+            Assert.True(p.DateOfBirth!.Value < DateOnly.FromDateTime(DateTime.UtcNow));
             Assert.NotNull(p.CustomFields);
             Assert.True(p.CustomFields.ContainsKey("primary_address_line"));
             Assert.True(p.CustomFields.ContainsKey("primary_barangay"));
@@ -69,7 +70,7 @@ public class DevPatientSeederTests
             Assert.True(p.CustomFields.ContainsKey("emergency_contact_relationship"));
             Assert.NotEmpty(p.YakapEnlistments);
 
-            var age = DateTime.UtcNow.Year - p.DateOfBirth.Year;
+            var age = DateTime.UtcNow.Year - p.DateOfBirth.Value.Year;
             if (age >= 60)
             {
                 Assert.NotNull(p.SeniorCitizenId);

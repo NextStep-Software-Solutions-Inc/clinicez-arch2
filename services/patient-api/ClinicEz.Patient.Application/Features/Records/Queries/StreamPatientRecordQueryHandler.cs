@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +13,15 @@ namespace ClinicEz.Patient.Application.Features.Records.Queries;
 
 public sealed class StreamPatientRecordQueryHandler : IRequestHandler<StreamPatientRecordQuery, DecryptedFileStreamResult>
 {
+    private static readonly HashSet<string> AllowedLegacyExternalHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "clinicezstorage.blob.core.windows.net",
+        "clinicez.blob.core.windows.net",
+        "drive.google.com",
+        "docs.google.com",
+        "lh3.googleusercontent.com"
+    };
+
     private readonly IFileRecordRepository _fileRepository;
     private readonly IPatientEncryptionService _encryptionService;
     private readonly IStorageService _storageService;
@@ -31,6 +41,16 @@ public sealed class StreamPatientRecordQueryHandler : IRequestHandler<StreamPati
         var record = await _fileRepository.GetByIdAndPatientIdAsync(request.FileId, request.PatientId, cancellationToken)
             ?? throw new NotFoundException($"Patient record '{request.FileId}' was not found.");
 
+        if (IsAllowedLegacyExternalUrl(record.EncryptionAlgorithm, record.StorageKey))
+        {
+            return new DecryptedFileStreamResult(
+                Stream: Stream.Null,
+                ContentType: record.MimeType ?? "application/octet-stream",
+                FileName: record.FileName,
+                ExternalRedirectUrl: record.StorageKey.Trim()
+            );
+        }
+
         await using var encryptedStream = await _storageService.OpenReadStreamAsync(record.StorageKey, cancellationToken);
 
         var decryptedStream = await _encryptionService.DecryptToStreamAsync(
@@ -48,5 +68,22 @@ public sealed class StreamPatientRecordQueryHandler : IRequestHandler<StreamPati
             ContentType: record.MimeType ?? "application/octet-stream",
             FileName: record.FileName
         );
+    }
+
+    public static bool IsAllowedLegacyExternalUrl(string? encryptionAlgorithm, string? storageKey)
+    {
+        if (!string.Equals(encryptionAlgorithm, "NONE", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(storageKey))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(storageKey.Trim(), UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+               && AllowedLegacyExternalHosts.Contains(uri.Host);
     }
 }

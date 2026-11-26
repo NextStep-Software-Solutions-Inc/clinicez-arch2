@@ -12,6 +12,7 @@ public static class Permissions
     public const string ManageRoles = "manage:roles";
     public const string ManageAdmins = "manage:admins";
     public const string ManageSettings = "manage:settings";
+    public const string ManageMigrations = "manage:migrations";
     public const string ManagePlans = "manage:plans";
     public const string ViewVerifications = "view:verifications";
     public const string VerifyDirectory = "verify:directory";
@@ -27,6 +28,7 @@ public static class Permissions
         ManageRoles,
         ManageAdmins,
         ManageSettings,
+        ManageMigrations,
         ManagePlans,
         ViewVerifications,
         VerifyDirectory,
@@ -43,6 +45,7 @@ public static class Permissions
         new(ManageRoles, "Manage Roles & Access", "Allows viewing, creating, and editing roles and permissions configurations.", "Administration"),
         new(ManageAdmins, "Manage Admin Users", "Allows full control to invite, edit, or delete other administrative profiles.", "Administration"),
         new(ManageSettings, "Manage Platform Settings", "Allows configuring platform-wide system settings and environment parameters.", "System"),
+        new(ManageMigrations, "Manage v1 Migrations & Sync", "Allows operating the Clinic EZ v1 to v2 migration engine, live CDC sync bindings, parity sweeps, and manual decommission freeze.", "System"),
         new(ManagePlans, "Manage Commercial Plans", "Allows creating, updating, and managing commercial subscription tiers, limits, and feature entitlements.", "Billing"),
         new(ViewVerifications, "View Verification Queue", "Allows viewing clinic and practitioner directory verification requests.", "Directory"),
         new(VerifyDirectory, "Verify Directory Requests", "Allows approving or rejecting clinic and practitioner directory verification requests.", "Directory"),

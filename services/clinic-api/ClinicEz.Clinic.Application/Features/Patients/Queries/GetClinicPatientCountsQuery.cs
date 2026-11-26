@@ -105,7 +105,7 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
             var seniorPwdCount = await baseQuery.Where(p =>
                 (!string.IsNullOrWhiteSpace(p.SeniorCitizenId) && p.SeniorCitizenId.Trim().Length > 0) ||
                 (!string.IsNullOrWhiteSpace(p.PwdId) && p.PwdId.Trim().Length > 0) ||
-                p.DateOfBirth <= seniorCutoff)
+                (p.DateOfBirth.HasValue && p.DateOfBirth.Value <= seniorCutoff))
                 .CountAsync(ct);
 
             var list = await baseQuery.Select(p => p.CustomFields).ToListAsync(ct);
@@ -190,7 +190,7 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
                 g.Count(p =>
                     (!string.IsNullOrWhiteSpace(p.SeniorCitizenId) && p.SeniorCitizenId.Trim().Length > 0) ||
                     (!string.IsNullOrWhiteSpace(p.PwdId) && p.PwdId.Trim().Length > 0) ||
-                    p.DateOfBirth <= seniorCutoff),
+                    (p.DateOfBirth.HasValue && p.DateOfBirth.Value <= seniorCutoff)),
                 !hasStaff ? 0 : g.Count(p =>
                     (relatedPatientIds.Count > 0 && relatedPatientIds.Contains(p.Id)) ||
                     p.Vitals.Any(v => !v.IsDeleted && v.NurseId == staffId) ||

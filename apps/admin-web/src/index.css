@@ -53,3 +53,38 @@ html, body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+
+@keyframes clinicez-wave-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-32px);
+  }
+}
+
+@keyframes clinicez-shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+.clinicez-progress-wave {
+  animation: clinicez-wave-scroll 0.9s linear infinite;
+  will-change: transform;
+}
+
+.clinicez-progress-shimmer {
+  animation: clinicez-shimmer-sweep 1.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clinicez-progress-wave,
+  .clinicez-progress-shimmer {
+    animation: none;
+  }
+}

@@ -111,6 +111,11 @@ public sealed class RecordsController : ControllerBase
             return NotFound(ApiResponse<object>.Fail("Attachment file not found or unauthorized."));
         }
 
+        if (!string.IsNullOrWhiteSpace(result.ExternalRedirectUrl))
+        {
+            return Redirect(result.ExternalRedirectUrl);
+        }
+
         return File(result.FileBytes, result.ContentType, result.FileName);
     }
 

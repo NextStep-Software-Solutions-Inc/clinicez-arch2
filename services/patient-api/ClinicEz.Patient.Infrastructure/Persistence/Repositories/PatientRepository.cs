@@ -15,6 +15,33 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
         => Context.Patients
             .FirstOrDefaultAsync(p => p.ClerkUserId == clerkUserId, cancellationToken);
 
+    public async Task<Patient?> GetSingleUnlinkedByVerifiedEmailsAsync(
+        IReadOnlyCollection<string> verifiedEmails,
+        CancellationToken cancellationToken = default)
+    {
+        if (verifiedEmails is null || verifiedEmails.Count == 0)
+            return null;
+
+        var normalized = verifiedEmails
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Select(e => e.Trim().ToLowerInvariant())
+            .Distinct()
+            .ToArray();
+
+        if (normalized.Length == 0)
+            return null;
+
+        var matches = await Context.Patients
+            .Where(p => p.ClerkUserId == null
+                        && p.ManagedByPatientId == null
+                        && p.Email != null
+                        && normalized.Contains(p.Email.ToLower()))
+            .Take(2)
+            .ToListAsync(cancellationToken);
+
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
     public Task<Patient?> GetByClerkUserIdWithDetailsAsync(string clerkUserId, CancellationToken cancellationToken = default)
         => Context.Patients
             .Include(p => p.Addresses)

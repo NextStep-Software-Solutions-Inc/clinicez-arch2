@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using ClinicEz.Patient.Api.Abstractions;
+using ClinicEz.Patient.Api.Auth;
 using ClinicEz.Patient.Application.Common.DTOs;
 using ClinicEz.Patient.Application.Features.Patients.Queries.GetPatientMe;
 using ClinicEz.Shared.Common;
@@ -18,6 +19,7 @@ public sealed class GetPatientsMeEndpoint : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("/patients/me", async (
+                HttpContext httpContext,
                 ICurrentUserService currentUser,
                 ISender sender,
                 CancellationToken ct) =>
@@ -26,7 +28,8 @@ public sealed class GetPatientsMeEndpoint : IEndpoint
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new UnauthorizedException("Authenticated Clerk user identity is required.");
 
-                var result = await sender.Send(new GetPatientMeQuery(userId), ct);
+                var verifiedEmails = ClaimEmailExtractor.ExtractVerifiedEmails(httpContext.User);
+                var result = await sender.Send(new GetPatientMeQuery(userId, verifiedEmails), ct);
 
                 return result is null
                     ? Results.NotFound(ApiResponse<object>.Fail("No linked patient record found for current user."))

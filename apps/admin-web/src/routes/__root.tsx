@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRootRoute, Outlet } from '@tanstack/react-router';
 import { IdleSessionGuard } from '@/components/IdleSessionGuard';
+import { GlobalUiTooltip } from '@/components/ui';
 import { Toaster } from 'sonner';
 
 function RootComponent() {
@@ -26,6 +27,7 @@ function RootComponent() {
   return (
     <IdleSessionGuard>
       <Outlet />
+      <GlobalUiTooltip />
       <Toaster position="top-right" richColors theme={theme} />
     </IdleSessionGuard>
   );

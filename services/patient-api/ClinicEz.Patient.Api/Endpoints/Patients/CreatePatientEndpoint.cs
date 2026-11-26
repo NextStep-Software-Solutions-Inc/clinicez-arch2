@@ -3,6 +3,7 @@ using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interfaces;
 using MediatR;
 using ClinicEz.Patient.Api.Abstractions;
+using ClinicEz.Patient.Api.Auth;
 using ClinicEz.Patient.Application.Features.Patients.Commands.CreatePatient;
 
 namespace ClinicEz.Patient.Api.Endpoints.Patients;
@@ -23,6 +24,7 @@ public sealed class CreatePatientEndpoint : IEndpoint
     {
         app.MapPost("/patients", async (
                 CreatePatientRequest request,
+                HttpContext httpContext,
                 ICurrentUserService currentUser,
                 ISender sender,
                 CancellationToken ct) =>
@@ -30,6 +32,7 @@ public sealed class CreatePatientEndpoint : IEndpoint
                 if (!string.Equals(request.ClerkUserId, currentUser.UserId, StringComparison.Ordinal))
                     throw new ForbiddenException("A patient profile can only be created for the signed-in user.");
 
+                var verifiedEmails = ClaimEmailExtractor.ExtractVerifiedEmails(httpContext.User);
                 var id = await sender.Send(new CreatePatientCommand(
                     request.ClerkUserId,
                     request.FirstName,
@@ -38,7 +41,8 @@ public sealed class CreatePatientEndpoint : IEndpoint
                     request.Suffix,
                     request.Sex,
                     request.DateOfBirth,
-                    request.Nationality), ct);
+                    request.Nationality,
+                    verifiedEmails), ct);
 
                 return Results.Created(
                     $"/api/v1/patients/{id}",

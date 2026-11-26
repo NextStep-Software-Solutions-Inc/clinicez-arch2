@@ -6,6 +6,7 @@ import {
   PlanEditorDialog,
   calculateAnnualDiscountPercent,
 } from '@/components/PlanEditorDialog';
+import { Button, Chip, Text } from '@/components/ui';
 import { toast } from 'sonner';
 import {
   IconCash,
@@ -105,40 +106,41 @@ function PlansPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={loadPlans}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
-          <button
-            type="button"
+            Refresh
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs"
+            leadingIcon={<IconPlus className="h-4 w-4" />}
           >
-            <IconPlus className="h-4 w-4" />
-            <span>New Plan</span>
-          </button>
+            New Plan
+          </Button>
         </div>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="dangerSubtle"
+            size="xs"
             onClick={loadPlans}
-            className="px-3 py-1 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
+            className="shrink-0"
           >
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -196,22 +198,24 @@ function PlansPage() {
           </p>
           <div className="pt-2">
             {search ? (
-              <button
-                type="button"
+              <Button
+                variant="unstyled"
+                size="md"
                 onClick={() => setSearch('')}
-                className="px-4 py-2 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20 transition-colors cursor-pointer"
+                className="px-4 font-semibold text-primary bg-primary-subtle hover:bg-primary/20"
               >
                 Clear Search
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="lg"
                 onClick={handleCreate}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs"
+                leadingIcon={<IconPlus className="h-4 w-4" />}
+                className="px-5 text-xs"
               >
-                <IconPlus className="h-4 w-4" />
-                <span>Author First Plan</span>
-              </button>
+                Author First Plan
+              </Button>
             )}
           </div>
         </div>
@@ -236,18 +240,24 @@ function PlansPage() {
                 }`}
               >
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-base text-text">{p.name}</h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Text as="h3" className="font-bold text-base text-text">
+                        {p.name}
+                      </Text>
                       {p.highlighted && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary-subtle text-primary border border-primary/20">
+                        <Chip tone="primary" size="xs" className="shrink-0">
                           Popular
-                        </span>
+                        </Chip>
                       )}
                     </div>
-                    <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-surface-muted border border-border text-text-muted">
+                    <Chip
+                      tone="neutral"
+                      size="xs"
+                      className="font-mono text-text-muted rounded-md shrink-0"
+                    >
                       Rank {p.rank}
-                    </span>
+                    </Chip>
                   </div>
 
                   <p className="text-xs text-text-muted leading-relaxed line-clamp-2">
@@ -262,9 +272,9 @@ function PlansPage() {
                     <div className="text-[11px] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
                       <span>Annual: ₱{(p.annualPrice ?? 0).toLocaleString()} / yr</span>
                       {discountPct > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        <Chip tone="success" size="xs" className="rounded-md px-1.5">
                           Save {discountPct}%
-                        </span>
+                        </Chip>
                       )}
                     </div>
                   </div>
@@ -279,9 +289,9 @@ function PlansPage() {
                   {hasFeatures ? (
                     <ul className="space-y-1.5 text-text-secondary">
                       {displayFeatures.slice(0, 5).map((f, i) => (
-                        <li key={i} className="flex items-center gap-2">
+                        <li key={i} className="flex items-center gap-2 min-w-0">
                           <IconCheck className="h-3.5 w-3.5 text-primary shrink-0" />
-                          <span className="truncate">{f}</span>
+                          <Text>{f}</Text>
                         </li>
                       ))}
                       {displayFeatures.length > 5 && (
@@ -297,22 +307,24 @@ function PlansPage() {
 
                 {/* Action Buttons */}
                 <div className="pt-4 border-t border-border flex items-center justify-end gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => handleEdit(p)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text bg-surface-muted hover:bg-surface border border-border rounded-xl transition-colors cursor-pointer"
+                    leadingIcon={<IconEdit className="h-3.5 w-3.5" />}
+                    className="font-semibold bg-surface-muted hover:bg-surface rounded-xl"
                   >
-                    <IconEdit className="h-3.5 w-3.5" />
-                    <span>Edit</span>
-                  </button>
-                  <button
-                    type="button"
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setPlanToDelete(p)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-500/10 rounded-xl transition-colors cursor-pointer"
+                    leadingIcon={<IconTrash className="h-3.5 w-3.5" />}
+                    className="font-semibold text-red-600 dark:text-red-400 hover:text-red-600 hover:bg-red-500/10 rounded-xl"
                   >
-                    <IconTrash className="h-3.5 w-3.5" />
-                    <span>Delete</span>
-                  </button>
+                    Delete
+                  </Button>
                 </div>
               </div>
             );
@@ -357,22 +369,23 @@ function PlansPage() {
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="md"
                 onClick={() => setPlanToDelete(null)}
-                className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
                 onClick={handleDelete}
                 disabled={deleteLoading}
-                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                leadingIcon={deleteLoading ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                className="px-5"
               >
-                {deleteLoading && <IconLoader className="h-4 w-4 animate-spin" />}
-                <span>Confirm Delete</span>
-              </button>
+                Confirm Delete
+              </Button>
             </div>
           </div>
         </div>

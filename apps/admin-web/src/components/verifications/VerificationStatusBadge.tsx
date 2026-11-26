@@ -14,6 +14,7 @@ import {
 } from "@tabler/icons-react";
 import { getQueueStatusDisplay, TONE_BADGE_CLASSES } from "@/lib/verificationStatus";
 import type { VerificationEvidenceBlobResult } from "@/services/verification.service";
+import { Button, Chip, Text } from "@/components/ui";
 
 export function VerificationStatusBadge({
   status,
@@ -24,25 +25,33 @@ export function VerificationStatusBadge({
 }) {
   const display = getQueueStatusDisplay(status);
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${display.badgeClassName} ${className}`.trim()}
+    <Chip
+      tone="unstyled"
+      size="custom"
+      className={`px-2 py-0.5 text-[11px] border ${display.badgeClassName} ${className}`.trim()}
     >
       {display.label}
-    </span>
+    </Chip>
   );
 }
 
 export function VerificationKindBadge({ kind }: { kind: string }) {
   const isFacility = kind.toLowerCase() === "facility";
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-surface-muted text-text border border-border whitespace-nowrap">
-      {isFacility ? (
-        <IconBuildingHospital className="h-3 w-3 text-primary shrink-0" />
-      ) : (
-        <IconStethoscope className="h-3 w-3 text-primary shrink-0" />
-      )}
-      <span>{isFacility ? "Facility" : "Practitioner"}</span>
-    </span>
+    <Chip
+      tone="neutral"
+      size="custom"
+      className="gap-1 px-2 py-0.5 text-[11px] text-text"
+      leadingIcon={
+        isFacility ? (
+          <IconBuildingHospital className="h-3 w-3 text-primary shrink-0" />
+        ) : (
+          <IconStethoscope className="h-3 w-3 text-primary shrink-0" />
+        )
+      }
+    >
+      {isFacility ? "Facility" : "Practitioner"}
+    </Chip>
   );
 }
 
@@ -179,19 +188,21 @@ export function ProofEvidenceCard({
       <div className="rounded-xl border border-dashed border-border bg-surface-muted/40 p-3 text-xs text-text-muted flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <IconFileText className="h-4 w-4 text-text-muted shrink-0" />
-          <span className="truncate">{label}: Not attached</span>
+          <Text>{label}: Not attached</Text>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {isUpdated ? (
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.warning}`}
+            <Chip
+              tone="unstyled"
+              size="custom"
+              className={`px-2 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.warning}`}
             >
               Updated
-            </span>
+            </Chip>
           ) : null}
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-muted text-text-muted border border-border">
+          <Chip tone="neutral" size="xs" className="text-text-muted">
             Missing
-          </span>
+          </Chip>
         </div>
       </div>
     );
@@ -215,32 +226,37 @@ export function ProofEvidenceCard({
             )}
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <div className="text-xs font-semibold text-text truncate">{label}</div>
+                <Text as="div" className="text-xs font-semibold text-text">
+                  {label}
+                </Text>
                 {isUpdated ? (
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.warning}`}
+                  <Chip
+                    tone="unstyled"
+                    size="custom"
+                    className={`px-2 py-0.5 text-[10px] border ${TONE_BADGE_CLASSES.warning}`}
                   >
                     Updated
-                  </span>
+                  </Chip>
                 ) : null}
               </div>
-              <div className="text-[10px] text-text-muted truncate">
+              <Text as="div" className="text-[10px] text-text-muted">
                 {kindLabel} • {fileName}
-              </div>
+              </Text>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
             {previewUrl ? (
               <>
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="xs"
                   onClick={() => setExpanded(true)}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-semibold text-text bg-surface border border-border hover:bg-surface-muted rounded-lg transition-colors cursor-pointer"
+                  leadingIcon={<IconMaximize className="h-3 w-3" />}
+                  className="gap-1 font-semibold text-text"
                 >
-                  <IconMaximize className="h-3 w-3" />
-                  <span>Full View</span>
-                </button>
+                  Full View
+                </Button>
                 <a
                   href={previewUrl}
                   download={fileName}
@@ -270,22 +286,25 @@ export function ProofEvidenceCard({
               <span className="leading-relaxed">{error}</span>
             </div>
             {fetchEvidence ? (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="xs"
                 onClick={() => void loadPreview()}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-surface border border-border text-text hover:bg-surface-muted transition-colors cursor-pointer shrink-0"
+                leadingIcon={<IconRefresh className="h-3 w-3" />}
+                className="gap-1 font-semibold text-text shrink-0"
               >
-                <IconRefresh className="h-3 w-3" />
-                <span>Retry</span>
-              </button>
+                Retry
+              </Button>
             ) : null}
           </div>
         ) : previewUrl ? (
           isImage ? (
-            <button
-              type="button"
+            <Button
+              variant="unstyled"
+              size="custom"
+              multiline
               onClick={() => setExpanded(true)}
-              className="block w-full rounded-lg overflow-hidden border border-border bg-background hover:border-primary/50 transition-colors cursor-pointer"
+              className="block w-full rounded-lg overflow-hidden border border-border bg-background hover:border-primary/50"
               aria-label={`Expand ${label}`}
             >
               <img
@@ -296,7 +315,7 @@ export function ProofEvidenceCard({
                 }`}
                 referrerPolicy="no-referrer"
               />
-            </button>
+            </Button>
           ) : isPdf ? (
             <div className="rounded-lg overflow-hidden border border-border bg-background">
               <iframe
@@ -309,7 +328,7 @@ export function ProofEvidenceCard({
             </div>
           ) : (
             <div className="rounded-lg border border-border bg-background p-3 flex items-center justify-between gap-2 text-xs text-text-secondary">
-              <span className="truncate">{fileName}</span>
+              <Text>{fileName}</Text>
               <a
                 href={previewUrl}
                 download={fileName}
@@ -324,13 +343,14 @@ export function ProofEvidenceCard({
           <div className="rounded-lg border border-dashed border-border bg-background p-3 text-xs text-text-muted flex items-center justify-between gap-2">
             <span>Uploaded proof attached ({fileName}).</span>
             {fetchEvidence ? (
-              <button
-                type="button"
+              <Button
+                variant="unstyled"
+                size="xs"
                 onClick={() => void loadPreview()}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-primary bg-primary-subtle hover:bg-primary/20 transition-colors cursor-pointer"
+                className="font-semibold text-primary bg-primary-subtle hover:bg-primary/20 shrink-0"
               >
-                <span>Load Preview</span>
-              </button>
+                Load Preview
+              </Button>
             ) : null}
           </div>
         )}
@@ -351,10 +371,12 @@ export function ProofEvidenceCard({
           >
             <div className="px-5 py-3.5 border-b border-border bg-surface-muted/40 flex items-center justify-between gap-3 shrink-0">
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-text truncate">{label}</h3>
-                <p className="text-[11px] text-text-muted truncate">
+                <Text as="h3" className="text-sm font-bold text-text">
+                  {label}
+                </Text>
+                <Text as="p" className="text-[11px] text-text-muted">
                   {kindLabel} • {fileName}
-                </p>
+                </Text>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <a
@@ -365,14 +387,15 @@ export function ProofEvidenceCard({
                   <IconDownload className="h-3.5 w-3.5" />
                   <span>Download</span>
                 </a>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="iconSm"
                   onClick={() => setExpanded(false)}
                   aria-label="Close document viewer"
-                  className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-muted transition-colors cursor-pointer"
+                  className="text-text-muted hover:text-text"
                 >
                   <IconX className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             </div>
 

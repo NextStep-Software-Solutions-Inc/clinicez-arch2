@@ -126,6 +126,12 @@ public sealed class ValidateConsultationYakapReadinessQueryHandler : IRequestHan
             }
         }
 
+        bool patientDobValid = patient?.DateOfBirth.HasValue == true;
+        if (patient != null && !patientDobValid)
+        {
+            missingFields.Add("Patient date of birth is missing.");
+        }
+
         // 4. ATC (Authorization Transaction Code / Appointment Transaction Code)
         var atc = encounter.PhilHealthAtc;
         bool atcValid = !string.IsNullOrWhiteSpace(atc);
@@ -265,10 +271,9 @@ public sealed class ValidateConsultationYakapReadinessQueryHandler : IRequestHan
         else
         {
             bool isInfant = false;
-            if (patient != null)
+            if (patient?.DateOfBirth is { } birthDate)
             {
                 var encDate = encounter.EncounterDate;
-                var birthDate = patient.DateOfBirth;
                 int ageMonths = (encDate.Year - birthDate.Year) * 12 + encDate.Month - birthDate.Month;
                 if (encDate.Day < birthDate.Day)
                     ageMonths--;
@@ -347,6 +352,7 @@ public sealed class ValidateConsultationYakapReadinessQueryHandler : IRequestHan
         bool isReady = doctorPanValid &&
                        doctorPrcValid &&
                        patientPinValid &&
+                       patientDobValid &&
                        atcValid &&
                        symptomsValid &&
                        physicalExamComplete &&

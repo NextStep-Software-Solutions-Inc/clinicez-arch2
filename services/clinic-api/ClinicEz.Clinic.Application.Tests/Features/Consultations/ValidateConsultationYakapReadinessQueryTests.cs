@@ -51,6 +51,7 @@ public class ValidateConsultationYakapReadinessQueryTests
             FirstName = "Maria",
             LastName = "Santos",
             ContactNumber = "09171234567",
+            DateOfBirth = new DateOnly(1990, 5, 15),
             PhilHealthNumber = "12-345678901-8"
         };
 
@@ -316,5 +317,39 @@ public class ValidateConsultationYakapReadinessQueryTests
         // Act & Assert
         var act = () => handler.Handle(new ValidateConsultationYakapReadinessQuery(Guid.NewGuid()), CancellationToken.None);
         await act.Should().ThrowAsync<NotFoundException>();
+    }
+
+    [Fact]
+    public async Task Handle_MissingPatientDateOfBirth_ReturnsIsReadyFalseWithMissingField()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+
+        var encounterId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+
+        var (encounter, doctor, patient, vitals) = CreateValidBaseline(encounterId, doctorId, patientId);
+        patient.DateOfBirth = null;
+
+        await consultRepo.AddAsync(encounter, CancellationToken.None);
+        await staffRepo.AddAsync(doctor, CancellationToken.None);
+        await patientRepo.AddAsync(patient, CancellationToken.None);
+        await vitalsRepo.AddAsync(vitals, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new ValidateConsultationYakapReadinessQueryHandler(
+            consultRepo, patientRepo, staffRepo, vitalsRepo, _clinicContext);
+
+        // Act
+        var result = await handler.Handle(new ValidateConsultationYakapReadinessQuery(encounterId), CancellationToken.None);
+
+        // Assert
+        result.IsReady.Should().BeFalse();
+        result.MissingFields.Should().Contain("Patient date of birth is missing.");
     }
 }

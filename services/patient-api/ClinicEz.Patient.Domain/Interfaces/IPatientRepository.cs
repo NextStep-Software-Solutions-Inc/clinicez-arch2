@@ -7,6 +7,14 @@ public interface IPatientRepository : IBaseRepository<ClinicEz.Patient.Domain.En
     Task<ClinicEz.Patient.Domain.Entities.Patient?> GetByClerkUserIdAsync(string clerkUserId, CancellationToken cancellationToken = default);
     Task<ClinicEz.Patient.Domain.Entities.Patient?> GetByClerkUserIdWithDetailsAsync(string clerkUserId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Finds a single unambiguous unlinked primary patient (ClerkUserId == null, ManagedByPatientId == null)
+    /// matching one of the caller's Clerk-verified email addresses. Returns null if 0 or >1 records match.
+    /// </summary>
+    Task<ClinicEz.Patient.Domain.Entities.Patient?> GetSingleUnlinkedByVerifiedEmailsAsync(
+        IReadOnlyCollection<string> verifiedEmails,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Retrieves the caller's own patient record for intake autofill with data-minimized child collections (Addresses, GovernmentIds, Allergies).</summary>
     Task<ClinicEz.Patient.Domain.Entities.Patient?> GetForMeByClerkUserIdAsync(string clerkUserId, CancellationToken cancellationToken = default);
 

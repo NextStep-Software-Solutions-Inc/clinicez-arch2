@@ -9,7 +9,8 @@ public sealed record PatientHealthPassDto(
     string? BloodType,
     string? BloodGroupDisplay,
     string? AvatarUrl,
-    int UnreadNotificationsCount);
+    int UnreadNotificationsCount,
+    bool IsLegacyAccountReclaimed = false);
 
 public sealed record WelcomeChecklistDto(
     IReadOnlyList<string> VisitedSteps,

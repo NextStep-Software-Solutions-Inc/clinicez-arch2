@@ -7,6 +7,7 @@ import {
   PermissionDefinitionDto,
 } from '@/services/admin.service';
 import { toast } from 'sonner';
+import { Button, Chip, Text } from '@/components/ui';
 import {
   IconShieldCheck,
   IconRefresh,
@@ -164,40 +165,36 @@ function RolesPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={loadData}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
-          <button
-            type="button"
+            Refresh
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleOpenCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs"
+            leadingIcon={<IconPlus className="h-4 w-4" />}
           >
-            <IconPlus className="h-4 w-4" />
-            <span>New Custom Role</span>
-          </button>
+            New Custom Role
+          </Button>
         </div>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
-            onClick={loadData}
-            className="px-3 py-1 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
-          >
+          <Button variant="dangerSubtle" size="xs" onClick={loadData} className="shrink-0">
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -252,14 +249,15 @@ function RolesPage() {
               : 'Zero custom administrative roles currently exist. Define a custom role to configure permissions.'}
           </p>
           <div className="pt-2">
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="lg"
               onClick={handleOpenCreate}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs"
+              leadingIcon={<IconPlus className="h-4 w-4" />}
+              className="px-5 text-xs"
             >
-              <IconPlus className="h-4 w-4" />
-              <span>Create New Role</span>
-            </button>
+              Create New Role
+            </Button>
           </div>
         </div>
       ) : (
@@ -274,19 +272,25 @@ function RolesPage() {
                 className="p-5 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
               >
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-sm text-text">{role.name}</h3>
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Text as="h3" className="font-bold text-sm text-text">
+                        {role.name}
+                      </Text>
                       {isSuper && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                          <IconLock className="h-3 w-3" />
+                        <Chip
+                          tone="warning"
+                          size="xs"
+                          leadingIcon={<IconLock className="h-3 w-3" />}
+                          className="shrink-0"
+                        >
                           SuperAdmin
-                        </span>
+                        </Chip>
                       )}
                     </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary-subtle text-primary border border-primary/20">
+                    <Chip tone="primary" size="xs" className="font-mono shrink-0">
                       {role.permissions?.length ?? 0} Scopes
-                    </span>
+                    </Chip>
                   </div>
 
                   <p className="text-xs text-text-muted leading-relaxed line-clamp-2">
@@ -297,45 +301,57 @@ function RolesPage() {
                 <div className="space-y-3 pt-3 border-t border-border">
                   <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
                     {role.permissions?.slice(0, 8).map((perm) => (
-                      <span
+                      <Chip
                         key={perm}
-                        className="text-[10px] px-2 py-0.5 rounded-md bg-surface-muted border border-border text-text-secondary font-mono"
+                        tone="neutral"
+                        size="xs"
+                        className="rounded-md font-mono font-normal"
                       >
                         {perm}
-                      </span>
+                      </Chip>
                     ))}
                     {(role.permissions?.length ?? 0) > 8 && (
-                      <span className="text-[10px] text-text-muted font-mono pl-1">
+                      <Chip
+                        tone="unstyled"
+                        size="xs"
+                        className="text-text-muted font-mono font-normal px-1"
+                      >
                         + {(role.permissions?.length ?? 0) - 8} more
-                      </span>
+                      </Chip>
                     )}
                   </div>
 
                   <div className="pt-2 border-t border-border flex items-center justify-end gap-2">
                     {!isSuper ? (
                       <>
-                        <button
-                          type="button"
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => handleOpenEdit(role)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text bg-surface-muted hover:bg-surface border border-border rounded-xl transition-colors cursor-pointer"
+                          leadingIcon={<IconEdit className="h-3.5 w-3.5" />}
+                          className="bg-surface-muted hover:bg-surface rounded-xl font-semibold"
                         >
-                          <IconEdit className="h-3.5 w-3.5" />
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          type="button"
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => setRoleToDelete(role)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-500/10 rounded-xl transition-colors cursor-pointer"
+                          leadingIcon={<IconTrash className="h-3.5 w-3.5" />}
+                          className="text-red-600 dark:text-red-400 hover:text-red-600 hover:bg-red-500/10 rounded-xl font-semibold"
                         >
-                          <IconTrash className="h-3.5 w-3.5" />
-                          <span>Delete</span>
-                        </button>
+                          Delete
+                        </Button>
                       </>
                     ) : (
-                      <span className="text-[11px] text-text-muted font-medium flex items-center gap-1">
-                        <IconLock className="h-3 w-3" />
+                      <Chip
+                        tone="neutral"
+                        size="xs"
+                        leadingIcon={<IconLock className="h-3 w-3" />}
+                        className="bg-transparent border-transparent text-text-muted font-medium px-0"
+                      >
                         System Protected
-                      </span>
+                      </Chip>
                     )}
                   </div>
                 </div>
@@ -355,32 +371,36 @@ function RolesPage() {
             className="w-full max-w-2xl bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col text-text"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-5 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-primary-subtle text-primary">
+            <div className="flex items-center justify-between p-5 border-b border-border gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-xl bg-primary-subtle text-primary shrink-0">
                   <IconShieldCheck className="h-5 w-5" />
                 </div>
-                <div>
-                  <h2 className="text-base font-bold text-text">
+                <div className="min-w-0">
+                  <Text as="h2" className="text-base font-bold text-text">
                     {editingRole ? `Edit Role: ${editingRole.name}` : 'Create New Administrative Role'}
-                  </h2>
+                  </Text>
                   <p className="text-xs text-text-muted">Configure granular RBAC permissions</p>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={() => setDialogOpen(false)}
-                className="p-1 rounded-lg text-text-muted hover:text-text cursor-pointer"
+                className="text-text-muted hover:text-text shrink-0"
+                aria-label="Close role editor"
               >
                 <IconX className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
 
             <form onSubmit={handleSaveRole} className="flex flex-col">
               <div className="p-6 max-h-[68vh] overflow-y-auto space-y-4 text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Role Name</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Role Name
+                    </Text>
                     <input
                       type="text"
                       value={name}
@@ -390,7 +410,9 @@ function RolesPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-text">Description</label>
+                    <Text as="label" className="font-semibold text-text">
+                      Description
+                    </Text>
                     <input
                       type="text"
                       value={description}
@@ -403,24 +425,28 @@ function RolesPage() {
 
                 {/* Permissions Checkbox Matrix */}
                 <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between border-b border-border pb-1">
-                    <label className="font-semibold text-text">Permission Matrix ({selectedPermissions.length} selected)</label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
+                  <div className="flex items-center justify-between border-b border-border pb-1 gap-2">
+                    <Text as="label" className="font-semibold text-text">
+                      Permission Matrix ({selectedPermissions.length} selected)
+                    </Text>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        variant="unstyled"
+                        size="custom"
                         onClick={() => setSelectedPermissions(permissions.map((p) => p.token))}
-                        className="text-[11px] text-primary hover:underline font-medium cursor-pointer"
+                        className="text-[11px] text-primary hover:underline font-medium"
                       >
                         Select All
-                      </button>
+                      </Button>
                       <span className="text-text-muted">•</span>
-                      <button
-                        type="button"
+                      <Button
+                        variant="unstyled"
+                        size="custom"
                         onClick={() => setSelectedPermissions([])}
-                        className="text-[11px] text-text-muted hover:text-text cursor-pointer"
+                        className="text-[11px] text-text-muted hover:text-text"
                       >
                         Clear All
-                      </button>
+                      </Button>
                     </div>
                   </div>
 
@@ -446,16 +472,24 @@ function RolesPage() {
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => handleTogglePermission(perm.token)}
-                              className="mt-0.5 rounded text-primary focus:ring-primary h-4 w-4"
+                              className="mt-0.5 rounded text-primary focus:ring-primary h-4 w-4 shrink-0"
                             />
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-xs text-text">{perm.label || perm.token}</span>
-                                <span className="font-mono text-[10px] text-text-muted">({perm.token})</span>
+                            <div className="space-y-0.5 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Text as="span" className="font-semibold text-xs text-text">
+                                  {perm.label || perm.token}
+                                </Text>
+                                <Text as="span" className="font-mono text-[10px] text-text-muted shrink-0">
+                                  ({perm.token})
+                                </Text>
                                 {perm.category && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface border border-border text-text-muted">
+                                  <Chip
+                                    tone="neutral"
+                                    size="xs"
+                                    className="rounded bg-surface shrink-0 font-normal"
+                                  >
                                     {perm.category}
-                                  </span>
+                                  </Chip>
                                 )}
                               </div>
                               <div className="text-[11px] text-text-muted leading-relaxed">
@@ -472,22 +506,24 @@ function RolesPage() {
 
               {/* Footer */}
               <div className="p-4 bg-surface-muted border-t border-border flex items-center justify-end gap-3">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={() => setDialogOpen(false)}
                   disabled={saving}
-                  className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="md"
                   disabled={saving}
-                  className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  leadingIcon={saving ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                  className="px-5"
                 >
-                  {saving && <IconLoader className="h-4 w-4 animate-spin" />}
-                  <span>{editingRole ? 'Save Role Changes' : 'Create Custom Role'}</span>
-                </button>
+                  {editingRole ? 'Save Role Changes' : 'Create Custom Role'}
+                </Button>
               </div>
             </form>
           </div>
@@ -519,22 +555,23 @@ function RolesPage() {
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="md"
                 onClick={() => setRoleToDelete(null)}
-                className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
                 onClick={handleDeleteRole}
                 disabled={deleting}
-                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                leadingIcon={deleting ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                className="px-5"
               >
-                {deleting && <IconLoader className="h-4 w-4 animate-spin" />}
-                <span>Confirm Delete</span>
-              </button>
+                Confirm Delete
+              </Button>
             </div>
           </div>
         </div>

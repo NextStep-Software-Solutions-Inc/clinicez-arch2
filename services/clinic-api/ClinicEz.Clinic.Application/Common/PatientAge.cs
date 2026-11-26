@@ -11,4 +11,8 @@ public static class PatientAge
         if (today < dateOfBirth.AddYears(years)) years--;
         return Math.Max(years, 0);
     }
+
+    /// <summary>Completed years between optional <paramref name="dateOfBirth"/> and <paramref name="today"/>.</summary>
+    public static int? InYears(DateOnly? dateOfBirth, DateOnly today) =>
+        dateOfBirth.HasValue ? InYears(dateOfBirth.Value, today) : null;
 }

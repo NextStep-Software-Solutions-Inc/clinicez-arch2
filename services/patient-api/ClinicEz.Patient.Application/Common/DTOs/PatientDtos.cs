@@ -14,7 +14,8 @@ public sealed record PatientSummaryDto(
     string? Mobile, string? AltPhone, string? Email, string? MessengerHandle,
     string? AvatarUrl,
     bool ConsentToShareInfo,
-    string ClinicEzId);
+    string ClinicEzId,
+    bool IsLegacyAccountReclaimed = false);
 
 // ── Contact sub-entities ──────────────────────────────────────────────────
 
@@ -233,5 +234,6 @@ public sealed record PatientMeDto(
     IReadOnlyList<PatientAddressDto> Addresses,
     string? PhilHealthPin,
     IReadOnlyList<PatientGovernmentIdDto> GovernmentIds,
-    IReadOnlyList<PatientAllergyDto> Allergies
+    IReadOnlyList<PatientAllergyDto> Allergies,
+    bool IsLegacyAccountReclaimed = false
 );

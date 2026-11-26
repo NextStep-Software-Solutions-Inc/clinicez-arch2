@@ -106,6 +106,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
     public DbSet<UploadGrant> UploadGrants { get; set; } = null!;
     public DbSet<ShareImport> ShareImports { get; set; } = null!;
+    public DbSet<PatientLinkRequest> PatientLinkRequests { get; set; } = null!;
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; } = null!;
     public DbSet<InteropInboxMessage> InteropInbox { get; set; } = null!;
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();

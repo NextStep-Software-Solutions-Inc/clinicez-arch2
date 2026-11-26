@@ -5,6 +5,7 @@ import {
   CreateBillingPlanPayload,
   UpdateBillingPlanPayload,
 } from '@/services/admin.service';
+import { Button, Chip, Tabs, Text } from '@/components/ui';
 import { toast } from 'sonner';
 import {
   IconLoader,
@@ -611,15 +612,15 @@ export function PlanEditorDialog({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary-subtle text-primary">
+        <div className="flex items-center justify-between gap-3 p-5 border-b border-border">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2.5 rounded-xl bg-primary-subtle text-primary shrink-0">
               <IconStack className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-text">
+            <div className="min-w-0">
+              <Text as="h2" className="text-base font-bold text-text">
                 {isEditing ? `Edit Commercial Plan — ${plan?.name}` : 'Author Commercial Subscription Plan'}
-              </h2>
+              </Text>
               <p className="text-xs text-text-muted mt-0.5">
                 Step {step} of 4: {step === 1 && 'Basic Identity'}
                 {step === 2 && 'Commercial Pricing'}
@@ -628,39 +629,34 @@ export function PlanEditorDialog({
               </p>
             </div>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="iconSm"
             onClick={onClose}
-            className="p-1 rounded-lg text-text-muted hover:text-text cursor-pointer"
+            aria-label="Close plan editor"
+            tooltip="Close"
+            className="text-text-muted hover:text-text shrink-0"
           >
             <IconX className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Step Indicator */}
-        <div className="grid grid-cols-4 border-b border-border text-center text-xs font-semibold">
-          {[
-            { num: 1, label: 'Identity' },
-            { num: 2, label: 'Pricing' },
-            { num: 3, label: 'Limits (14)' },
-            { num: 4, label: 'Features (10)' },
-          ].map((s) => (
-            <button
-              key={s.num}
-              type="button"
-              onClick={() => setStep(s.num as any)}
-              className={`py-2.5 border-b-2 transition-all cursor-pointer ${
-                step === s.num
-                  ? 'border-primary text-primary bg-primary-subtle/50'
-                  : 'border-transparent text-text-muted hover:text-text'
-              }`}
-            >
-              <span>
-                {s.num}. {s.label}
-              </span>
-            </button>
-          ))}
-        </div>
+        <Tabs
+          ariaLabel="Plan editor steps"
+          variant="underline"
+          fullWidthUntil="always"
+          value={String(step)}
+          onValueChange={(val) => setStep(Number(val) as 1 | 2 | 3 | 4)}
+          className="gap-0"
+          tabClassName="py-2.5 rounded-none"
+          items={[
+            { value: '1', label: '1. Identity' },
+            { value: '2', label: '2. Pricing' },
+            { value: '3', label: '3. Limits (14)' },
+            { value: '4', label: '4. Features (10)' },
+          ]}
+        />
 
         {/* Form Body */}
         <div className="p-6 max-h-[65vh] overflow-y-auto text-xs space-y-4">
@@ -669,7 +665,7 @@ export function PlanEditorDialog({
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Plan Name</label>
+                  <Text as="label" className="font-semibold text-text">Plan Name</Text>
                   <input
                     type="text"
                     value={name}
@@ -690,20 +686,29 @@ export function PlanEditorDialog({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text flex items-center justify-between">
-                    <span>URL Slug</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <Text as="label" className="font-semibold text-text">URL Slug</Text>
                     {slugChecking && (
-                      <span className="text-[10px] text-text-muted flex items-center gap-1 font-normal">
-                        <IconLoader className="h-3 w-3 animate-spin" /> Checking...
-                      </span>
+                      <Chip
+                        tone="neutral"
+                        size="xs"
+                        leadingIcon={<IconLoader className="h-3 w-3 animate-spin" />}
+                        className="font-normal shrink-0"
+                      >
+                        Checking...
+                      </Chip>
                     )}
                     {!slugChecking && slugAvailable === true && (
-                      <span className="text-[10px] text-emerald-600 font-semibold">Available</span>
+                      <Chip tone="success" size="xs" className="shrink-0">
+                        Available
+                      </Chip>
                     )}
                     {!slugChecking && slugAvailable === false && (
-                      <span className="text-[10px] text-red-600 font-semibold">Unavailable</span>
+                      <Chip tone="danger" size="xs" className="shrink-0">
+                        Unavailable
+                      </Chip>
                     )}
-                  </label>
+                  </div>
                   <input
                     type="text"
                     value={slug}
@@ -720,7 +725,7 @@ export function PlanEditorDialog({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Ladder Rank (Ordering)</label>
+                  <Text as="label" className="font-semibold text-text">Ladder Rank (Ordering)</Text>
                   <input
                     type="number"
                     value={rank}
@@ -731,20 +736,20 @@ export function PlanEditorDialog({
                 </div>
 
                 <div className="space-y-1.5 flex flex-col justify-end">
-                  <label className="flex items-center gap-3 p-2.5 rounded-xl bg-surface-muted border border-border cursor-pointer">
+                  <label className="flex items-center gap-3 p-2.5 rounded-xl bg-surface-muted border border-border cursor-pointer min-w-0">
                     <input
                       type="checkbox"
                       checked={isHighlighted}
                       onChange={(e) => setIsHighlighted(e.target.checked)}
-                      className="rounded text-primary focus:ring-primary h-4 w-4"
+                      className="rounded text-primary focus:ring-primary h-4 w-4 shrink-0"
                     />
-                    <span className="font-medium text-text">Highlighted / Most Popular Badge</span>
+                    <Text className="font-medium text-text">Highlighted / Most Popular Badge</Text>
                   </label>
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-semibold text-text">Description</label>
+                <Text as="label" className="font-semibold text-text">Description</Text>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -755,7 +760,7 @@ export function PlanEditorDialog({
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-semibold text-text">Marketing Feature Highlights (One per line)</label>
+                <Text as="label" className="font-semibold text-text">Marketing Feature Highlights (One per line)</Text>
                 <textarea
                   value={marketingFeaturesText}
                   onChange={(e) => setMarketingFeaturesText(e.target.value)}
@@ -773,9 +778,9 @@ export function PlanEditorDialog({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Monthly Price */}
                 <div className="space-y-1.5">
-                  <label htmlFor="plan-monthly-price" className="font-semibold text-text block">
+                  <Text as="label" htmlFor="plan-monthly-price" className="font-semibold text-text">
                     Monthly Price (PHP)
-                  </label>
+                  </Text>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted font-mono">
                       ₱
@@ -798,21 +803,22 @@ export function PlanEditorDialog({
                 {/* Annual Discount Percentage */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-1">
-                    <label htmlFor="plan-annual-discount" className="font-semibold text-text">
+                    <Text as="label" htmlFor="plan-annual-discount" className="font-semibold text-text">
                       Annual Discount
-                    </label>
-                    <button
-                      type="button"
+                    </Text>
+                    <Button
+                      variant="unstyled"
+                      size="custom"
                       onClick={handleToggleAutoSync}
                       title="Toggle automatic annual price calculation from discount percentage"
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer ${
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0 ${
                         autoSyncAnnual
                           ? 'bg-primary-subtle text-primary border border-primary/20'
                           : 'bg-surface-muted text-text-muted border border-border hover:text-text'
                       }`}
                     >
                       {autoSyncAnnual ? 'Auto-set ON' : 'Manual'}
-                    </button>
+                    </Button>
                   </div>
                   <div className="relative">
                     <input
@@ -843,13 +849,13 @@ export function PlanEditorDialog({
                 {/* Annual Price */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-1">
-                    <label htmlFor="plan-annual-price" className="font-semibold text-text">
+                    <Text as="label" htmlFor="plan-annual-price" className="font-semibold text-text">
                       Annual Price (PHP)
-                    </label>
+                    </Text>
                     {autoSyncAnnual && (
-                      <span className="text-[10px] font-mono text-primary font-semibold">
+                      <Chip tone="primary" size="xs" className="font-mono px-1.5 py-0 shrink-0">
                         Auto
-                      </span>
+                      </Chip>
                     )}
                   </div>
                   <div className="relative">
@@ -884,18 +890,19 @@ export function PlanEditorDialog({
                       monthlyPrice > 0 &&
                       Math.abs(pricingSummary.discountPercent - preset.percent) <= 0.02;
                     return (
-                      <button
+                      <Button
                         key={preset.label}
-                        type="button"
+                        variant={isSelected ? 'primary' : 'unstyled'}
+                        size="custom"
                         onClick={() => handleApplyDiscountPreset(preset)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${
                           isSelected
-                            ? 'bg-primary text-white border-primary'
+                            ? 'border-primary'
                             : 'bg-surface-muted text-text-secondary border-border hover:text-text hover:border-primary/40'
                         }`}
                       >
                         {preset.label}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -916,30 +923,31 @@ export function PlanEditorDialog({
                     Real-Time Annual Pricing Preview
                   </span>
                   {pricingSummary.isCustomOrFree ? (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface border border-border text-text-muted">
+                    <Chip tone="neutral" size="xs" className="bg-surface text-text-muted">
                       Custom / Zero-Cost Tier
-                    </span>
+                    </Chip>
                   ) : pricingSummary.isMarkup ? (
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                      <Chip tone="warning" size="xs">
                         +{Math.abs(pricingSummary.discountPercent)}% Above 12× Monthly
-                      </span>
-                      <button
-                        type="button"
+                      </Chip>
+                      <Button
+                        variant="unstyled"
+                        size="custom"
                         onClick={() => handleApplyDiscountPreset(ANNUAL_DISCOUNT_PRESETS[0])}
-                        className="text-[10px] font-semibold text-primary underline cursor-pointer"
+                        className="text-[10px] font-semibold text-primary underline"
                       >
                         Match 12× Monthly
-                      </button>
+                      </Button>
                     </div>
                   ) : pricingSummary.discountPercent > 0 ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                    <Chip tone="success" size="sm" className="font-bold">
                       Save {pricingSummary.discountPercent}% Annually
-                    </span>
+                    </Chip>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface border border-border text-text-muted">
+                    <Chip tone="neutral" size="xs" className="bg-surface text-text-muted">
                       0% Annual Discount
-                    </span>
+                    </Chip>
                   )}
                 </div>
 
@@ -1023,21 +1031,20 @@ export function PlanEditorDialog({
                       className="p-3 rounded-xl bg-surface-muted border border-border space-y-2 flex flex-col justify-between"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           <Icon className="h-4 w-4 text-primary shrink-0" />
-                          <span className="font-semibold text-text">{lim.label}</span>
+                          <Text className="font-semibold text-text">{lim.label}</Text>
                         </div>
-                        <button
-                          type="button"
+                        <Button
+                          variant={isUnlimited ? 'primary' : 'secondary'}
+                          size="custom"
                           onClick={() => handleLimitChange(lim.key, isUnlimited ? lim.defaultVal : -1)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors cursor-pointer ${
-                            isUnlimited
-                              ? 'bg-primary text-white'
-                              : 'bg-surface border border-border text-text-muted hover:text-text'
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 ${
+                            isUnlimited ? '' : 'text-text-muted hover:text-text'
                           }`}
                         >
                           {isUnlimited ? 'Unlimited' : 'Set ∞'}
-                        </button>
+                        </Button>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -1073,17 +1080,20 @@ export function PlanEditorDialog({
                   const isEnabled = Boolean(flags[cap.key]);
 
                   return (
-                    <button
+                    <Button
                       key={cap.key}
-                      type="button"
+                      multiline
+                      variant="unstyled"
+                      size="custom"
                       onClick={() => handleFlagToggle(cap.key)}
-                      className={`w-full p-3 rounded-xl border text-left flex items-start justify-between gap-3 transition-colors cursor-pointer ${
+                      tooltip={cap.label}
+                      className={`w-full p-3 rounded-xl border text-left flex items-start justify-between gap-3 ${
                         isEnabled
                           ? 'border-primary bg-primary-subtle text-text'
                           : 'border-border bg-surface hover:bg-surface-muted text-text-secondary'
                       }`}
                     >
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
                         <div
                           className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${
                             isEnabled ? 'bg-primary text-white' : 'bg-surface-muted text-text-muted'
@@ -1091,10 +1101,10 @@ export function PlanEditorDialog({
                         >
                           <Icon className="h-4 w-4" />
                         </div>
-                        <div>
-                          <div className={`font-semibold ${isEnabled ? 'text-primary' : 'text-text'}`}>
+                        <div className="min-w-0">
+                          <Text as="div" className={`font-semibold ${isEnabled ? 'text-primary' : 'text-text'}`}>
                             {cap.label}
-                          </div>
+                          </Text>
                           <div className="text-[11px] text-text-muted mt-0.5">{cap.description}</div>
                         </div>
                       </div>
@@ -1105,7 +1115,7 @@ export function PlanEditorDialog({
                       >
                         <div className="h-4 w-4 rounded-full bg-white shadow-xs" />
                       </div>
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
@@ -1115,44 +1125,40 @@ export function PlanEditorDialog({
 
         {/* Footer Navigation */}
         <div className="p-4 bg-surface-muted border-t border-border flex items-center justify-between">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="md"
             onClick={() => {
               if (step > 1) setStep((s) => (s - 1) as any);
               else onClose();
             }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
+            leadingIcon={step > 1 ? <IconArrowLeft className="h-4 w-4" /> : undefined}
           >
-            {step > 1 ? (
-              <>
-                <IconArrowLeft className="h-4 w-4" />
-                <span>Back</span>
-              </>
-            ) : (
-              <span>Cancel</span>
-            )}
-          </button>
+            {step > 1 ? 'Back' : 'Cancel'}
+          </Button>
 
           <div className="flex items-center gap-3">
             {step < 4 ? (
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="md"
                 onClick={() => setStep((s) => (s + 1) as any)}
-                className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs"
+                trailingIcon={<IconArrowRight className="h-4 w-4" />}
+                className="px-5"
               >
-                <span>Continue</span>
-                <IconArrowRight className="h-4 w-4" />
-              </button>
+                Continue
+              </Button>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="md"
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="inline-flex items-center gap-2 px-6 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                leadingIcon={submitting ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                className="px-6"
               >
-                {submitting && <IconLoader className="h-4 w-4 animate-spin" />}
-                <span>{isEditing ? 'Save Plan Changes' : 'Create Commercial Plan'}</span>
-              </button>
+                {isEditing ? 'Save Plan Changes' : 'Create Commercial Plan'}
+              </Button>
             )}
           </div>
         </div>

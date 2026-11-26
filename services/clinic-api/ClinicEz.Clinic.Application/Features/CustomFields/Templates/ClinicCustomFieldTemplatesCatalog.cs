@@ -15,6 +15,51 @@ public static class ClinicCustomFieldTemplatesCatalog
     public const string PatientIntakeAddressKey = "patient_intake_address";
     public const string PatientIntakeEmergencyKey = "patient_intake_emergency";
 
+    /// <summary>
+    /// Canonical mapping from legacy/share-import <c>primary_*</c> address keys (read by
+    /// <c>GetPatientChartQuery</c> and written by <c>PatientShareSnapshotHandler</c> / <c>v1-sync-api</c>
+    /// when structured 1NF <c>PatientAddress</c> rows are absent) to the catalog's <c>secondary_*</c>
+    /// template keys. Active primary home addresses are stored in the 1NF <c>PatientAddresses</c> table.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> PrimaryToSecondaryAddressKeyMap { get; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["primary_address_line"] = "secondary_address_line",
+            ["primary_barangay"] = "secondary_barangay",
+            ["primary_city"] = "secondary_city",
+            ["primary_province"] = "secondary_province",
+            ["primary_postal_code"] = "secondary_postal_code",
+            ["primary_zip_code"] = "secondary_postal_code"
+        };
+
+    /// <summary>
+    /// Canonical primary chart/share intake keys accounted for by <c>GetPatientChartQuery</c>,
+    /// <c>PatientShareSnapshotHandler</c>, and <c>v1-sync-api</c> alongside the catalog templates.
+    /// </summary>
+    public static IReadOnlySet<string> CanonicalIntakeFallbackKeys { get; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "primary_address_line",
+            "primary_barangay",
+            "primary_city",
+            "primary_province",
+            "primary_postal_code",
+            "primary_zip_code",
+            "emergency_contact_name",
+            "emergency_contact_phone",
+            "emergency_contact_relationship"
+        };
+
+    public static bool IsKnownPatientIntakeKey(string? fieldKey)
+    {
+        if (string.IsNullOrWhiteSpace(fieldKey))
+            return false;
+
+        var trimmed = fieldKey.Trim();
+        return CanonicalIntakeFallbackKeys.Contains(trimmed) ||
+               _templates.Any(t => t.Fields.Any(f => string.Equals(f.FieldKey, trimmed, StringComparison.OrdinalIgnoreCase)));
+    }
+
     private static readonly IReadOnlyList<CustomFieldTemplateDto> _templates = new List<CustomFieldTemplateDto>
     {
         CreateUniversityUstpTemplate(),

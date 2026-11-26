@@ -18,7 +18,7 @@ public class Patient : ClinicScopedEntity
     public string? MiddleName { get; set; }
     public string? Suffix { get; set; }
 
-    public DateOnly DateOfBirth { get; set; }
+    public DateOnly? DateOfBirth { get; set; }
 
     public BiologicalSex Sex { get; set; } = BiologicalSex.Male;
     public string? GenderIdentity { get; set; }

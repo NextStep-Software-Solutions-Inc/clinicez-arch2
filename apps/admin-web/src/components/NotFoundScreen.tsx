@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from '@tanstack/react-router';
 import { IconAlertCircle, IconArrowLeft } from '@tabler/icons-react';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
+import { Text } from '@/components/ui';
 
 /** Branded fallback screen for unmatched Governance Workstation routes. */
 export function NotFoundScreen() {
@@ -21,7 +22,9 @@ export function NotFoundScreen() {
         </div>
 
         <div className="space-y-1.5">
-          <h1 className="text-lg font-bold tracking-tight text-text">Page Not Found</h1>
+          <Text as="h1" className="text-lg font-bold tracking-tight text-text">
+            Page Not Found
+          </Text>
           <p className="text-xs text-text-secondary leading-relaxed">
             The Governance Workstation route you requested could not be found or is no longer available.
           </p>
@@ -30,16 +33,16 @@ export function NotFoundScreen() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
           <Link
             to="/"
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors whitespace-nowrap min-w-0"
           >
-            <IconArrowLeft className="h-4 w-4" />
-            <span>Return to Workstation</span>
+            <IconArrowLeft className="h-4 w-4 shrink-0" />
+            <Text as="span">Return to Workstation</Text>
           </Link>
           <Link
             to="/sign-in"
-            className="w-full sm:w-auto inline-flex items-center justify-center px-5 py-2.5 text-xs font-semibold text-text bg-surface-muted hover:bg-border rounded-xl transition-colors"
+            className="w-full sm:w-auto inline-flex items-center justify-center px-5 py-2.5 text-xs font-semibold text-text bg-surface-muted hover:bg-border rounded-xl transition-colors whitespace-nowrap min-w-0"
           >
-            Sign In
+            <Text as="span">Sign In</Text>
           </Link>
         </div>
       </div>

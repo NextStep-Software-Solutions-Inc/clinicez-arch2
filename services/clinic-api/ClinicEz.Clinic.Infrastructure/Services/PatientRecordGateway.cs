@@ -9,6 +9,7 @@ using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
+using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Infrastructure.Services;
 
@@ -36,6 +37,24 @@ public sealed class PatientRecordGateway : IPatientRecordGateway
         var clinic = await _clinicIdentity.GetAsync(ct)
             ?? throw new BadRequestException("This clinic has not been provisioned on this server, so it cannot read a shared patient record.");
 
+        if (input.TargetPatientId is { } targetPatientId)
+        {
+            if (targetPatientId == Guid.Empty)
+            {
+                throw new BadRequestException("TargetPatientId must be a valid non-empty patient ID when provided.");
+            }
+
+            var targetExists = await _db.Patients
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .AnyAsync(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && p.Id == targetPatientId, ct);
+
+            if (!targetExists)
+            {
+                throw new NotFoundException($"Target clinic patient chart '{targetPatientId}' was not found.");
+            }
+        }
+
         var requestId = Guid.NewGuid();
         var now = DateTime.UtcNow;
 
@@ -45,6 +64,7 @@ public sealed class PatientRecordGateway : IPatientRecordGateway
             TenantId = clinic.TenantId,
             ClinicId = clinic.ClinicId,
             RequestedByStaffId = _clinicContext.StaffId,
+            TargetPatientId = input.TargetPatientId,
             Purpose = input.Purpose,
             AddToQueue = input.AddToQueue,
             ChiefComplaint = input.ChiefComplaint,

@@ -83,7 +83,8 @@ public sealed class PatientHomeService(
             patient.BloodType?.ToString(),
             FormatBloodGroup(patient.BloodType),
             patient.AvatarUrl,
-            unreadNotifications);
+            unreadNotifications,
+            string.Equals(patient.UpdatedBy, "System:ClerkEmailReclaim", StringComparison.Ordinal));
 
         var visitedSteps = ParseVisitedSteps(patient.WelcomeVisitedStepsJson);
         var hasProfileData = patient.BloodType.HasValue || hasAllergies || hasEmergencyContacts;

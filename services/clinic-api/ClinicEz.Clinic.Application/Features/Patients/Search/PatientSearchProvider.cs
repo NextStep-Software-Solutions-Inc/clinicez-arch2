@@ -54,9 +54,10 @@ public sealed class PatientSearchProvider : ISearchProvider
             var suffix = !string.IsNullOrWhiteSpace(p.Suffix) ? $" {p.Suffix.Trim()}" : "";
             var title = $"{p.LastName}, {p.FirstName}{middle}{suffix}";
 
+            var dobLabel = p.DateOfBirth.HasValue ? $"{p.DateOfBirth.Value:yyyy-MM-dd}" : "N/A";
             var subtitle = string.IsNullOrWhiteSpace(p.ClinicEzId)
-                ? $"{p.PatientCode} • DOB: {p.DateOfBirth:yyyy-MM-dd} • {p.ContactNumber}"
-                : $"{p.PatientCode} • {p.ClinicEzId} • DOB: {p.DateOfBirth:yyyy-MM-dd} • {p.ContactNumber}";
+                ? $"{p.PatientCode} • DOB: {dobLabel} • {p.ContactNumber}"
+                : $"{p.PatientCode} • {p.ClinicEzId} • DOB: {dobLabel} • {p.ContactNumber}";
 
             return new SearchResultItemDto(
                 id: p.Id.ToString(),

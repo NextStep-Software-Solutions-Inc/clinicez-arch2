@@ -68,7 +68,10 @@ public sealed class StartPatientPcuSessionCommandHandler : IRequestHandler<Start
             throw new BadRequestException("Enter a valid 12-digit PhilHealth number before starting the face scan.");
 
         var normalizedPin = PhilHealthPinNormalizer.Normalize(pin) ?? pin.Trim();
-        var birthDateStr = YakapWorkflowHelpers.FormatMmDdYyyy(patient.DateOfBirth);
+        if (!patient.DateOfBirth.HasValue)
+            throw new BadRequestException("Enter the patient's date of birth before starting the face scan.");
+
+        var birthDateStr = YakapWorkflowHelpers.FormatMmDdYyyy(patient.DateOfBirth.Value);
 
         var pcapiRes = await _pcapiClient.StartPcuSessionAsync(
             new PcuStartRequest(

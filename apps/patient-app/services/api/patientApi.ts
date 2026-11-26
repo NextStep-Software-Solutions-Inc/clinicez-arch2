@@ -27,6 +27,7 @@ export interface PatientSummary {
     messengerHandle: string | null;
     avatarUrl: string | null;
     consentToShareInfo: boolean;
+    isLegacyAccountReclaimed?: boolean;
 }
 
 // ── Sub-entity types ──────────────────────────────────────────────────────────

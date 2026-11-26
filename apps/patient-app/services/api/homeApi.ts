@@ -14,6 +14,7 @@ export interface PatientHealthPassDto {
   bloodGroupDisplay: string | null;
   avatarUrl: string | null;
   unreadNotificationsCount: number;
+  isLegacyAccountReclaimed?: boolean;
 }
 
 export interface WelcomeChecklistDto {

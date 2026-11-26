@@ -24,6 +24,8 @@ public sealed class ShareImport : ClinicScopedEntity
 
     public Guid? PatientId { get; set; }
     public Patient? Patient { get; set; }
+    /// <summary>Optional existing unlinked clinic chart explicitly chosen by counter staff to bind this QR/code onto instead of creating a duplicate chart.</summary>
+    public Guid? TargetPatientId { get; set; }
     public string? PatientName { get; set; }
     public string? ClinicEzId { get; set; }
     public Guid? GrantId { get; set; }

@@ -6,6 +6,7 @@ import { getTenantWorkspaceUrl } from '@/lib/urls';
 import { TenantEntitlementsCard } from '@/components/TenantEntitlementsCard';
 import { RecordPaymentDialog } from '@/components/RecordPaymentDialog';
 import { TenantCleanupDialog } from '@/components/TenantCleanupDialog';
+import { Button, Chip, Tabs, Text } from '@/components/ui';
 import { toast } from 'sonner';
 import {
   IconBuildingHospital,
@@ -116,13 +117,13 @@ function TenantDetailPage() {
         </Link>
         <div className="p-6 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 space-y-3">
           <p className="font-semibold">{error || 'Tenant not found.'}</p>
-          <button
-            type="button"
+          <Button
+            variant="dangerSubtle"
+            size="md"
             onClick={loadData}
-            className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-xs font-semibold rounded-xl cursor-pointer"
           >
             Retry
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -145,61 +146,61 @@ function TenantDetailPage() {
 
       {/* Header Banner */}
       <div className="p-6 rounded-2xl bg-surface border border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 min-w-0">
           <div className="p-3.5 rounded-2xl bg-primary-subtle text-primary shrink-0">
             <IconBuildingHospital className="h-8 w-8" />
           </div>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-text">{tenant.clinicName}</h1>
-              <span
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
-                  isActive
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                }`}
-              >
+          <div className="min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <Text as="h1" className="text-xl font-bold text-text">
+                {tenant.clinicName}
+              </Text>
+              <Chip tone={isActive ? 'success' : 'warning'} size="xs" className="px-2.5 shrink-0">
                 {tenant.subscriptionStatus}
-              </span>
+              </Chip>
             </div>
-            <p className="text-xs text-text-muted mt-1 font-mono flex items-center gap-2">
+            <p className="text-xs text-text-muted mt-1 font-mono flex items-center gap-2 flex-wrap">
               <span>Slug: {tenant.tenantSlug}</span>
               <span>•</span>
               <span>ID: {tenant.id}</span>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="custom"
                 onClick={() => {
                   navigator.clipboard.writeText(getTenantWorkspaceUrl(tenant.tenantSlug));
                   toast.success('Workspace portal URL copied to clipboard');
                 }}
-                className="text-text-muted hover:text-text cursor-pointer"
+                className="p-0.5 rounded text-text-muted hover:text-text hover:bg-transparent shrink-0"
                 title="Copy Workspace URL"
+                aria-label="Copy Workspace URL"
               >
                 <IconCopy className="h-3 w-3" />
-              </button>
+              </Button>
             </p>
           </div>
         </div>
 
         {/* Operational Actions */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <Button
+            variant="secondary"
+            size="md"
             onClick={() => setIsPaymentOpen(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconCreditCard className="h-4 w-4 text-primary" />}
+            className="font-semibold"
           >
-            <IconCreditCard className="h-4 w-4 text-primary" />
-            <span>Record Payment</span>
-          </button>
+            Record Payment
+          </Button>
 
-          <button
-            type="button"
+          <Button
+            variant="dangerSubtle"
+            size="md"
             onClick={() => setIsCleanupOpen(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-red-600 bg-red-500/10 hover:bg-red-500/20 rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconTrash className="h-4 w-4" />}
+            className="border-0 text-red-600 dark:text-red-400"
           >
-            <IconTrash className="h-4 w-4" />
-            <span>Offboard</span>
-          </button>
+            Offboard
+          </Button>
 
           <a
             href={getTenantWorkspaceUrl(tenant.tenantSlug)}
@@ -214,48 +215,41 @@ function TenantDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-border pb-px">
-        {[
-          { id: 'subscription', label: 'Subscription Settings' },
-          { id: 'entitlements', label: 'Entitlements & Overrides' },
-          { id: 'usage', label: 'Usage & Telemetry' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`px-4 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px cursor-pointer ${
-              activeTab === tab.id
-                ? 'border-primary text-primary font-semibold'
-                : 'border-transparent text-text-muted hover:text-text'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        ariaLabel="Tenant workspace sections"
+        variant="underline"
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="w-full gap-2"
+        tabClassName="px-4 py-2.5"
+        items={[
+          { value: 'subscription', label: 'Subscription Settings' },
+          { value: 'entitlements', label: 'Entitlements & Overrides' },
+          { value: 'usage', label: 'Usage & Telemetry' },
+        ]}
+      />
 
       {/* Tab Panels */}
       {activeTab === 'subscription' && (
         <div className="p-6 rounded-2xl bg-surface border border-border space-y-5">
-          <div className="flex items-center justify-between pb-3 border-b border-border">
+          <div className="flex items-center justify-between gap-2 pb-3 border-b border-border">
             <div>
               <h2 className="text-sm font-bold text-text">Commercial Subscription Plan</h2>
               <p className="text-[11px] text-text-muted mt-0.5">
                 Active commercial license and billing parameters
               </p>
             </div>
-            <span className="text-[10px] font-mono font-semibold px-2.5 py-1 rounded-full bg-surface-muted text-text-secondary">
+            <Chip tone="neutral" size="xs" className="font-mono px-2.5 py-1 border-0">
               Plan ID: {tenant.subscriptionPlanId || '—'}
-            </span>
+            </Chip>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
             <div className="p-4 rounded-xl bg-surface-muted border border-border space-y-1">
               <span className="text-text-muted">Subscription Tier:</span>
-              <p className="font-semibold text-text text-sm capitalize">
+              <Text as="p" className="font-semibold text-text text-sm capitalize">
                 {tenant.subscriptionPlanId || '—'}
-              </p>
+              </Text>
             </div>
             <div className="p-4 rounded-xl bg-surface-muted border border-border space-y-1">
               <span className="text-text-muted">Billing Cadence:</span>
@@ -263,10 +257,14 @@ function TenantDetailPage() {
                 {tenant.isAnnual ? 'Annual Billing (₱ Discounted)' : 'Monthly Billing'}
               </p>
             </div>
-            <div className="p-4 rounded-xl bg-surface-muted border border-border space-y-1">
+            <div className="p-4 rounded-xl bg-surface-muted border border-border space-y-1 min-w-0">
               <span className="text-text-muted">Registered Contact:</span>
-              <p className="font-semibold text-text text-sm">{tenant.ownerName}</p>
-              <p className="text-[11px] text-text-muted">{tenant.email}</p>
+              <Text as="p" className="font-semibold text-text text-sm">
+                {tenant.ownerName}
+              </Text>
+              <Text as="p" className="text-[11px] text-text-muted">
+                {tenant.email}
+              </Text>
             </div>
           </div>
         </div>
@@ -319,7 +317,9 @@ function TenantDetailPage() {
             <h3 className="font-semibold text-text text-xs">In-Place Resource Telemetry Calibration</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="space-y-1.5">
-                <label className="font-medium text-text text-xs">Facility Branches</label>
+                <Text as="label" className="font-medium text-text text-xs">
+                  Facility Branches
+                </Text>
                 <input
                   type="number"
                   value={branchesVal}
@@ -329,7 +329,9 @@ function TenantDetailPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="font-medium text-text text-xs">Staff Accounts</label>
+                <Text as="label" className="font-medium text-text text-xs">
+                  Staff Accounts
+                </Text>
                 <input
                   type="number"
                   value={staffVal}
@@ -339,7 +341,9 @@ function TenantDetailPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="font-medium text-text text-xs">Patient Records</label>
+                <Text as="label" className="font-medium text-text text-xs">
+                  Patient Records
+                </Text>
                 <input
                   type="number"
                   value={patientsVal}
@@ -349,7 +353,9 @@ function TenantDetailPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="font-medium text-text text-xs">Monthly API Used</label>
+                <Text as="label" className="font-medium text-text text-xs">
+                  Monthly API Used
+                </Text>
                 <input
                   type="number"
                   value={apiUsedVal}
@@ -359,7 +365,9 @@ function TenantDetailPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="font-medium text-text text-xs">Monthly API Limit</label>
+                <Text as="label" className="font-medium text-text text-xs">
+                  Monthly API Limit
+                </Text>
                 <input
                   type="number"
                   value={apiLimitVal}
@@ -371,14 +379,16 @@ function TenantDetailPage() {
             </div>
 
             <div className="flex justify-end pt-2">
-              <button
+              <Button
                 type="submit"
+                variant="primary"
+                size="md"
                 disabled={savingUsage}
-                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                leadingIcon={savingUsage ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                className="px-5"
               >
-                {savingUsage && <IconLoader className="h-4 w-4 animate-spin" />}
-                <span>Calibrate Telemetry</span>
-              </button>
+                Calibrate Telemetry
+              </Button>
             </div>
           </form>
         </div>

@@ -74,7 +74,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         var patientAge = ChronologicalAgeCalculator.FormatLongAge(
             patient?.DateOfBirth,
             cert.IssueDate,
-            patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
+            patient?.DateOfBirth is { } certDob ? DateTime.UtcNow.Year - certDob.Year : (patient == null ? 35 : 0));
         var patientGender = patient?.Sex.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
@@ -634,7 +634,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         var patientAge = ChronologicalAgeCalculator.FormatLongAge(
             patient?.DateOfBirth,
             referral.ReferralDate,
-            patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
+            patient?.DateOfBirth is { } refDob ? DateTime.UtcNow.Year - refDob.Year : (patient == null ? 35 : 0));
         var patientGender = patient?.Sex.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
@@ -912,7 +912,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         var config = MapToTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
 
-        var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : (int?)null;
+        var patientAge = patient?.DateOfBirth is { } invDob ? DateTime.UtcNow.Year - invDob.Year : (int?)null;
         var patientGender = patient?.Sex.ToString();
         var patientIdStr = patient?.PatientCode ?? (invoice.PatientId.HasValue && invoice.PatientId.Value != Guid.Empty ? invoice.PatientId.Value.ToString("N")[..8] : "N/A");
         var docName = doctor != null

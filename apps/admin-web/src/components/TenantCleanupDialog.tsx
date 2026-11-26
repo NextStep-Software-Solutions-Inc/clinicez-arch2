@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { adminService, TenantCleanupPreviewDto } from '@/services/admin.service';
+import { Button, Chip, TabList, TabButton, Text } from '@/components/ui';
 import { toast } from 'sonner';
 import {
   IconLoader,
@@ -123,10 +124,10 @@ export function TenantCleanupDialog({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-3 p-5 border-b border-border">
+          <div className="flex items-center gap-3 min-w-0">
             <div
-              className={`p-2.5 rounded-xl ${
+              className={`p-2.5 rounded-xl shrink-0 ${
                 actionType === 'purge'
                   ? 'bg-red-500/10 text-red-600 dark:text-red-400'
                   : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
@@ -138,50 +139,50 @@ export function TenantCleanupDialog({
                 <IconArchive className="h-5 w-5" />
               )}
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-bold text-text">Workspace Offboarding & Cleanup</h2>
-              <p className="text-xs text-text-muted mt-0.5">
+              <Text as="p" className="text-xs text-text-muted mt-0.5">
                 {clinicName} ({tenantSlug})
-              </p>
+              </Text>
             </div>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="iconSm"
             onClick={onClose}
-            className="p-1 rounded-lg text-text-muted hover:text-text cursor-pointer"
+            aria-label="Close cleanup dialog"
+            className="text-text-muted hover:text-text shrink-0"
           >
             <IconX className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Action Type Toggle */}
         <div className="px-5 pt-4">
-          <div className="grid grid-cols-2 p-1 bg-surface-muted rounded-xl border border-border text-xs font-semibold">
-            <button
-              type="button"
+          <TabList ariaLabel="Workspace cleanup action" fullWidthUntil="always">
+            <TabButton
+              fullWidthUntil="always"
+              active={actionType === 'archive'}
               onClick={() => setActionType('archive')}
-              className={`py-2 rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                actionType === 'archive'
-                  ? 'bg-surface text-text shadow-xs'
-                  : 'text-text-muted hover:text-text'
-              }`}
+              leadingIcon={<IconArchive className="h-4 w-4" />}
+              className="py-2"
             >
-              <IconArchive className="h-4 w-4" />
-              <span>Soft Archive</span>
-            </button>
-            <button
-              type="button"
+              Soft Archive
+            </TabButton>
+            <TabButton
+              fullWidthUntil="always"
+              active={actionType === 'purge'}
               onClick={() => setActionType('purge')}
-              className={`py-2 rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              leadingIcon={<IconTrash className="h-4 w-4" />}
+              className={
                 actionType === 'purge'
-                  ? 'bg-red-600 text-white shadow-xs'
-                  : 'text-text-muted hover:text-text'
-              }`}
+                  ? 'py-2 bg-red-600 text-white hover:text-white shadow-xs'
+                  : 'py-2'
+              }
             >
-              <IconTrash className="h-4 w-4" />
-              <span>Permanent Purge</span>
-            </button>
-          </div>
+              Permanent Purge
+            </TabButton>
+          </TabList>
         </div>
 
         {/* Content Body */}
@@ -203,18 +204,26 @@ export function TenantCleanupDialog({
             <>
               {/* Dependency Check Overview Grid */}
               <div className="p-4 rounded-xl bg-surface-muted border border-border space-y-3">
-                <div className="font-semibold text-text flex items-center justify-between">
+                <div className="font-semibold text-text flex items-center justify-between gap-2">
                   <span>Pre-flight Inspection Results</span>
                   {preview.isOrphaned ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
-                      <IconAlertTriangle className="h-3 w-3" />
+                    <Chip
+                      tone="warning"
+                      size="xs"
+                      leadingIcon={<IconAlertTriangle className="h-3 w-3" />}
+                      className="gap-1"
+                    >
                       Orphan Workspace
-                    </span>
+                    </Chip>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                      <IconCircleCheck className="h-3 w-3" />
+                    <Chip
+                      tone="success"
+                      size="xs"
+                      leadingIcon={<IconCircleCheck className="h-3 w-3" />}
+                      className="gap-1"
+                    >
                       Active Organization
-                    </span>
+                    </Chip>
                   )}
                 </div>
 
@@ -279,7 +288,9 @@ export function TenantCleanupDialog({
                     </p>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="font-medium text-text">Archive Reason (Optional)</label>
+                    <Text as="label" className="font-medium text-text">
+                      Archive Reason (Optional)
+                    </Text>
                     <textarea
                       value={archiveReason}
                       onChange={(e) => setArchiveReason(e.target.value)}
@@ -302,9 +313,9 @@ export function TenantCleanupDialog({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-medium text-text">
+                    <Text as="label" className="font-medium text-text">
                       Type <span className="font-mono font-bold text-red-600 dark:text-red-400">{tenantSlug}</span> to confirm:
-                    </label>
+                    </Text>
                     <input
                       type="text"
                       value={confirmSlug}
@@ -321,35 +332,37 @@ export function TenantCleanupDialog({
 
         {/* Footer Actions */}
         <div className="p-4 bg-surface-muted border-t border-border flex items-center justify-end gap-3">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="md"
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer"
           >
             Cancel
-          </button>
+          </Button>
 
           {actionType === 'archive' ? (
-            <button
-              type="button"
+            <Button
+              variant="unstyled"
+              size="md"
               onClick={handleArchive}
               disabled={submitting || loading || !preview}
-              className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+              leadingIcon={submitting ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+              className="px-5 font-semibold text-white bg-amber-600 hover:bg-amber-700 shadow-xs"
             >
-              {submitting && <IconLoader className="h-4 w-4 animate-spin" />}
-              <span>{archivedAt ? 'Re-Archive Workspace' : 'Archive Workspace'}</span>
-            </button>
+              {archivedAt ? 'Re-Archive Workspace' : 'Archive Workspace'}
+            </Button>
           ) : (
-            <button
-              type="button"
+            <Button
+              variant="danger"
+              size="md"
               onClick={handlePurge}
               disabled={submitting || loading || confirmSlug.trim() !== tenantSlug.trim()}
-              className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+              leadingIcon={submitting ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+              className="px-5"
             >
-              {submitting && <IconLoader className="h-4 w-4 animate-spin" />}
-              <span>Permanently Purge Workspace</span>
-            </button>
+              Permanently Purge Workspace
+            </Button>
           )}
         </div>
       </div>

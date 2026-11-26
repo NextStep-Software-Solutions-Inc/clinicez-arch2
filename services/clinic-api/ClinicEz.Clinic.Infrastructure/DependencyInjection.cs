@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Common.Security;
+using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
@@ -226,6 +227,7 @@ public static class DependencyInjection
         services.AddScoped<IClaimSlipService, ClaimSlipService>();
         services.AddScoped<IBillingRequestPublisher, BillingRequestPublisher>();
         services.AddScoped<IPatientRecordGateway, PatientRecordGateway>();
+        services.AddScoped<IPatientLinkResolutionPublisher, PatientLinkResolutionPublisher>();
         services.AddScoped<ILabResultReviewedPublisher, LabResultReviewedPublisher>();
         services.AddClinicEzDocumentEngine();
         services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
@@ -297,6 +299,7 @@ public static class DependencyInjection
             .HandleWorkspaceProfileUpdated()
             .Handle<AppointmentBookedEvent, AppointmentBookedHandler>(InteropTypes.PatientAppointmentBooked)
             .Handle<PatientJoinRequestedPayload, PatientJoinRequestedHandler>(InteropTypes.PatientJoinRequested)
+            .Handle<PatientLinkRequestedPayload, PatientLinkRequestedHandler>(InteropTypes.PatientLinkRequested)
             .Handle<DiagnosticReportFinalizedEvent, DiagnosticReportFinalizedHandler>(InteropTypes.LabResultFinalized)
             .Handle<PrescriptionDispensedEvent, PrescriptionDispensedHandler>(InteropTypes.RxDispensed)
             .Handle<LabPanicResultAlertEvent, LabPanicResultAlertHandler>(InteropTypes.LabResultPanic)

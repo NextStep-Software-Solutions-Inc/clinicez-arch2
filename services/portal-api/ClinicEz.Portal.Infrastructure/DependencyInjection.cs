@@ -196,7 +196,9 @@ public static class DependencyInjection
             .Respond<PractitionerVerificationUpdateRequestedPayload, VerificationUpdateRespondedPayload, PractitionerVerificationUpdateRequestedResponder>(
                 InteropTypes.PractitionerVerificationUpdateRequested, InteropTypes.PractitionerVerificationUpdateResponded)
             .HandleReply(InteropTypes.YakapSubmissionResponded)
-            .HandleReply(InteropTypes.VerificationEvidenceResponded));
+            .HandleReply(InteropTypes.VerificationEvidenceResponded)
+            .HandleReply(InteropTypes.PatientIdentityDirectoryResponded)
+            .HandleReply(InteropTypes.PatientIdentityReconcileResponded));
 
         // The PhilHealth proxy asks the portal for the credentials it holds; the key ring protects them at rest.
         services.AddSingleton<IPhilHealthSecretProtector, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSecretProtector>();

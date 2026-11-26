@@ -21,7 +21,7 @@ public sealed record UpdateClinicPatientCommand(
     string LastName,
     string? MiddleName,
     string? Suffix,
-    DateOnly DateOfBirth,
+    DateOnly? DateOfBirth,
     string Sex,
     string? CivilStatus,
     string ContactNumber,

@@ -4,6 +4,7 @@ import { Route as authRoute } from '../_auth';
 import { adminService, AdminTenantDto, BillingPlan } from '@/services/admin.service';
 import { getTenantWorkspaceUrl } from '@/lib/urls';
 import { TenantCleanupDialog } from '@/components/TenantCleanupDialog';
+import { Button, Chip, SelectField, Text } from '@/components/ui';
 import { toast } from 'sonner';
 import {
   IconBuildingHospital,
@@ -114,32 +115,33 @@ function TenantsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={loadTenants}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
+            Refresh
+          </Button>
         </div>
       </div>
 
       {/* Error Banner */}
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="dangerSubtle"
+            size="xs"
             onClick={loadTenants}
-            className="px-3 py-1 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
+            className="shrink-0"
           >
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -157,35 +159,44 @@ function TenantsPage() {
         </div>
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          <div className="flex items-center gap-1.5 text-xs text-text-muted">
+          <div className="flex items-center gap-1.5 text-xs text-text-muted shrink-0">
             <IconFilter className="h-3.5 w-3.5" />
             <span>Filters:</span>
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="TRIALING">Trialing</option>
-            <option value="ARCHIVED">Archived</option>
-            <option value="CANCELLED">Cancelled</option>
-            <option value="ORPHANED">Orphaned</option>
-          </select>
+          <div className="w-36 shrink-0">
+            <SelectField
+              ariaLabel="Filter tenants by status"
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+              searchable={false}
+              align="right"
+              options={[
+                { value: 'ALL', label: 'All Statuses' },
+                { value: 'ACTIVE', label: 'Active' },
+                { value: 'TRIALING', label: 'Trialing' },
+                { value: 'ARCHIVED', label: 'Archived' },
+                { value: 'CANCELLED', label: 'Cancelled' },
+                { value: 'ORPHANED', label: 'Orphaned' },
+              ]}
+            />
+          </div>
 
-          <select
-            value={planFilter}
-            onChange={(e) => setPlanFilter(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
-          >
-            <option value="ALL">All Plans</option>
-            {plans.map((p) => (
-              <option key={p.slug} value={p.slug}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <div className="w-40 shrink-0">
+            <SelectField
+              ariaLabel="Filter tenants by plan"
+              value={planFilter}
+              onValueChange={setPlanFilter}
+              searchable={false}
+              align="right"
+              options={[
+                { value: 'ALL', label: 'All Plans' },
+                ...plans.map((p) => ({
+                  value: p.slug,
+                  label: p.name,
+                })),
+              ]}
+            />
+          </div>
         </div>
       </div>
 
@@ -240,17 +251,18 @@ function TenantsPage() {
                         : 'No tenant organizations have been registered in the platform yet.'}
                     </p>
                     {(search || statusFilter !== 'ALL' || planFilter !== 'ALL') && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="unstyled"
+                        size="custom"
                         onClick={() => {
                           setSearch('');
                           setStatusFilter('ALL');
                           setPlanFilter('ALL');
                         }}
-                        className="px-4 py-1.5 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20 transition-colors cursor-pointer"
+                        className="px-4 py-1.5 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20"
                       >
                         Reset Search Filters
-                      </button>
+                      </Button>
                     )}
                   </td>
                 </tr>
@@ -269,53 +281,55 @@ function TenantsPage() {
                       key={tenant.id}
                       className="hover:bg-surface-muted/50 transition-colors"
                     >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
+                      <td className="px-5 py-4 max-w-[280px]">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div className="p-2 rounded-xl bg-primary-subtle text-primary shrink-0">
                             <IconBuildingHospital className="h-5 w-5" />
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <Link
                               to="/tenants/$slug"
                               params={{ slug: tenant.tenantSlug }}
-                              className="font-semibold text-text hover:text-primary transition-colors"
+                              className="block font-semibold text-text hover:text-primary transition-colors"
                             >
-                              {tenant.clinicName}
+                              <Text as="span" className="block">
+                                {tenant.clinicName}
+                              </Text>
                             </Link>
-                            <div className="text-[11px] text-text-muted font-mono mt-0.5 flex items-center gap-1.5">
-                              <span>{tenant.tenantSlug}</span>
-                              <button
-                                type="button"
+                            <div className="text-[11px] text-text-muted font-mono mt-0.5 flex items-center gap-1.5 min-w-0">
+                              <Text>{tenant.tenantSlug}</Text>
+                              <Button
+                                variant="ghost"
+                                size="custom"
                                 onClick={() => {
                                   navigator.clipboard.writeText(tenant.tenantSlug);
                                   toast.success(`Slug '${tenant.tenantSlug}' copied`);
                                 }}
-                                className="text-text-muted hover:text-text cursor-pointer"
+                                className="p-0.5 rounded text-text-muted hover:text-text hover:bg-transparent shrink-0"
                                 title="Copy Slug"
+                                aria-label="Copy Slug"
                               >
                                 <IconCopy className="h-3 w-3" />
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4">
-                        <div className="text-text font-medium">{tenant.ownerName}</div>
-                        <div className="text-[11px] text-text-muted">{tenant.email}</div>
+                      <td className="px-5 py-4 max-w-[240px]">
+                        <Text as="div" className="text-text font-medium">
+                          {tenant.ownerName}
+                        </Text>
+                        <Text as="div" className="text-[11px] text-text-muted">
+                          {tenant.email}
+                        </Text>
                       </td>
                       <td className="px-5 py-4">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                            isActive
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                          }`}
-                        >
+                        <Chip tone={isActive ? 'success' : 'warning'} size="xs">
                           {tenant.subscriptionStatus}
-                        </span>
-                        <div className="text-[11px] text-text-muted mt-0.5 capitalize">
+                        </Chip>
+                        <Text as="div" className="text-[11px] text-text-muted mt-0.5 capitalize max-w-[160px]">
                           {matchedPlan?.name || tenant.subscriptionPlanId || '—'}
-                        </div>
+                        </Text>
                       </td>
                       <td className="px-5 py-4 text-text-secondary">
                         <div>{tenant.facilitiesCount} branches</div>
@@ -326,19 +340,21 @@ function TenantsPage() {
                       <td className="px-5 py-4 text-right">
                         <div className="inline-flex items-center gap-1">
                           {/* Toggle Subscription */}
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
                             onClick={() => handleToggleSubscription(tenant)}
                             disabled={togglingId === tenant.id}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-muted transition-colors cursor-pointer"
+                            className="text-text-muted hover:text-text"
                             title={isActive ? 'Deactivate / Archive' : 'Activate Subscription'}
+                            aria-label={isActive ? 'Deactivate / Archive' : 'Activate Subscription'}
                           >
                             {isActive ? (
                               <IconToggleRight className="h-4 w-4 text-emerald-600" />
                             ) : (
                               <IconToggleLeft className="h-4 w-4 text-text-muted" />
                             )}
-                          </button>
+                          </Button>
 
                           {/* Launch Tenant Workspace */}
                           <a
@@ -352,14 +368,16 @@ function TenantsPage() {
                           </a>
 
                           {/* Cleanup / Offboard Trigger */}
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
                             onClick={() => setCleanupTenant(tenant)}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-red-600 hover:bg-red-500/10 transition-colors cursor-pointer"
+                            className="text-text-muted hover:text-red-600 hover:bg-red-500/10"
                             title="Offboard / Cleanup Workspace"
+                            aria-label="Offboard / Cleanup Workspace"
                           >
                             <IconTrash className="h-4 w-4" />
-                          </button>
+                          </Button>
 
                           {/* View Detail Link */}
                           <Link

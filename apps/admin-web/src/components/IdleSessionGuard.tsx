@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useClerk, useAuth } from '@clerk/clerk-react';
 import { IconClock } from '@tabler/icons-react';
+import { Button } from '@/components/ui';
 import {
   getIdleTimeoutMinutes,
   getLastActiveTimestamp,
@@ -284,20 +285,22 @@ export function IdleSessionGuard({ children }: IdleSessionGuardProps) {
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleManualSignOut}
-                className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-lg transition-colors cursor-pointer"
+                className="px-4"
               >
                 Sign Out Now
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={handleStaySignedIn}
-                className="px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors cursor-pointer shadow-sm"
+                className="px-5 shadow-sm"
               >
                 Stay Signed In
-              </button>
+              </Button>
             </div>
           </div>
         </div>

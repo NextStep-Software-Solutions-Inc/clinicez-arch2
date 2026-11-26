@@ -96,6 +96,55 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         }
 
         var patient = await FindPatientAsync(clinic.ClinicId, message, ct);
+        if (import.TargetPatientId is { } targetId)
+        {
+            if (targetId == Guid.Empty)
+            {
+                import.Status = ShareImportStatus.Failed;
+                import.DenialReason = "Target clinic patient chart ID cannot be empty.";
+                import.CompletedAt = now;
+                import.UpdatedAt = now;
+                await _dbContext.SaveChangesAsync(ct);
+                return;
+            }
+
+            var targetChart = await _dbContext.Patients
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && p.Id == targetId, ct);
+
+            if (targetChart == null)
+            {
+                import.Status = ShareImportStatus.Failed;
+                import.DenialReason = "The selected target clinic patient chart was not found.";
+                import.CompletedAt = now;
+                import.UpdatedAt = now;
+                await _dbContext.SaveChangesAsync(ct);
+                _logger.LogWarning("[ClinicEz.Clinic] Share import {ImportId} failed: target patient {TargetPatientId} not found.", import.Id, targetId);
+                return;
+            }
+
+            if (targetChart.CloudPatientId.HasValue && targetChart.CloudPatientId.Value != message.PatientId)
+            {
+                import.Status = ShareImportStatus.Failed;
+                import.DenialReason = "The selected clinic chart is already linked to a different ClinicEZ patient account.";
+                import.CompletedAt = now;
+                import.UpdatedAt = now;
+                await _dbContext.SaveChangesAsync(ct);
+                return;
+            }
+
+            if (patient != null && patient.Id != targetChart.Id)
+            {
+                import.Status = ShareImportStatus.Failed;
+                import.DenialReason = "This ClinicEZ patient account is already linked to another chart in this clinic.";
+                import.CompletedAt = now;
+                import.UpdatedAt = now;
+                await _dbContext.SaveChangesAsync(ct);
+                return;
+            }
+
+            patient = targetChart;
+        }
         var demographicsShared = message.Scopes.HasFlag(SharingScopes.Demographics) && message.Demographics != null;
 
         if (patient == null && !demographicsShared)
@@ -287,7 +336,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             MiddleName = middle,
             LastName = last,
             Suffix = suffix,
-            DateOfBirth = ParseDate(demographics.DateOfBirth) ?? new DateOnly(2000, 1, 1),
+            DateOfBirth = ParseDate(demographics.DateOfBirth),
             Sex = ParseSex(demographics.Sex),
             ContactNumber = !string.IsNullOrWhiteSpace(demographics.MobileNumber) ? demographics.MobileNumber.Trim() : "N/A",
             Email = Clean(demographics.Email),

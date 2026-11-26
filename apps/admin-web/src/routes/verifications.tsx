@@ -8,7 +8,6 @@ import {
   IconClipboardCheck,
   IconRefresh,
   IconSearch,
-  IconShieldCheck,
   IconShieldLock,
 } from "@tabler/icons-react";
 import { Route as authRoute } from "./_auth";
@@ -34,6 +33,7 @@ import {
   VerificationKindBadge,
   VerificationStatusBadge,
 } from "@/components/verifications/VerificationStatusBadge";
+import { Button, Chip, Tabs, Text } from "@/components/ui";
 
 export type { QueueStatusTab, QueueKindFilter, VerificationQueueSearch };
 export { parseVerificationQueueSearch, serializeVerificationQueueSearch };
@@ -363,39 +363,30 @@ export function VerificationQueueView({
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight text-text">
-              Directory Verifications
-            </h1>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary-subtle text-primary border border-primary/20">
-              {profile.roleName}
-            </span>
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-text">
+            Directory Verifications
+          </h1>
           <p className="text-xs text-text-muted">
             Verify clinic DOH License to Operate (LTO) documents and clinician PRC licenses before publishing to the Patient App directory.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-surface text-xs">
-            <IconShieldCheck className="h-4 w-4 text-primary shrink-0" />
-            <span className="font-semibold text-text">{profile.fullName}</span>
-          </div>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             disabled={queueLoading}
             onClick={() => void fetchQueue()}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${queueLoading ? "animate-spin" : ""}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${queueLoading ? "animate-spin" : ""}`} />
-            <span>Refresh</span>
-          </button>
+            Refresh
+          </Button>
         </div>
       </div>
 
       {/* Summary KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-border bg-surface p-5 flex items-center justify-between">
+        <div className="rounded-2xl border border-border bg-surface p-5 flex items-center justify-between gap-2">
           <div>
             <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
               Pending Action
@@ -404,12 +395,12 @@ export function VerificationQueueView({
               {queueData?.pendingCount ?? 0}
             </div>
           </div>
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+          <Chip tone="warning" size="md">
             Open Queue
-          </span>
+          </Chip>
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface p-5 flex items-center justify-between">
+        <div className="rounded-2xl border border-border bg-surface p-5 flex items-center justify-between gap-2">
           <div>
             <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
               Pending Facilities
@@ -418,12 +409,12 @@ export function VerificationQueueView({
               {queueData?.pendingFacilityCount ?? 0}
             </div>
           </div>
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-surface-muted text-text-secondary border border-border">
+          <Chip tone="neutral" size="md">
             DOH LTO Review
-          </span>
+          </Chip>
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface p-5 flex items-center justify-between">
+        <div className="rounded-2xl border border-border bg-surface p-5 flex items-center justify-between gap-2">
           <div>
             <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
               Pending Practitioners
@@ -432,64 +423,29 @@ export function VerificationQueueView({
               {queueData?.pendingPractitionerCount ?? 0}
             </div>
           </div>
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-surface-muted text-text-secondary border border-border">
+          <Chip tone="neutral" size="md">
             PRC &amp; Affiliation
-          </span>
+          </Chip>
         </div>
       </div>
 
       {/* Filters Toolbar */}
       <div className="p-4 rounded-2xl bg-surface border border-border space-y-3">
-        <div
-          className="inline-flex flex-wrap items-center gap-1 p-1 rounded-xl bg-surface-muted border border-border"
-          role="tablist"
-          aria-label="Filter by verification status"
-        >
-          {STATUS_TABS.map((tab) => {
-            const active = statusTab === tab.value;
-            return (
-              <button
-                key={tab.value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setStatusTab(tab.value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                  active
-                    ? "bg-surface text-text shadow-xs"
-                    : "text-text-muted hover:text-text"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs
+          ariaLabel="Filter by verification status"
+          items={STATUS_TABS}
+          value={statusTab}
+          onValueChange={setStatusTab}
+        />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div
-            className="inline-flex items-center gap-1 p-1 rounded-xl bg-surface-muted border border-border self-start"
-            role="group"
-            aria-label="Filter by request kind"
-          >
-            {KIND_FILTERS.map((kind) => {
-              const active = kindFilter === kind.value;
-              return (
-                <button
-                  key={kind.value}
-                  type="button"
-                  onClick={() => setKindFilter(kind.value)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                    active
-                      ? "bg-primary text-white shadow-xs"
-                      : "text-text-secondary hover:text-text"
-                  }`}
-                >
-                  {kind.label}
-                </button>
-              );
-            })}
-          </div>
+          <Tabs
+            ariaLabel="Filter by request kind"
+            items={KIND_FILTERS}
+            value={kindFilter}
+            onValueChange={setKindFilter}
+            className="self-start"
+          />
 
           <div className="relative flex-1 max-w-md">
             <IconSearch className="h-4 w-4 text-text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -522,13 +478,14 @@ export function VerificationQueueView({
                 <p className="mt-0.5">{queueError}</p>
               </div>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="dangerSubtle"
+              size="xs"
               onClick={() => void fetchQueue()}
-              className="px-3 py-1.5 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer shrink-0"
+              className="shrink-0"
             >
               Try Again
-            </button>
+            </Button>
           </div>
         ) : displayedItems.length === 0 ? (
           <div className="p-12 rounded-2xl bg-surface border border-dashed border-border text-center space-y-3">
@@ -542,18 +499,19 @@ export function VerificationQueueView({
               </p>
             </div>
             {statusTab !== "all" || kindFilter !== "all" || searchInput.trim() ? (
-              <button
-                type="button"
+              <Button
+                variant="unstyled"
+                size="custom"
                 onClick={() => {
                   setStatusTab("all");
                   setKindFilter("all");
                   setSearchInput("");
                   setDebouncedSearch("");
                 }}
-                className="px-4 py-1.5 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20 transition-colors cursor-pointer"
+                className="px-4 py-1.5 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20"
               >
                 Show All Requests
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : (
@@ -631,7 +589,7 @@ export function VerificationQueueView({
                         </td>
                         <td className="px-4 py-3.5 min-w-[200px]">
                           <div className="flex items-center gap-1.5 font-semibold text-text">
-                            <span className="truncate max-w-[240px]">{primaryName}</span>
+                            <Text className="max-w-[240px]">{primaryName}</Text>
                             {item.hasNameMismatch ? (
                               <span
                                 title="PRC name mismatch detected"
@@ -641,9 +599,9 @@ export function VerificationQueueView({
                               </span>
                             ) : null}
                           </div>
-                          <div className="text-[11px] text-text-muted truncate max-w-[260px]">
+                          <Text as="div" className="text-[11px] text-text-muted max-w-[260px]">
                             {secondaryName}
-                          </div>
+                          </Text>
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap font-mono text-text">
                           <div>{licenseNumber}</div>
@@ -651,11 +609,13 @@ export function VerificationQueueView({
                             <div className="flex items-center gap-1.5 text-[10px] font-sans text-text-muted mt-0.5">
                               <span>{`Exp ${licenseExpiry.dateText}`}</span>
                               {licenseExpiry.badgeLabel && licenseExpiry.badgeClassName ? (
-                                <span
-                                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold border whitespace-nowrap ${licenseExpiry.badgeClassName}`}
+                                <Chip
+                                  tone="unstyled"
+                                  size="custom"
+                                  className={`px-1.5 py-0.5 text-[9px] border ${licenseExpiry.badgeClassName}`}
                                 >
                                   {licenseExpiry.badgeLabel}
-                                </span>
+                                </Chip>
                               ) : null}
                             </div>
                           ) : null}
@@ -666,12 +626,13 @@ export function VerificationQueueView({
                         <td className="px-4 py-3.5 whitespace-nowrap text-text-muted">
                           <div>{formatVerificationTimestamp(item.submittedAtUtc)}</div>
                           {submittedBy ? (
-                            <div
-                              className="text-[10px] text-text-muted truncate max-w-[180px]"
+                            <Text
+                              as="div"
+                              className="text-[10px] text-text-muted max-w-[180px]"
                               title={submittedBy.tooltip}
                             >
                               {`by ${submittedBy.primary}`}
-                            </div>
+                            </Text>
                           ) : null}
                           {showUpdatedAt ? (
                             <div className="text-[10px] font-medium text-primary">
@@ -682,12 +643,13 @@ export function VerificationQueueView({
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <VerificationStatusBadge status={item.status} />
                           {reviewedBy ? (
-                            <div
-                              className="text-[10px] text-text-muted mt-1 truncate max-w-[180px]"
+                            <Text
+                              as="div"
+                              className="text-[10px] text-text-muted mt-1 max-w-[180px]"
                               title={reviewedBy.tooltip}
                             >
                               {`Reviewed by ${reviewedBy.primary}`}
-                            </div>
+                            </Text>
                           ) : null}
                         </td>
                         <td

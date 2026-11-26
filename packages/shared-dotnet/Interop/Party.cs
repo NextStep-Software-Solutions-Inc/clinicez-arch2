@@ -79,6 +79,9 @@ public sealed record Party
 
     public static Party Portal { get; } = new() { Kind = PartyKind.ControlPlane, Service = InteropServices.Portal };
 
+    /// <summary>The patient plane service (patient-api) in the cloud cell.</summary>
+    public static Party PatientPlane { get; } = new() { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient };
+
     public static Party Hub { get; } = new() { Kind = PartyKind.ControlPlane, Service = InteropServices.Hub };
 
     /// <summary>The PhilHealth proxy, a platform service that runs in the cloud cell.</summary>

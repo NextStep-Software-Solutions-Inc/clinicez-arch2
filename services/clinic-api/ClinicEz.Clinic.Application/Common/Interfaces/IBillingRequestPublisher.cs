@@ -35,4 +35,5 @@ public sealed record PatientShareRedeemInput(
     string? Code,
     string Purpose,
     bool AddToQueue,
-    string? ChiefComplaint);
+    string? ChiefComplaint,
+    Guid? TargetPatientId = null);

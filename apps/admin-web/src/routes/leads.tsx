@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { createRoute } from '@tanstack/react-router';
 import { Route as authRoute } from './_auth';
 import { adminService, AdminLeadDto } from '@/services/admin.service';
+import { Button, Chip, Text } from '@/components/ui';
 import {
   IconUsersGroup,
   IconRefresh,
@@ -60,32 +61,33 @@ function LeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={loadLeads}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-text-secondary bg-surface border border-border hover:bg-surface-muted rounded-xl transition-colors cursor-pointer"
+            leadingIcon={<IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
           >
-            <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
+            Refresh
+          </Button>
         </div>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="dangerSubtle"
+            size="xs"
             onClick={loadLeads}
-            className="px-3 py-1 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer"
+            className="shrink-0"
           >
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
@@ -157,13 +159,14 @@ function LeadsPage() {
                         : 'Zero prospective clinic onboarding leads are currently registered in the pipeline.'}
                     </p>
                     {search && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="unstyled"
+                        size="sm"
                         onClick={() => setSearch('')}
-                        className="px-4 py-1.5 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20 transition-colors cursor-pointer"
+                        className="px-4 font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20"
                       >
                         Reset Search
-                      </button>
+                      </Button>
                     )}
                   </td>
                 </tr>
@@ -171,37 +174,46 @@ function LeadsPage() {
                 /* Active Table */
                 filteredLeads.map((lead) => (
                   <tr key={lead.id} className="hover:bg-surface-muted/50 transition-colors">
-                    <td className="px-5 py-4">
-                      <div className="font-semibold text-text">{lead.clinicName}</div>
-                      <div className="text-[11px] text-text-muted font-mono font-normal mt-0.5">
+                    <td className="px-5 py-4 max-w-[240px]">
+                      <Text as="div" className="font-semibold text-text">
+                        {lead.clinicName}
+                      </Text>
+                      <Text
+                        as="div"
+                        variant="mono"
+                        className="text-[11px] text-text-muted font-normal mt-0.5"
+                      >
                         {lead.tenantSlug}
-                      </div>
+                      </Text>
                     </td>
-                    <td className="px-5 py-4">
-                      <div className="text-text font-medium">{lead.ownerName}</div>
-                      <div className="text-[11px] text-text-muted flex items-center gap-1.5 mt-0.5">
+                    <td className="px-5 py-4 max-w-[260px]">
+                      <Text as="div" className="text-text font-medium">
+                        {lead.ownerName}
+                      </Text>
+                      <div className="text-[11px] text-text-muted flex items-center gap-1.5 mt-0.5 min-w-0">
                         <IconMail className="h-3.5 w-3.5 shrink-0" />
-                        <button
-                          type="button"
+                        <Button
+                          variant="unstyled"
+                          size="custom"
                           onClick={() => {
                             navigator.clipboard.writeText(lead.email);
                             toast.success(`Copied '${lead.email}' to clipboard`);
                           }}
-                          className="hover:underline cursor-pointer flex items-center gap-1"
+                          trailingIcon={<IconCopy className="h-3 w-3 text-text-muted" />}
+                          className="gap-1 hover:underline text-[11px] text-text-muted"
                           title="Click to Copy Email"
                         >
-                          <span>{lead.email}</span>
-                          <IconCopy className="h-3 w-3 text-text-muted" />
-                        </button>
+                          <Text>{lead.email}</Text>
+                        </Button>
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-text-secondary">
-                      <span className="capitalize">{lead.facilityType || '—'}</span>
+                    <td className="px-5 py-4 text-text-secondary max-w-[180px]">
+                      <Text className="capitalize">{lead.facilityType || '—'}</Text>
                     </td>
                     <td className="px-5 py-4">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      <Chip tone="warning" size="xs">
                         {lead.subscriptionStatus || '—'}
-                      </span>
+                      </Chip>
                     </td>
                     <td className="px-5 py-4 text-right text-text-muted font-mono text-[11px]">
                       {lead.createdAt

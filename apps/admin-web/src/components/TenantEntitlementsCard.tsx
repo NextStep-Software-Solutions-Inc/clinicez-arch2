@@ -7,6 +7,7 @@ import {
   AdminTeleconsultBillingDto,
 } from '@/services/admin.service';
 import { QUANTITATIVE_LIMITS, CAPABILITY_FLAGS } from './PlanEditorDialog';
+import { Button, Chip, Tabs, TabList, TabButton, Text } from '@/components/ui';
 import { toast } from 'sonner';
 import {
   IconLoader,
@@ -240,11 +241,11 @@ export function TenantEntitlementsCard({
             <IconAdjustments className="h-5 w-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-sm font-bold text-text">Workspace Entitlement Overrides</h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary-subtle text-primary border border-primary/20">
+              <Chip tone="primary" size="xs">
                 {activeOverridesCount} Active Overrides
-              </span>
+              </Chip>
             </div>
             <p className="text-[11px] text-text-muted mt-0.5">
               Custom resource ceilings and capability flags for {tenantSlug} (Base Plan:{' '}
@@ -253,15 +254,17 @@ export function TenantEntitlementsCard({
           </div>
         </div>
 
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="iconSm"
           onClick={loadOverridesAndPlans}
           disabled={loading}
-          className="p-1.5 rounded-xl text-text-muted hover:text-text hover:bg-surface-muted transition-colors cursor-pointer self-start sm:self-auto"
+          className="rounded-xl text-text-muted hover:text-text self-start sm:self-auto"
           title="Reload Overrides"
+          aria-label="Reload Overrides"
         >
           <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        </Button>
       </div>
 
       {/* 4-State Rendering */}
@@ -277,56 +280,53 @@ export function TenantEntitlementsCard({
             <span>Failed to load entitlements</span>
           </div>
           <p>{error}</p>
-          <button
-            type="button"
+          <Button
+            variant="dangerSubtle"
+            size="xs"
             onClick={loadOverridesAndPlans}
-            className="px-3 py-1 bg-red-500/20 rounded-lg text-xs font-semibold cursor-pointer"
           >
             Retry
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="space-y-5">
           {/* Subtab Navigation */}
-          <div className="flex items-center gap-2 border-b border-border pb-px">
-            <button
-              type="button"
+          <TabList
+            ariaLabel="Entitlement override categories"
+            variant="underline"
+            className="w-full gap-2"
+          >
+            <TabButton
+              variant="underline"
+              active={activeSubTab === 'limits'}
               onClick={() => setActiveSubTab('limits')}
-              className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px cursor-pointer ${
-                activeSubTab === 'limits'
-                  ? 'border-primary text-primary font-semibold'
-                  : 'border-transparent text-text-muted hover:text-text'
-              }`}
+              className="px-4"
             >
               14 Quantitative Limits
-            </button>
-            <button
-              type="button"
+            </TabButton>
+            <TabButton
+              variant="underline"
+              active={activeSubTab === 'features'}
               onClick={() => setActiveSubTab('features')}
-              className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px cursor-pointer ${
-                activeSubTab === 'features'
-                  ? 'border-primary text-primary font-semibold'
-                  : 'border-transparent text-text-muted hover:text-text'
-              }`}
+              className="px-4"
             >
               10 Capability Feature Flags
-            </button>
-            <button
-              type="button"
+            </TabButton>
+            <TabButton
+              variant="underline"
+              active={activeSubTab === 'teleconsult'}
               onClick={() => setActiveSubTab('teleconsult')}
-              className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px cursor-pointer flex items-center gap-1.5 ${
-                activeSubTab === 'teleconsult'
-                  ? 'border-primary text-primary font-semibold'
-                  : 'border-transparent text-text-muted hover:text-text'
-              }`}
+              leadingIcon={<IconVideo className="h-3.5 w-3.5" />}
+              badge={
+                teleconsultBilling?.isEnabled ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                ) : undefined
+              }
+              className="px-4"
             >
-              <IconVideo className="h-3.5 w-3.5" />
-              <span>Teleconsult PAYG Billing</span>
-              {teleconsultBilling?.isEnabled && (
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              )}
-            </button>
-          </div>
+              Teleconsult PAYG Billing
+            </TabButton>
+          </TabList>
 
           {/* Subtab 1: 14 Limits */}
           {activeSubTab === 'limits' && (
@@ -349,44 +349,46 @@ export function TenantEntitlementsCard({
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           <Icon className="h-4 w-4 text-primary shrink-0" />
-                          <span className="font-semibold text-text">{lim.label}</span>
+                          <Text className="font-semibold text-text">{lim.label}</Text>
                         </div>
                         {hasOverride ? (
-                          <button
-                            type="button"
+                          <Button
+                            variant="unstyled"
+                            size="custom"
                             onClick={() =>
                               setLimitOverrides((prev) => ({ ...prev, [lim.key]: null }))
                             }
-                            className="text-[10px] text-primary hover:underline font-medium cursor-pointer"
+                            className="text-[10px] text-primary hover:underline font-medium shrink-0"
                           >
                             Reset to Base
-                          </button>
+                          </Button>
                         ) : (
-                          <span className="text-[10px] text-text-muted">Inherits Base</span>
+                          <span className="text-[10px] text-text-muted shrink-0">Inherits Base</span>
                         )}
                       </div>
 
                       <div className="flex items-center justify-between text-[11px] text-text-muted">
                         <span>Baseline: {baseline === -1 ? '∞' : baseline}</span>
                         <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
+                          <Button
+                            variant={isUnlimited ? 'primary' : 'secondary'}
+                            size="custom"
                             onClick={() =>
                               setLimitOverrides((prev) => ({
                                 ...prev,
                                 [lim.key]: isUnlimited ? baseline : -1,
                               }))
                             }
-                            className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer ${
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono ${
                               isUnlimited
-                                ? 'bg-primary text-white font-semibold'
-                                : 'bg-surface border border-border text-text hover:text-primary'
+                                ? 'font-semibold'
+                                : 'text-text hover:text-primary'
                             }`}
                           >
                             {isUnlimited ? 'Unlimited (∞)' : 'Set ∞'}
-                          </button>
+                          </Button>
                         </div>
                       </div>
 
@@ -460,32 +462,30 @@ export function TenantEntitlementsCard({
 
                     <div className="flex items-center gap-2 shrink-0">
                       {hasOverride && (
-                        <button
-                          type="button"
+                        <Button
+                          variant="unstyled"
+                          size="custom"
                           onClick={() =>
                             setFeatureOverrides((prev) => ({ ...prev, [cap.key]: null }))
                           }
-                          className="text-[10px] text-text-muted hover:text-text cursor-pointer pr-1"
+                          className="text-[10px] text-text-muted hover:text-text pr-1"
                         >
                           Inherit
-                        </button>
+                        </Button>
                       )}
-                      <button
-                        type="button"
+                      <Button
+                        variant={effective ? 'primary' : 'secondary'}
+                        size="sm"
                         onClick={() =>
                           setFeatureOverrides((prev) => ({
                             ...prev,
                             [cap.key]: !effective,
                           }))
                         }
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                          effective
-                            ? 'bg-primary text-white'
-                            : 'bg-surface border border-border text-text hover:bg-surface-muted'
-                        }`}
+                        className={effective ? '' : 'text-text font-semibold'}
                       >
                         {effective ? 'Enabled' : 'Disabled'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 );
@@ -508,45 +508,27 @@ export function TenantEntitlementsCard({
                       Master platform toggle for this tenant workspace. Turning this off locks video teleconsultation across all facilities.
                     </p>
                   </div>
-                  <button
-                    type="button"
+                  <Button
+                    variant={tcEnabled ? 'primary' : 'secondary'}
+                    size="sm"
                     onClick={() => setTcEnabled((prev) => !prev)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                      tcEnabled
-                        ? 'bg-primary text-white'
-                        : 'bg-surface border border-border text-text hover:bg-surface-muted'
-                    }`}
+                    className={`shrink-0 ${tcEnabled ? '' : 'text-text font-semibold'}`}
                   >
                     {tcEnabled ? 'Active (Enabled)' : 'Disabled'}
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="pt-3 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <span className="text-xs font-semibold text-text">Billing Mode:</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTcBillingMode('Postpaid')}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                        tcBillingMode === 'Postpaid'
-                          ? 'bg-primary text-white font-semibold'
-                          : 'bg-surface border border-border text-text hover:bg-surface-muted'
-                      }`}
-                    >
-                      Postpaid Metered
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTcBillingMode('Prepaid')}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                        tcBillingMode === 'Prepaid'
-                          ? 'bg-primary text-white font-semibold'
-                          : 'bg-surface border border-border text-text hover:bg-surface-muted'
-                      }`}
-                    >
-                      Prepaid Credits
-                    </button>
-                  </div>
+                  <Tabs
+                    ariaLabel="Teleconsultation billing mode"
+                    value={tcBillingMode}
+                    onValueChange={setTcBillingMode}
+                    items={[
+                      { value: 'Postpaid', label: 'Postpaid Metered' },
+                      { value: 'Prepaid', label: 'Prepaid Credits' },
+                    ]}
+                  />
                 </div>
               </div>
 
@@ -627,14 +609,16 @@ export function TenantEntitlementsCard({
                     placeholder="Enter grant amount (₱) to add"
                     className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text font-mono text-xs focus:outline-hidden"
                   />
-                  <button
-                    type="button"
+                  <Button
+                    variant="primary"
+                    size="md"
                     disabled={grantingCredit || !tcCreditGrantInput || parseFloat(tcCreditGrantInput) <= 0}
                     onClick={handleGrantCredit}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-primary hover:bg-primary-hover transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
+                    leadingIcon={grantingCredit ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                    className="px-4 shrink-0"
                   >
-                    {grantingCredit ? <IconLoader className="h-4 w-4 animate-spin" /> : 'Grant Credit (+=)'}
-                  </button>
+                    {grantingCredit ? 'Granting...' : 'Grant Credit (+=)'}
+                  </Button>
                 </div>
                 <p className="text-[11px] text-text-muted">
                   Note: Credit grants are additive (<code className="font-mono">+=</code>) and increment the tenant's current prepaid balance.
@@ -650,10 +634,10 @@ export function TenantEntitlementsCard({
                   onChange={(e) => setTcAllowOverage(e.target.checked)}
                   className="mt-0.5 rounded border-border"
                 />
-                <div className="space-y-0.5">
-                  <label htmlFor="tc-allow-overage" className="font-semibold text-text cursor-pointer">
+                <div className="space-y-0.5 min-w-0">
+                  <Text as="label" htmlFor="tc-allow-overage" className="font-semibold text-text cursor-pointer">
                     Allow Overage Beyond Allocation
-                  </label>
+                  </Text>
                   <p className="text-[11px] text-text-muted">
                     When checked, ongoing clinical teleconsultations are never terminated mid-call if allocation is reached; overage minutes are recorded and billed separately.
                   </p>
@@ -697,15 +681,16 @@ export function TenantEntitlementsCard({
 
               {/* Save Teleconsultation Settings Button */}
               <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="lg"
                   onClick={handleSaveTeleconsultBilling}
                   disabled={savingTc}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  leadingIcon={savingTc ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                  className="px-6 text-xs"
                 >
-                  {savingTc && <IconLoader className="h-4 w-4 animate-spin" />}
-                  <span>Save Teleconsultation Settings</span>
-                </button>
+                  Save Teleconsultation Settings
+                </Button>
               </div>
             </div>
           )}
@@ -714,14 +699,17 @@ export function TenantEntitlementsCard({
           {activeSubTab !== 'teleconsult' && (
             <>
               <div className="pt-3 border-t border-border space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-text flex items-center gap-1.5">
-                    <IconShieldLock className="h-4 w-4 text-primary" />
-                    <span>Audit Authorization Reason (Mandatory)</span>
-                  </label>
-                  <span className="text-[10px] text-text-muted">Recorded in immutable audit trail</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <IconShieldLock className="h-4 w-4 text-primary shrink-0" />
+                    <Text as="label" htmlFor="entitlement-audit-reason" className="font-semibold text-text">
+                      Audit Authorization Reason (Mandatory)
+                    </Text>
+                  </div>
+                  <span className="text-[10px] text-text-muted shrink-0">Recorded in immutable audit trail</span>
                 </div>
                 <input
+                  id="entitlement-audit-reason"
                   type="text"
                   required
                   value={reason}
@@ -732,15 +720,16 @@ export function TenantEntitlementsCard({
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="lg"
                   onClick={handleSaveOverrides}
                   disabled={saving || !reason.trim()}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  leadingIcon={saving ? <IconLoader className="h-4 w-4 animate-spin" /> : undefined}
+                  className="px-6 text-xs"
                 >
-                  {saving && <IconLoader className="h-4 w-4 animate-spin" />}
-                  <span>Save Workspace Entitlements</span>
-                </button>
+                  Save Workspace Entitlements
+                </Button>
               </div>
             </>
           )}

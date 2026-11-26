@@ -13,6 +13,7 @@ Every `docker-compose` file in the repository lives here, one folder per stack. 
 | [`philhealth-proxy`](philhealth-proxy/docker-compose.yml) | PhilHealth proxy | `deploy-philhealth-proxy-dev.yml` |
 | [`interop-hub`](interop-hub/docker-compose.yml) | Interop Hub (+ `docker-compose.local-hub.yml` for Local mode, `.env.example`) | `deploy-interop-hub-dev.yml` |
 | [`billing-api`](billing-api/docker-compose.yml) | Billing API (per-cell cashiering) | `deploy-billing-api-dev.yml` |
+| [`v1-sync-api`](v1-sync-api/docker-compose.yml) | Classic (v1) → v2 Migration & Sync API (+ `docker-compose.local.yml` for local runs) | `deploy-v1-sync-api-dev.yml` |
 | [`clinic-web`](clinic-web/docker-compose.yml) | Clinic web app on nginx for a clinic's own LAN (+ `.env.example`) | run manually; image from `publish-images.yml` |
 | [`edge`](edge/README.md) | On-premise single-tenant edge cell (PostgreSQL + backups, local hub, APIs, web apps) installed with `install.sh` / `install.ps1` | run by the installer; images from `publish-images.yml` |
 

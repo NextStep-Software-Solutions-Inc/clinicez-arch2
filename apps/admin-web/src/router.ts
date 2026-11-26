@@ -12,6 +12,8 @@ import { Route as blogRoute } from './routes/blog';
 import { Route as subscribersRoute } from './routes/subscribers';
 import { Route as rolesRoute } from './routes/roles';
 import { Route as usersRoute } from './routes/users';
+import { Route as patientIdentitiesRoute } from './routes/patient-identities';
+import { Route as v1SyncRoute } from './routes/v1-sync';
 import { Route as settingsRoute } from './routes/settings';
 import { Route as signInRoute } from './routes/sign-in';
 import { Route as signUpRoute } from './routes/sign-up';
@@ -33,6 +35,8 @@ export const routeTree = rootRoute.addChildren([
     subscribersRoute,
     rolesRoute,
     usersRoute,
+    patientIdentitiesRoute,
+    v1SyncRoute,
     settingsRoute,
   ]),
   signInRoute,

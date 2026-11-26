@@ -285,12 +285,15 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
             var todayDateOnly = DateOnly.FromDateTime(today);
             foreach (var p in patients)
             {
-                var age = todayDateOnly.Year - p.DateOfBirth.Year;
-                if (p.DateOfBirth > todayDateOnly.AddYears(-age)) age--;
+                if (p.DateOfBirth is { } dob)
+                {
+                    var age = todayDateOnly.Year - dob.Year;
+                    if (dob > todayDateOnly.AddYears(-age)) age--;
 
-                if (age < 18) pedCount++;
-                else if (age >= 60) seniorCount++;
-                else adultCount++;
+                    if (age < 18) pedCount++;
+                    else if (age >= 60) seniorCount++;
+                    else adultCount++;
+                }
 
                 var g = p.Sex.ToString().ToLowerInvariant();
                 if (g.StartsWith("m")) maleCount++;

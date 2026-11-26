@@ -6,6 +6,7 @@ import { adminService } from '@/services/admin.service';
 import { setupAxiosInterceptors } from '@/lib/api';
 import { IconShieldX, IconLogout } from '@tabler/icons-react';
 import { ClinicEzLogo, ClinicEzMark } from '@/components/ClinicEzLogo';
+import { Button } from '@/components/ui';
 
 function SyncAuthPage() {
   const [status, setStatus] = useState<'syncing' | 'unauthorized' | 'error'>('syncing');
@@ -92,17 +93,18 @@ function SyncAuthPage() {
             Your authenticated account is not registered as a Platform Administrator in Clinic EZ Central. Please contact your organization owner to request access.
           </p>
           <div className="pt-2">
-            <button
-              type="button"
+            <Button
+              variant="danger"
+              size="lg"
               onClick={async () => {
                 await signOut();
                 window.location.href = '/sign-in';
               }}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors cursor-pointer"
+              leadingIcon={<IconLogout className="h-4 w-4" />}
+              className="px-5 text-xs"
             >
-              <IconLogout className="h-4 w-4" />
-              <span>Sign Out</span>
-            </button>
+              Sign Out
+            </Button>
           </div>
         </div>
       </div>

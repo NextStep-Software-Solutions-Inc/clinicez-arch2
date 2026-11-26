@@ -5,6 +5,7 @@ import { apiClient } from '@/lib/api';
 import { IconKey } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
+import { Button, Text } from '@/components/ui';
 
 function ResetPasswordPage() {
   const { token } = Route.useParams();
@@ -126,13 +127,18 @@ function ResetPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {email && (
-              <div className="p-3 rounded-xl bg-surface-muted border border-border text-xs text-text-secondary">
+              <Text
+                as="div"
+                className="p-3 rounded-xl bg-surface-muted border border-border text-xs text-text-secondary"
+              >
                 Account: <span className="font-semibold text-text">{fullName || email}</span> ({email})
-              </div>
+              </Text>
             )}
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-text">New Password</label>
+              <Text as="label" className="text-xs font-semibold text-text">
+                New Password
+              </Text>
               <input
                 type="password"
                 required
@@ -145,7 +151,9 @@ function ResetPasswordPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-text">Confirm Password</label>
+              <Text as="label" className="text-xs font-semibold text-text">
+                Confirm Password
+              </Text>
               <input
                 type="password"
                 required
@@ -157,13 +165,15 @@ function ResetPasswordPage() {
               />
             </div>
 
-            <button
+            <Button
               type="submit"
+              variant="primary"
+              size="lg"
               disabled={submitting}
-              className="w-full px-5 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-sm"
+              className="w-full text-xs shadow-sm"
             >
               {submitting ? 'Updating Password...' : 'Save New Password'}
-            </button>
+            </Button>
           </form>
         )}
       </div>

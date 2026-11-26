@@ -7,7 +7,7 @@ public sealed record DuplicateMatchDto(
     Guid PatientId,
     string PatientCode,
     string FullName,
-    DateOnly DateOfBirth,
+    DateOnly? DateOfBirth,
     string? ContactNumber,
     string? PhilHealthNumber,
     string MatchReason,

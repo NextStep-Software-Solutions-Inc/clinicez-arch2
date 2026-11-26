@@ -321,6 +321,27 @@ export const adminService = {
     }));
   },
 
+  getAdminClinics: async (): Promise<
+    Array<{
+      id: string;
+      name: string;
+      tenantId?: string | null;
+      tenantSlug?: string | null;
+      facilitySlug?: string | null;
+    }>
+  > => {
+    const res = await apiClient.get<
+      Array<{
+        id: string;
+        name: string;
+        tenantId?: string | null;
+        tenantSlug?: string | null;
+        facilitySlug?: string | null;
+      }>
+    >('/admin/clinics');
+    return Array.isArray(res.data) ? res.data : [];
+  },
+
   getTenantById: async (id: string): Promise<AdminTenantDto | undefined> => {
     const tenants = await adminService.getTenants();
     return tenants.find((t) => t.id === id);
@@ -661,4 +682,85 @@ export const adminService = {
     );
     return res.data;
   },
+
+  getPatientIdentities: async (params?: {
+    search?: string;
+    status?: PatientIdentityFilter;
+    limit?: number;
+    offset?: number;
+  }): Promise<PatientIdentityDirectoryResponseDto> => {
+    const res = await apiClient.get<PatientIdentityDirectoryResponseDto>('/admin/patient-identities', {
+      params: {
+        ...(params?.search?.trim() ? { search: params.search.trim() } : {}),
+        ...(params?.status && params.status !== 'ALL' ? { status: params.status } : {}),
+        limit: params?.limit ?? 25,
+        offset: params?.offset ?? 0,
+      },
+    });
+    return res.data;
+  },
+
+  reconcilePatientIdentity: async (
+    patientId: string,
+    payload: ReconcilePatientIdentityPayload
+  ): Promise<ReconcilePatientIdentityResponseDto> => {
+    const res = await apiClient.post<ReconcilePatientIdentityResponseDto>(
+      `/admin/patient-identities/${patientId}/reconcile`,
+      payload
+    );
+    return res.data;
+  },
 };
+
+export type PatientIdentityStatus = 'ClerkLinked' | 'Unlinked' | 'Reclaimed' | 'AmbiguousEmail';
+export type PatientIdentityFilter = 'ALL' | 'CLERK_LINKED' | 'UNLINKED' | 'RECLAIMED' | 'AMBIGUOUS_EMAIL';
+export type PatientIdentityReconcileAction = 'BIND_CLERK' | 'UNBIND_CLERK';
+
+export interface PatientIdentitySummaryDto {
+  totalPrimaryPatients: number;
+  clerkLinkedCount: number;
+  unlinkedCount: number;
+  reclaimedViaEmailCount: number;
+  ambiguousDuplicateEmailGroups: number;
+  ambiguousDuplicatePatientCount: number;
+}
+
+export interface PatientIdentityItemDto {
+  patientId: string;
+  clinicEzId: string;
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  clerkUserId?: string | null;
+  identityStatus: PatientIdentityStatus | string;
+  duplicateEmailCount: number;
+  v1UserId?: string | null;
+  createdAtUtc: string;
+  updatedAtUtc?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface PatientIdentityDirectoryResponseDto {
+  succeeded?: boolean;
+  error?: string | null;
+  errorCode?: string | null;
+  summary: PatientIdentitySummaryDto;
+  items: PatientIdentityItemDto[];
+  totalMatching: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ReconcilePatientIdentityPayload {
+  action: PatientIdentityReconcileAction;
+  clerkUserId?: string | null;
+  reason?: string | null;
+}
+
+export interface ReconcilePatientIdentityResponseDto {
+  succeeded?: boolean;
+  error?: string | null;
+  errorCode?: string | null;
+  item?: PatientIdentityItemDto | null;
+  action?: string;
+}

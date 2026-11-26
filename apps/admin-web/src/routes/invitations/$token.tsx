@@ -11,6 +11,7 @@ import {
 } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
+import { Button, Chip, Text } from '@/components/ui';
 import { setupAxiosInterceptors } from '@/lib/api';
 import {
   isUserEmailMatched,
@@ -140,17 +141,23 @@ function InvitationAcceptPage() {
         ) : invite ? (
           <div className="space-y-4">
             <div className="p-4 rounded-2xl bg-surface-muted border border-border text-xs space-y-2">
-              <div className="flex justify-between">
-                <span className="text-text-muted">Invitee:</span>
-                <span className="font-semibold text-text">{invite.fullName}</span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-text-muted shrink-0">Invitee:</span>
+                <Text as="span" className="font-semibold text-text">
+                  {invite.fullName}
+                </Text>
               </div>
-              <div className="flex justify-between">
-                <span className="text-text-muted">Email:</span>
-                <span className="font-mono text-text">{invite.email}</span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-text-muted shrink-0">Email:</span>
+                <Text as="span" className="font-mono text-text">
+                  {invite.email}
+                </Text>
               </div>
-              <div className="flex justify-between">
-                <span className="text-text-muted">Assigned Role:</span>
-                <span className="font-semibold text-primary">{invite.roleName}</span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-text-muted shrink-0">Assigned Role:</span>
+                <Chip tone="primary" size="xs">
+                  {invite.roleName}
+                </Chip>
               </div>
             </div>
 
@@ -163,17 +170,16 @@ function InvitationAcceptPage() {
                   </div>
                   <p>{INVITATION_EMAIL_MISMATCH_MESSAGE}</p>
                 </div>
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="lg"
                   onClick={handleSwitchAccount}
                   disabled={switchingAccount}
-                  className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                  leadingIcon={<IconSwitchHorizontal className="h-4 w-4" />}
+                  className="w-full py-3 text-xs shadow-sm"
                 >
-                  <IconSwitchHorizontal className="h-4 w-4" />
-                  <span>
-                    {switchingAccount ? 'Switching Account...' : 'Switch Account & Sign In'}
-                  </span>
-                </button>
+                  {switchingAccount ? 'Switching Account...' : 'Switch Account & Sign In'}
+                </Button>
                 <Link
                   to="/"
                   className="w-full flex items-center justify-center px-4 py-2.5 text-xs font-semibold text-text bg-surface-muted hover:bg-border rounded-xl transition-colors"
@@ -182,15 +188,16 @@ function InvitationAcceptPage() {
                 </Link>
               </div>
             ) : isSignedIn && !isEmailMismatch ? (
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="lg"
                 onClick={handleAccept}
                 disabled={accepting || !isEmailMatched}
-                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                trailingIcon={<IconArrowRight className="h-4 w-4" />}
+                className="w-full py-3 text-xs shadow-sm"
               >
                 {accepting ? 'Activating Account...' : 'Accept Invitation & Enter Workstation'}
-                <IconArrowRight className="h-4 w-4" />
-              </button>
+              </Button>
             ) : (
               <div className="space-y-2">
                 <p className="text-xs text-text-muted text-center">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { adminService, AdminTenantDto } from '@/services/admin.service';
+import { Button, Text } from '@/components/ui';
 import {
   IconSearch,
   IconDashboard,
@@ -276,13 +277,15 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
           <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 text-[10px] font-mono font-medium rounded-md bg-surface-muted border border-border text-text-muted">
             ESC
           </kbd>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="iconSm"
             onClick={onClose}
-            className="p-1 rounded-lg text-text-muted hover:text-text"
+            className="h-7 w-7 text-text-muted hover:text-text shrink-0"
+            aria-label="Close command palette"
           >
             <IconX className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Results List */}
@@ -296,21 +299,27 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
               const catItems = filteredItems.filter((i) => i.category === cat);
               return (
                 <div key={cat} className="space-y-1">
-                  <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                  <Text
+                    as="div"
+                    className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted"
+                  >
                     {cat}
-                  </div>
+                  </Text>
                   {catItems.map((item) => {
                     const itemGlobalIndex = filteredItems.indexOf(item);
                     const isSelected = itemGlobalIndex === selectedIndex;
                     const Icon = item.icon;
 
                     return (
-                      <button
+                      <Button
                         key={item.id}
-                        type="button"
+                        variant="unstyled"
+                        size="custom"
+                        multiline
+                        tooltip={item.subtitle ? `${item.title} — ${item.subtitle}` : item.title}
                         onClick={item.action}
                         onMouseEnter={() => setSelectedIndex(itemGlobalIndex)}
-                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left text-xs ${
                           isSelected
                             ? 'bg-primary text-white'
                             : 'hover:bg-surface-muted text-text'
@@ -322,16 +331,19 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                               isSelected ? 'text-white' : 'text-primary'
                             }`}
                           />
-                          <div className="truncate">
-                            <div className="font-semibold truncate">{item.title}</div>
+                          <div className="min-w-0">
+                            <Text as="div" className="font-semibold">
+                              {item.title}
+                            </Text>
                             {item.subtitle && (
-                              <div
-                                className={`text-[11px] truncate ${
+                              <Text
+                                as="div"
+                                className={`text-[11px] ${
                                   isSelected ? 'text-white/80' : 'text-text-muted'
                                 }`}
                               >
                                 {item.subtitle}
-                              </div>
+                              </Text>
                             )}
                           </div>
                         </div>
@@ -340,7 +352,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                             isSelected ? 'opacity-100 text-white' : 'opacity-0'
                           }`}
                         />
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
