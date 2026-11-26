@@ -165,9 +165,20 @@ export default function GovernmentIdsScreen() {
   const [hasRecord, setHasRecord] = useState(false);
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const isSavingRef = useRef(false);
+
+  useEffect(() => {
+    const subscription = watch((_value, { type }) => {
+      if (type === 'change') {
+        isDirtyRef.current = true;
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch]);
 
   const load = useCallback(async () => {
     if (!patientId || isDirtyRef.current) return;
+    if (isSavingRef.current) return;
     try {
       const rows = await db
         .select()
@@ -176,6 +187,7 @@ export default function GovernmentIdsScreen() {
         .limit(1);
       const row = rows[0];
       if (row && !isDirtyRef.current) {
+        if (isSavingRef.current) return;
         setHasRecord(true);
         reset({
           philhealthId: row.philhealthId ?? '',
@@ -225,6 +237,7 @@ export default function GovernmentIdsScreen() {
       }
     }
 
+    isSavingRef.current = true;
     setSaving(true);
     try {
       const payload = {
@@ -279,6 +292,7 @@ export default function GovernmentIdsScreen() {
 
       if (syncResult.isOffline) {
         reset(data);
+        isDirtyRef.current = false;
         dialog.alert(
           'Saved Offline',
           'Your government & insurance IDs have been saved locally and will sync when you are back online.',
@@ -286,6 +300,7 @@ export default function GovernmentIdsScreen() {
         );
       } else if (!syncResult.success && syncResult.failed > 0) {
         reset(data);
+        isDirtyRef.current = false;
         dialog.alert(
           'Sync Warning',
           `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`,
@@ -293,6 +308,7 @@ export default function GovernmentIdsScreen() {
         );
       } else {
         reset(data);
+        isDirtyRef.current = false;
         dialog.alert('Saved', 'Your government & insurance IDs have been updated successfully.', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
@@ -301,6 +317,7 @@ export default function GovernmentIdsScreen() {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save government & insurance IDs.');
     } finally {
+      isSavingRef.current = false;
       setSaving(false);
     }
   });

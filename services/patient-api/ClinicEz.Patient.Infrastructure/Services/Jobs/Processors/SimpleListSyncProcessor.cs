@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using ClinicEz.Patient.Application.Common.Constants;
 using ClinicEz.Patient.Domain.Common;
@@ -16,6 +17,7 @@ public abstract class SimpleListSyncProcessor<TEntity, TPayload> : ISyncEntityPr
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
     public abstract string EntityType { get; }
+    protected virtual bool UpsertOnMissingUpdate => false;
     protected abstract Task<TEntity?> FindExistingAsync(TPayload payload, Guid? entityId, CancellationToken ct);
     protected abstract TEntity CreateFromPayload(TPayload payload);
     protected abstract void ApplyUpdate(TEntity entity, TPayload payload);
@@ -25,6 +27,22 @@ public abstract class SimpleListSyncProcessor<TEntity, TPayload> : ISyncEntityPr
     protected ApplicationDbContext Context { get; }
 
     protected SimpleListSyncProcessor(ApplicationDbContext context) => Context = context;
+
+    protected async Task<TEntity?> FindByIdOrAsync(
+        Guid? id,
+        Expression<Func<TEntity, bool>>? fallbackPredicate,
+        CancellationToken ct)
+    {
+        if (id.HasValue)
+        {
+            var found = await Context.Set<TEntity>().FindAsync([id.Value], ct);
+            if (found is not null) return found;
+        }
+
+        return fallbackPredicate is not null
+            ? await Context.Set<TEntity>().FirstOrDefaultAsync(fallbackPredicate, ct)
+            : null;
+    }
 
     public async Task<SyncProcessResult> ProcessAsync(SyncLog log, CancellationToken ct)
     {
@@ -64,7 +82,18 @@ public abstract class SimpleListSyncProcessor<TEntity, TPayload> : ISyncEntityPr
         }
 
         // Update — Last-Write-Wins
-        if (existing is null) return SyncProcessResult.Conflict("Entity no longer exists on the server.");
+        if (existing is null)
+        {
+            if (UpsertOnMissingUpdate)
+            {
+                var entity = CreateFromPayload(payload);
+                await Context.Set<TEntity>().AddAsync(entity, ct);
+                SetEntityId(log, entity);
+                return SyncProcessResult.Success();
+            }
+
+            return SyncProcessResult.Conflict("Entity no longer exists on the server.");
+        }
         var serverTs = existing.UpdatedAt ?? existing.CreatedAt;
         var clientTs = GetPayloadTimestamp(payload);
         if (clientTs < serverTs)

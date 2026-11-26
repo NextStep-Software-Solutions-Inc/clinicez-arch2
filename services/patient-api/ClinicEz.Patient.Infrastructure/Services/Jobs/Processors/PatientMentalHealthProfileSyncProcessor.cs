@@ -24,10 +24,10 @@ internal sealed class PatientMentalHealthProfileSyncProcessor
 {
     public PatientMentalHealthProfileSyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientMentalHealthProfile;
+    protected override bool UpsertOnMissingUpdate => true;
 
-    protected override async Task<PatientMentalHealthProfile?> FindExistingAsync(MentalHealthProfilePayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientMentalHealthProfiles.FindAsync([id.Value], ct)
-            : await Context.PatientMentalHealthProfiles.FirstOrDefaultAsync(e => e.PatientId == p.PatientId || e.ClientId == p.ClientId, ct);
+    protected override Task<PatientMentalHealthProfile?> FindExistingAsync(MentalHealthProfilePayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, e => e.PatientId == p.PatientId || (p.ClientId != Guid.Empty && e.ClientId == p.ClientId), ct);
 
     protected override PatientMentalHealthProfile CreateFromPayload(MentalHealthProfilePayload p) => new()
     {

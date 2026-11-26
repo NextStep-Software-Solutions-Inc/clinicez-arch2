@@ -25,9 +25,8 @@ internal sealed class PatientImmunizationSelfSyncProcessor
     public PatientImmunizationSelfSyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientImmunizationSelf;
 
-    protected override async Task<PatientImmunizationSelf?> FindExistingAsync(ImmunizationSelfPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientImmunizationsSelf.FindAsync([id.Value], ct)
-            : await Context.PatientImmunizationsSelf.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    protected override Task<PatientImmunizationSelf?> FindExistingAsync(ImmunizationSelfPayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, p.ClientId != Guid.Empty ? e => e.PatientId == p.PatientId && e.ClientId == p.ClientId : null, ct);
 
     protected override PatientImmunizationSelf CreateFromPayload(ImmunizationSelfPayload p) => new()
     {

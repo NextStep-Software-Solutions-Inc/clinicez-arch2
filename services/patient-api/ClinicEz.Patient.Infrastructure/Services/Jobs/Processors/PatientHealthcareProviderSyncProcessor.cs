@@ -24,9 +24,8 @@ internal sealed class PatientHealthcareProviderSyncProcessor
     public PatientHealthcareProviderSyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientHealthcareProvider;
 
-    protected override async Task<PatientHealthcareProvider?> FindExistingAsync(HealthcareProviderPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientHealthcareProviders.FindAsync([id.Value], ct)
-            : await Context.PatientHealthcareProviders.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    protected override Task<PatientHealthcareProvider?> FindExistingAsync(HealthcareProviderPayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, p.ClientId != Guid.Empty ? e => e.PatientId == p.PatientId && e.ClientId == p.ClientId : null, ct);
 
     protected override PatientHealthcareProvider CreateFromPayload(HealthcareProviderPayload p) => new()
     {

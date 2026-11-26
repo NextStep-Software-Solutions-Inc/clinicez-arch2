@@ -26,9 +26,8 @@ internal sealed class PatientAllergySyncProcessor
     public PatientAllergySyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientAllergy;
 
-    protected override async Task<PatientAllergy?> FindExistingAsync(AllergyPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientAllergies.FindAsync([id.Value], ct)
-            : await Context.PatientAllergies.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    protected override Task<PatientAllergy?> FindExistingAsync(AllergyPayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, p.ClientId != Guid.Empty ? e => e.PatientId == p.PatientId && e.ClientId == p.ClientId : null, ct);
 
     protected override PatientAllergy CreateFromPayload(AllergyPayload p) => new()
     {

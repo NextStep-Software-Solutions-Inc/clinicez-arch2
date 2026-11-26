@@ -24,10 +24,10 @@ internal sealed class PatientOccupationSyncProcessor
 {
     public PatientOccupationSyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientOccupation;
+    protected override bool UpsertOnMissingUpdate => true;
 
-    protected override async Task<PatientOccupation?> FindExistingAsync(OccupationPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientOccupations.FindAsync([id.Value], ct)
-            : await Context.PatientOccupations.FirstOrDefaultAsync(e => e.PatientId == p.PatientId || e.ClientId == p.ClientId, ct);
+    protected override Task<PatientOccupation?> FindExistingAsync(OccupationPayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, e => e.PatientId == p.PatientId || (p.ClientId != Guid.Empty && e.ClientId == p.ClientId), ct);
 
     protected override PatientOccupation CreateFromPayload(OccupationPayload p) => new()
     {

@@ -1,7 +1,7 @@
 import { syncQueue } from './schema/syncQueue';
 import { randomUUID } from 'expo-crypto';
 import { toBackendBloodType } from '../services/api/patientApi';
-import { getTableName } from 'drizzle-orm';
+import { eq, getTableName } from 'drizzle-orm';
 
 export const TABLE_TO_ENTITY_TYPE: Record<string, string> = {
   patients: 'patient',
@@ -434,8 +434,7 @@ async function handleInterceptWrite(
       }
 
       const isSyncedOnServer = Boolean(
-        existingLocalRow?.syncedAt ||
-        (existingLocalRow?.id && isValidGuid(existingLocalRow.id) && existingLocalRow.id !== targetPatientId && !existingLocalRow.id.startsWith('demo:'))
+        existingLocalRow?.serverId || existingLocalRow?.syncedAt
       );
 
       let effectiveOperation: 'create' | 'update' | 'delete' = values?.deletedAt ? 'delete' : operation;
@@ -461,15 +460,17 @@ async function handleInterceptWrite(
       delete syncPayload.syncedAt;
 
       let entityIdForSync: string | undefined = undefined;
-      if (
-        effectiveOperation === 'update' &&
-        isSyncedOnServer &&
-        existingLocalRow?.id &&
-        isValidGuid(existingLocalRow.id) &&
-        existingLocalRow.id !== targetPatientId &&
-        !existingLocalRow.id.startsWith('demo:')
-      ) {
-        entityIdForSync = existingLocalRow.id;
+      if (effectiveOperation !== 'create' && isSyncedOnServer) {
+        if (existingLocalRow?.serverId && !existingLocalRow.serverId.startsWith('demo:')) {
+          entityIdForSync = existingLocalRow.serverId;
+        } else if (
+          existingLocalRow?.id &&
+          isValidGuid(existingLocalRow.id) &&
+          existingLocalRow.id !== targetPatientId &&
+          !existingLocalRow.id.startsWith('demo:')
+        ) {
+          entityIdForSync = existingLocalRow.id;
+        }
       }
 
       const rawDeletePayload = {
@@ -504,22 +505,25 @@ async function handleInterceptWrite(
       const pId = targetPatientId || values?.id || preCapturedRow?.id;
       if (!pId) return;
 
-      const effectiveOperation: 'create' | 'update' | 'delete' = values?.deletedAt ? 'delete' : operation;
+      const definedValues = Object.fromEntries(
+        Object.entries(values || {}).filter(([, v]) => v !== undefined)
+      );
+      const prevTs = preCapturedRow?.updatedAt ? new Date(preCapturedRow.updatedAt).getTime() : 0;
+      const safeUpdatedTime = Math.max(Date.now(), prevTs + 1000);
+
+      const effectiveOperation: 'create' | 'update' | 'delete' = definedValues?.deletedAt ? 'delete' : operation;
       const syncPayload: Record<string, any> = {
-        ...values,
+        ...(preCapturedRow || {}),
+        ...definedValues,
         clientId: pId,
-        updatedAt: now.toISOString(),
+        updatedAt: new Date(safeUpdatedTime).toISOString(),
       };
-      if (values?.dob !== undefined && syncPayload.dateOfBirth === undefined) {
-        syncPayload.dateOfBirth = values.dob;
-      }
-      if (values?.bloodType !== undefined) {
-        syncPayload.bloodType = toBackendBloodType(values.bloodType);
-      }
       delete syncPayload.syncedAt;
+      delete syncPayload.serverId;
+      delete syncPayload.createdAt;
 
       const finalPayload = effectiveOperation === 'delete'
-        ? { id: pId, patientId: pId, ...(preCapturedRow || values || {}) }
+        ? { id: pId, patientId: pId, ...(preCapturedRow || definedValues || {}) }
         : translateLocalToSyncPayload('patients', syncPayload);
 
       const syncItem = {
@@ -644,21 +648,50 @@ function createQueryProxy(
           }
 
           let preCapturedPromise: Promise<any> = Promise.resolve(null);
-          if (tableName && TABLE_TO_ENTITY_TYPE[tableName] && operation === 'delete') {
+          if (tableName && TABLE_TO_ENTITY_TYPE[tableName] && (operation === 'delete' || operation === 'update')) {
             try {
               const queryName = tableNameToDrizzleQueryKey(tableName);
-              const entityId = extractIdFromCondition(condition);
-              if (entityId && originalDb.query?.[queryName]?.findFirst) {
-                preCapturedPromise = originalDb.query[queryName].findFirst({
-                  where: (t: any, { eq }: any) => eq(t.id, entityId),
-                }).catch(() => null);
-              } else if (condition && originalDb.select) {
-                preCapturedPromise = originalDb.select().from(table).where(condition).limit(1)
+              if (condition && originalDb.select) {
+                preCapturedPromise = originalDb
+                  .select()
+                  .from(table)
+                  .where(condition)
+                  .limit(1)
                   .then((rows: any[]) => (rows && rows.length > 0 ? rows[0] : null))
                   .catch(() => null);
+              } else if (condition && originalDb.query?.[queryName]?.findFirst) {
+                const entityId = extractIdFromCondition(condition);
+                if (entityId) {
+                  preCapturedPromise = originalDb.query[queryName].findFirst({
+                    where: (t: any, { eq: eqOp, or: orOp }: any) =>
+                      (SINGLETON_TABLES.has(tableName!) || tableName === 'patient_government_ids') && t.patientId
+                        ? orOp(eqOp(t.patientId, entityId), eqOp(t.id, entityId))
+                        : eqOp(t.id, entityId),
+                  }).catch(() => null);
+                }
+              } else if (!condition && operation === 'update') {
+                const isPatientScoped = SINGLETON_TABLES.has(tableName) || tableName === 'patient_government_ids';
+                const lookupKey = isPatientScoped ? values?.patientId : values?.id;
+                if (lookupKey && originalDb.select) {
+                  const keyCol = isPatientScoped ? table.patientId : table.id;
+                  if (keyCol) {
+                    preCapturedPromise = originalDb
+                      .select()
+                      .from(table)
+                      .where(eq(keyCol, lookupKey))
+                      .limit(1)
+                      .then((rows: any[]) => (rows && rows.length > 0 ? rows[0] : null))
+                      .catch(() => null);
+                  }
+                } else if (lookupKey && originalDb.query?.[queryName]?.findFirst) {
+                  preCapturedPromise = originalDb.query[queryName].findFirst({
+                    where: (t: any, { eq: eqOp }: any) =>
+                      isPatientScoped && t.patientId ? eqOp(t.patientId, lookupKey) : eqOp(t.id, lookupKey),
+                  }).catch(() => null);
+                }
               }
             } catch (err) {
-              console.warn(`[DB Interceptor] Failed to initiate pre-capture for delete on ${tableName}:`, err);
+              console.warn(`[DB Interceptor] Failed to initiate pre-capture for ${operation} on ${tableName}:`, err);
             }
           }
 
@@ -692,8 +725,12 @@ function createQueryProxy(
         return function (...args: any[]) {
           const result = val.apply(target, args);
           const effectiveOperation = prop === 'onConflictDoUpdate' ? 'update' : operation;
+          const nextValues =
+            prop === 'onConflictDoUpdate' && args[0]?.set && typeof args[0].set === 'object'
+              ? { ...(values || {}), ...args[0].set }
+              : values;
           if (result && typeof result === 'object' && typeof result.then === 'function') {
-            return createQueryProxy(originalDb, result, table, effectiveOperation, values, condition);
+            return createQueryProxy(originalDb, result, table, effectiveOperation, nextValues, condition);
           }
           return result;
         };

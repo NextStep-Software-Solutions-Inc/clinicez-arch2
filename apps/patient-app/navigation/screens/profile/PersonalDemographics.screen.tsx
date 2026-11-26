@@ -2,8 +2,9 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, DeviceEventEmitter } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
-import { db, flushDatabaseSnapshot } from '@db/index';
+import { db, originalDb, flushDatabaseSnapshot } from '@db/index';
 import { patients } from '@db/schema/patients';
+import { syncQueue } from '@db/schema/syncQueue';
 import { and, eq, ne } from 'drizzle-orm';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
@@ -77,7 +78,7 @@ export default function PersonalDemographicsScreen() {
   const { selectOptions: bloodTypeOptions } = useEhrOptions('blood_type');
   const { selectOptions: educationOptions } = useEhrOptions('education_level');
 
-  const { control, handleSubmit, reset, formState: { isDirty } } = useForm<FormValues>({
+  const { control, handleSubmit, reset, watch, formState: { isDirty } } = useForm<FormValues>({
     defaultValues: {
       firstName: '', middleName: '', lastName: '', suffix: '',
       sex: '', dob: '', placeOfBirth: '', civilStatus: '',
@@ -88,12 +89,23 @@ export default function PersonalDemographicsScreen() {
 
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const isSavingRef = useRef(false);
+
+  useEffect(() => {
+    const subscription = watch((_value, { type }) => {
+      if (type === 'change') {
+        isDirtyRef.current = true;
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch]);
 
   const loadLocal = useCallback(async () => {
     if (!patientId || isDirtyRef.current) return;
+    if (isSavingRef.current) return;
     try {
       const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
-      if (row && !isDirtyRef.current) {
+      if (row && !isDirtyRef.current && !isSavingRef.current) {
         const localFirst = row.firstName || user?.firstName || '';
         const localLast = row.lastName || user?.lastName || '';
         const rawBlood = fromBackendBloodType(row.bloodType) ?? (row.bloodType ?? '');
@@ -128,7 +140,7 @@ export default function PersonalDemographicsScreen() {
       // 1. Read from local SQLite first for immediate UI render
       try {
         const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
-        if (row && isMounted && !isDirtyRef.current) {
+        if (row && isMounted && !isDirtyRef.current && !isSavingRef.current) {
           const localFirst = row.firstName || user?.firstName || '';
           const localLast = row.lastName || user?.lastName || '';
           const rawBlood = fromBackendBloodType(row.bloodType) ?? (row.bloodType ?? '');
@@ -176,7 +188,7 @@ export default function PersonalDemographicsScreen() {
           await upsertPatientSummary(serverData, user?.id);
 
           // Update form if user has not started modifying it
-          if (!isDirtyRef.current) {
+          if (!isDirtyRef.current && !isSavingRef.current) {
             const validFirst = serverData.firstName || user?.firstName || '';
             const validLast = serverData.lastName || user?.lastName || '';
             const bloodVal = fromBackendBloodType(serverData.bloodType) ?? '';
@@ -197,7 +209,7 @@ export default function PersonalDemographicsScreen() {
               educationLevel: (serverData.educationLevel as any) ?? '',
             });
           }
-        } else if (!serverData && isMounted && !isDirtyRef.current) {
+        } else if (!serverData && isMounted && !isDirtyRef.current && !isSavingRef.current) {
           // No DB row and no server data yet — pre-populate from Clerk profile
           reset((prev) => ({
             ...prev,
@@ -218,6 +230,7 @@ export default function PersonalDemographicsScreen() {
   }, [patientId, user?.id, user?.firstName, user?.lastName, getToken, reset]);
 
   const onSave = handleSubmit(async (data) => {
+    isSavingRef.current = true;
     setSaving(true);
     try {
       const payload = {
@@ -327,11 +340,27 @@ export default function PersonalDemographicsScreen() {
           }, user?.id);
         }
 
+        // Direct REST PUT succeeded; remove redundant pending patient queue item so it won't race server UpdatedAt
+        try {
+          await originalDb
+            .delete(syncQueue)
+            .where(
+              and(
+                eq(syncQueue.entityType, 'patient'),
+                eq(syncQueue.entityId, patientId),
+                eq(syncQueue.status, 'pending'),
+              ),
+            );
+        } catch {
+          // ignore
+        }
+
         await flushAndSyncProfile(patientId, getToken).catch((syncErr) =>
           console.warn('[PersonalDemographics] Background sync after save failed:', syncErr)
         );
 
         reset(data);
+        isDirtyRef.current = false;
         DeviceEventEmitter.emit('profile-synced');
         dialog.alert('Saved', 'Your personal demographics have been updated successfully.', [
           { text: 'OK', onPress: () => navigation.goBack() },
@@ -353,6 +382,7 @@ export default function PersonalDemographicsScreen() {
       console.error('[PersonalDemographics] Local save failed:', e);
       dialog.alert('Error', e?.message || 'An unexpected error occurred while saving.');
     } finally {
+      isSavingRef.current = false;
       setSaving(false);
     }
   });

@@ -2,8 +2,9 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
-import { db, flushDatabaseSnapshot } from '@db/index';
+import { db, originalDb, flushDatabaseSnapshot } from '@db/index';
 import { patients } from '@db/schema/patients';
+import { syncQueue } from '@db/schema/syncQueue';
 import { and, eq, ne } from 'drizzle-orm';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
@@ -38,18 +39,29 @@ export default function ContactInfoScreen() {
   const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
 
-  const { control, handleSubmit, reset, formState: { isDirty } } = useForm<FormValues>({
+  const { control, handleSubmit, reset, watch, formState: { isDirty } } = useForm<FormValues>({
     defaultValues: { mobile: '', altPhone: '', email: accountEmail, messengerHandle: '' },
   });
 
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const isSavingRef = useRef(false);
+
+  useEffect(() => {
+    const subscription = watch((_value, { type }) => {
+      if (type === 'change') {
+        isDirtyRef.current = true;
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch]);
 
   const loadLocal = useCallback(async () => {
     if (!patientId || isDirtyRef.current) return;
+    if (isSavingRef.current) return;
     try {
       const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
-      if (row && !isDirtyRef.current) {
+      if (row && !isDirtyRef.current && !isSavingRef.current) {
         reset({
           mobile: row.mobile ?? '',
           altPhone: row.altPhone ?? '',
@@ -71,7 +83,7 @@ export default function ContactInfoScreen() {
       // 1. Read from local SQLite
       try {
         const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
-        if (row && isMounted && !isDirtyRef.current) {
+        if (row && isMounted && !isDirtyRef.current && !isSavingRef.current) {
           reset({
             mobile: row.mobile ?? '',
             altPhone: row.altPhone ?? '',
@@ -89,7 +101,7 @@ export default function ContactInfoScreen() {
           const profile = await getPatientProfile(getToken, patientId);
           if (profile?.demographics && isMounted) {
             await upsertPatientSummary(profile.demographics, userId);
-            if (!isDirtyRef.current) {
+            if (!isDirtyRef.current && !isSavingRef.current) {
               reset({
                 mobile: profile.demographics.mobile ?? '',
                 altPhone: profile.demographics.altPhone ?? '',
@@ -112,6 +124,7 @@ export default function ContactInfoScreen() {
   }, [patientId, getToken, reset, accountEmail, userId]);
 
   const onSave = handleSubmit(async (data) => {
+    isSavingRef.current = true;
     setSaving(true);
     try {
       let serverDemo: PatientSummary | null = null;
@@ -209,10 +222,26 @@ export default function ContactInfoScreen() {
           }, userId);
         }
 
+        // Direct REST PUT succeeded; remove redundant pending patient queue item so it won't race server UpdatedAt
+        try {
+          await originalDb
+            .delete(syncQueue)
+            .where(
+              and(
+                eq(syncQueue.entityType, 'patient'),
+                eq(syncQueue.entityId, patientId),
+                eq(syncQueue.status, 'pending'),
+              ),
+            );
+        } catch {
+          // ignore
+        }
+
         // Push any remaining sync queue items
         await flushAndSyncProfile(patientId, getToken);
 
         reset(data);
+        isDirtyRef.current = false;
         dialog.alert('Saved', 'Your contact information has been updated successfully.', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
@@ -233,6 +262,7 @@ export default function ContactInfoScreen() {
       console.error('[ContactInfo] Local save failed:', e);
       dialog.alert('Error', e?.message || 'An unexpected error occurred while saving.');
     } finally {
+      isSavingRef.current = false;
       setSaving(false);
     }
   });
