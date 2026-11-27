@@ -280,10 +280,20 @@ export async function upsertRemoteNotifications(
   }
 }
 
+async function resolveAuthGetToken(
+  getToken: () => Promise<string | null>,
+): Promise<(() => Promise<string | null>) | null> {
+  const token = await getToken();
+  if (!token || !token.trim()) {
+    return null;
+  }
+  return () => Promise.resolve(token);
+}
+
 /**
  * Pulls the latest notifications from the backend and upserts them into the
  * local SQLite table. Intended to be called on app foreground / pull-to-refresh.
- * Fails silently when offline.
+ * Fails silently when offline or unauthenticated.
  */
 export async function syncNotificationsFromBackend(
   getToken: () => Promise<string | null>,
@@ -291,7 +301,9 @@ export async function syncNotificationsFromBackend(
 ): Promise<void> {
   try {
     await waitForPendingNotificationSyncs();
-    const result = await fetchNotificationsFromBackend(getToken, patientId, { take: 100 });
+    const resolvedGetToken = await resolveAuthGetToken(getToken);
+    if (!resolvedGetToken) return;
+    const result = await fetchNotificationsFromBackend(resolvedGetToken, patientId, { take: 100 });
     await upsertRemoteNotifications(patientId, result.items);
   } catch {
     // Offline — local cache remains unchanged
@@ -310,7 +322,9 @@ export async function markAsReadWithSync(
     (async () => {
       await markAsRead(id);
       try {
-        await markNotificationReadOnBackend(getToken, patientId, id);
+        const resolvedGetToken = await resolveAuthGetToken(getToken);
+        if (!resolvedGetToken) return;
+        await markNotificationReadOnBackend(resolvedGetToken, patientId, id);
       } catch {
         /* offline */
       }
@@ -329,7 +343,9 @@ export async function markAllAsReadWithSync(
     (async () => {
       await markAllAsRead(patientId);
       try {
-        await markAllNotificationsReadOnBackend(getToken, patientId);
+        const resolvedGetToken = await resolveAuthGetToken(getToken);
+        if (!resolvedGetToken) return;
+        await markAllNotificationsReadOnBackend(resolvedGetToken, patientId);
       } catch {
         /* offline */
       }
@@ -366,7 +382,9 @@ export async function deleteNotificationWithSync(
       await deleteNotification(id);
       if (existing[0] && !existing[0].isRead) {
         try {
-          await markNotificationReadOnBackend(getToken, patientId, id);
+          const resolvedGetToken = await resolveAuthGetToken(getToken);
+          if (!resolvedGetToken) return;
+          await markNotificationReadOnBackend(resolvedGetToken, patientId, id);
         } catch {
           /* offline */
         }
@@ -387,7 +405,9 @@ export async function clearAllNotificationsWithSync(
     (async () => {
       await clearAllNotifications(patientId);
       try {
-        await markAllNotificationsReadOnBackend(getToken, patientId);
+        const resolvedGetToken = await resolveAuthGetToken(getToken);
+        if (!resolvedGetToken) return;
+        await markAllNotificationsReadOnBackend(resolvedGetToken, patientId);
       } catch {
         /* offline */
       }
