@@ -680,6 +680,7 @@ public sealed class ScopedCdcIdResolver
                 keys.Add(("PatientSurgicalHistory", id));
                 break;
             case "UserVaccination":
+            case "PatientImmunization":
                 keys.Add(("PatientImmunization", id));
                 break;
             case "PhilHealthRecord":
@@ -787,6 +788,7 @@ public sealed class ScopedCdcIdResolver
                 keys.Add(("PatientDisability", id));
                 break;
             case "UserVaccination":
+            case "PatientImmunization":
                 keys.Add(("PatientImmunizationSelf", id));
                 keys.Add(("VaccinationAdministered", id));
                 break;

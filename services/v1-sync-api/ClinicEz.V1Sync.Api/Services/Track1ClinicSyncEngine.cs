@@ -758,11 +758,22 @@ public sealed class Track1ClinicSyncEngine
             WHERE sh."deletedAt" IS NULL AND {scopeUserFilter}
             """, scopeParams, ct);
 
-        long v1Immunizations = await ScalarInt64Async(v1, $"""
-            SELECT COUNT(*) FROM public."UserVaccination" uv
-            JOIN public."User" u ON u.id = uv."userId"
-            WHERE uv."deletedAt" IS NULL AND uv."isActive" = true AND {scopeUserFilter}
-            """, scopeParams, ct);
+        var hasUserVaccinationTable = await TableExistsAsync(v1, "UserVaccination", ct);
+        var hasPatientImmunizationTable = !hasUserVaccinationTable && await TableExistsAsync(v1, "PatientImmunization", ct);
+
+        long v1Immunizations = hasUserVaccinationTable
+            ? await ScalarInt64Async(v1, $"""
+                SELECT COUNT(*) FROM public."UserVaccination" uv
+                JOIN public."User" u ON u.id = uv."userId"
+                WHERE uv."deletedAt" IS NULL AND uv."isActive" = true AND {scopeUserFilter}
+                """, scopeParams, ct)
+            : hasPatientImmunizationTable
+                ? await ScalarInt64Async(v1, $"""
+                    SELECT COUNT(*) FROM public."PatientImmunization" pi
+                    JOIN public."User" u ON u.id = pi."userId"
+                    WHERE pi."deletedAt" IS NULL AND pi."isActive" = true AND {scopeUserFilter}
+                    """, scopeParams, ct)
+                : 0;
 
         long v1PhilHealth = await ScalarInt64Async(v1, $"""
             SELECT COUNT(DISTINCT pr."userId") FROM public."PhilHealthRecord" pr
@@ -2176,6 +2187,13 @@ public sealed class Track1ClinicSyncEngine
         var v2TenantId = binding.V2TenantId!;
         bool ShouldRun(string et) => targetEntityTypeFilter is null || string.Equals(targetEntityTypeFilter, et, StringComparison.OrdinalIgnoreCase);
 
+        var hasUserVaccinationTable = ShouldRun("PatientImmunization") && await TableExistsAsync(v1, "UserVaccination", ct);
+        var hasVaccineTable = hasUserVaccinationTable && await TableExistsAsync(v1, "Vaccine", ct);
+        var hasDoseTable = hasUserVaccinationTable && await TableExistsAsync(v1, "Dose", ct);
+        var hasRouteTable = hasUserVaccinationTable && await TableExistsAsync(v1, "Route", ct);
+        var hasPatientImmunizationTable = ShouldRun("PatientImmunization") && !hasUserVaccinationTable && await TableExistsAsync(v1, "PatientImmunization", ct);
+        var hasPhilHealthImmunLibTable = hasPatientImmunizationTable && await TableExistsAsync(v1, "PhilHealthImmunizationLibrary", ct);
+
         await foreach (var chunk in EnumerateBatchesAsync(cohortUserIds, ct))
         {
             var ids = chunk.ToArray();
@@ -2966,18 +2984,34 @@ public sealed class Track1ClinicSyncEngine
                     isDryRun, forceV1OnConflict, targetV1IdFilter, summary, ct);
             }
 
-            // 5i. PatientImmunizations (VaccineName clamped to 150)
-            if (ShouldRun("PatientImmunization"))
+            // 5i. PatientImmunizations (VaccineName clamped to 150; supports legacy UserVaccination and modern PatientImmunization)
+            if (ShouldRun("PatientImmunization") && (hasUserVaccinationTable || hasPatientImmunizationTable))
             {
                 var candidates = new List<ChildSyncCandidate>();
-                await using (var cmd = new NpgsqlCommand("""
-                    SELECT uv.id, uv."userId", COALESCE(v.name, 'Vaccine'), d.dose, rt.route, uv."dateGiven", uv."administeredBy", uv.notes, uv."createdAt", uv."updatedAt"
-                    FROM public."UserVaccination" uv
-                    LEFT JOIN public."Vaccine" v ON v.id = uv."vaccineId"
-                    LEFT JOIN public."Dose" d ON d.id = uv."doseId"
-                    LEFT JOIN public."Route" rt ON rt.id = uv."routeId"
-                    WHERE uv."userId" = ANY(@ids) AND uv."deletedAt" IS NULL AND uv."isActive" = true
-                    """, v1))
+                var immSql = hasUserVaccinationTable
+                    ? $"""
+                        SELECT uv.id, uv."userId",
+                               {(hasVaccineTable ? "COALESCE(v.name, 'Vaccine')" : "'Vaccine'::text")},
+                               {(hasDoseTable ? "d.dose" : "NULL::text")},
+                               {(hasRouteTable ? "rt.route" : "NULL::text")},
+                               uv."dateGiven", uv."administeredBy", uv.notes, uv."createdAt", uv."updatedAt"
+                        FROM public."UserVaccination" uv
+                        {(hasVaccineTable ? "LEFT JOIN public.\"Vaccine\" v ON v.id = uv.\"vaccineId\"" : string.Empty)}
+                        {(hasDoseTable ? "LEFT JOIN public.\"Dose\" d ON d.id = uv.\"doseId\"" : string.Empty)}
+                        {(hasRouteTable ? "LEFT JOIN public.\"Route\" rt ON rt.id = uv.\"routeId\"" : string.Empty)}
+                        WHERE uv."userId" = ANY(@ids) AND uv."deletedAt" IS NULL AND uv."isActive" = true
+                        """
+                    : $"""
+                        SELECT pi.id, pi."userId",
+                               COALESCE(NULLIF(trim(pi."vaccineName"), ''), {(hasPhilHealthImmunLibTable ? "NULLIF(trim(lib.name), ''), " : string.Empty)}'Vaccine'),
+                               COALESCE(NULLIF(trim(pi."doseNumber"), ''), {(hasPhilHealthImmunLibTable ? "NULLIF(trim(lib.\"defaultDoseLabel\"), ''), " : string.Empty)}NULL::text),
+                               COALESCE(NULLIF(trim(pi.route), ''), {(hasPhilHealthImmunLibTable ? "NULLIF(trim(lib.\"defaultRoute\"), ''), " : string.Empty)}NULL::text),
+                               pi."dateGiven", pi."administeredBy", pi.notes, pi."createdAt", pi."updatedAt"
+                        FROM public."PatientImmunization" pi
+                        {(hasPhilHealthImmunLibTable ? "LEFT JOIN public.\"PhilHealthImmunizationLibrary\" lib ON lib.id = pi.\"immunizationLibId\"" : string.Empty)}
+                        WHERE pi."userId" = ANY(@ids) AND pi."deletedAt" IS NULL AND pi."isActive" = true
+                        """;
+                await using (var cmd = new NpgsqlCommand(immSql, v1))
                 {
                     cmd.Parameters.AddWithValue("ids", ids);
                     await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -6243,9 +6277,12 @@ public sealed class Track1ClinicSyncEngine
                     ? await QueryOptionalIntAsync(v1, """SELECT "userId" FROM public."SurgicalHistory" WHERE id = @id AND "deletedAt" IS NULL""", surgId, null, ct)
                     : null;
             case "PatientImmunization":
-                return int.TryParse(v1Id, out var immId)
-                    ? await QueryOptionalIntAsync(v1, """SELECT "userId" FROM public."UserVaccination" WHERE id = @id AND "deletedAt" IS NULL AND "isActive" = true""", immId, null, ct)
-                    : null;
+                if (!int.TryParse(v1Id, out var immId)) return null;
+                if (await TableExistsAsync(v1, "UserVaccination", ct))
+                    return await QueryOptionalIntAsync(v1, """SELECT "userId" FROM public."UserVaccination" WHERE id = @id AND "deletedAt" IS NULL AND "isActive" = true""", immId, null, ct);
+                if (await TableExistsAsync(v1, "PatientImmunization", ct))
+                    return await QueryOptionalIntAsync(v1, """SELECT "userId" FROM public."PatientImmunization" WHERE id = @id AND "deletedAt" IS NULL AND "isActive" = true""", immId, null, ct);
+                return null;
             case "PatientPhilHealthMembership":
                 return int.TryParse(v1Id, out var phId)
                     ? await QueryOptionalIntAsync(v1, """SELECT "userId" FROM public."PhilHealthRecord" WHERE id = @id AND "deletedAt" IS NULL AND "isActive" = true""", phId, null, ct)

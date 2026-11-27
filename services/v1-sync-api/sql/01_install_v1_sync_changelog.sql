@@ -124,6 +124,7 @@ DECLARE
         'ObGyneHistory',
         'SurgicalHistory',
         'UserVaccination',
+        'PatientImmunization',
         'UserDisability',
         'PatientInsight',
         'PatientNcdQuestionnaire',

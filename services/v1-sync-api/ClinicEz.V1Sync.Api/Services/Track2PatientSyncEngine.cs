@@ -710,6 +710,7 @@ public sealed class Track2PatientSyncEngine
         var hasMedicationTable = await TableExistsAsync(v1, "Medication", ct);
         var hasMedDrugTable = await TableExistsAsync(v1, "MedicationDrug", ct);
         var hasVaccinationTable = await TableExistsAsync(v1, "UserVaccination", ct);
+        var hasPatientImmunizationTable = !hasVaccinationTable && await TableExistsAsync(v1, "PatientImmunization", ct);
 
         long v1Users = await ScalarInt64Async(v1, $"""
             SELECT COUNT(DISTINCT u.id) FROM public."User" u WHERE {userFilter}
@@ -783,7 +784,13 @@ public sealed class Track2PatientSyncEngine
                 JOIN public."User" u ON u.id = uv."userId"
                 WHERE uv."deletedAt" IS NULL AND uv."isActive" = true AND uv."hpId" IS NULL AND {userFilter}
                 """, scopeParams, ct)
-            : 0;
+            : hasPatientImmunizationTable
+                ? await ScalarInt64Async(v1, $"""
+                    SELECT COUNT(*) FROM public."PatientImmunization" pi
+                    JOIN public."User" u ON u.id = pi."userId"
+                    WHERE pi."deletedAt" IS NULL AND pi."isActive" = true AND {userFilter}
+                    """, scopeParams, ct)
+                : 0;
 
         long v1Meds = hasMedicationTable
             ? (hasMedDrugTable
@@ -1722,7 +1729,12 @@ public sealed class Track2PatientSyncEngine
         Guid Pid(int uid) => resolvedPatientIds.TryGetValue(uid, out var g) ? g : DeterministicUuid.PatientAccountId(uid);
         bool RunSection(string et) => targetEntityTypeFilter is null || string.Equals(targetEntityTypeFilter, et, StringComparison.OrdinalIgnoreCase);
 
-        var hasVaccineType = RunSection("PatientImmunizationSelf") && await ColumnExistsAsync(v1, "Vaccine", "type", ct);
+        var hasUserVaccinationTable = RunSection("PatientImmunizationSelf") && await TableExistsAsync(v1, "UserVaccination", ct);
+        var hasVaccineTable = hasUserVaccinationTable && await TableExistsAsync(v1, "Vaccine", ct);
+        var hasDoseTable = hasUserVaccinationTable && await TableExistsAsync(v1, "Dose", ct);
+        var hasVaccineType = hasVaccineTable && await ColumnExistsAsync(v1, "Vaccine", "type", ct);
+        var hasPatientImmunizationTable = RunSection("PatientImmunizationSelf") && !hasUserVaccinationTable && await TableExistsAsync(v1, "PatientImmunization", ct);
+        var hasPhilHealthImmunLibTable = hasPatientImmunizationTable && await TableExistsAsync(v1, "PhilHealthImmunizationLibrary", ct);
         var hasDisabilityTable = RunSection("PatientDisability") && await TableExistsAsync(v1, "UserDisability", ct);
         var hasMedicationTable = RunSection("PatientMedication") && await TableExistsAsync(v1, "Medication", ct);
         var hasMedDrugTable = hasMedicationTable && await TableExistsAsync(v1, "MedicationDrug", ct);
@@ -2614,19 +2626,34 @@ public sealed class Track2PatientSyncEngine
                     isDryRun, forceV1OnConflict, targetV1IdFilter, summary, ct, shieldedInRun: shieldedInRun);
             }
 
-            // 11. patient_immunizations_self (UserVaccination where hpId IS NULL; dose_number clamped to 20; ImmunizationCategory enum)
-            if (RunSection("PatientImmunizationSelf"))
+            // 11. patient_immunizations_self (legacy UserVaccination where hpId IS NULL OR modern PatientImmunization; dose_number clamped to 20; ImmunizationCategory enum)
+            if (RunSection("PatientImmunizationSelf") && (hasUserVaccinationTable || hasPatientImmunizationTable))
             {
                 var candidates = new List<ChildSyncCandidate>();
-                var vaxSql = $"""
-                    SELECT uv.id, uv."userId", COALESCE(v.name, 'Vaccine'), d.dose, uv."dateGiven", uv."administeredBy", uv."createdAt", uv."updatedAt",
-                           {(hasVaccineType ? "v.type" : "NULL::text")} AS vtype
-                    FROM public."UserVaccination" uv
-                    LEFT JOIN public."Vaccine" v ON v.id = uv."vaccineId"
-                    LEFT JOIN public."Dose" d ON d.id = uv."doseId"
-                    WHERE uv."userId" = ANY(@ids) AND uv."deletedAt" IS NULL AND uv."isActive" = true AND uv."hpId" IS NULL
-                    ORDER BY uv.id ASC
-                    """;
+                var vaxSql = hasUserVaccinationTable
+                    ? $"""
+                        SELECT uv.id, uv."userId",
+                               {(hasVaccineTable ? "COALESCE(v.name, 'Vaccine')" : "'Vaccine'::text")},
+                               {(hasDoseTable ? "d.dose" : "NULL::text")},
+                               uv."dateGiven", uv."administeredBy", uv."createdAt", uv."updatedAt",
+                               {(hasVaccineType ? "v.type" : "NULL::text")} AS vtype
+                        FROM public."UserVaccination" uv
+                        {(hasVaccineTable ? "LEFT JOIN public.\"Vaccine\" v ON v.id = uv.\"vaccineId\"" : string.Empty)}
+                        {(hasDoseTable ? "LEFT JOIN public.\"Dose\" d ON d.id = uv.\"doseId\"" : string.Empty)}
+                        WHERE uv."userId" = ANY(@ids) AND uv."deletedAt" IS NULL AND uv."isActive" = true AND uv."hpId" IS NULL
+                        ORDER BY uv.id ASC
+                        """
+                    : $"""
+                        SELECT pi.id, pi."userId",
+                               COALESCE(NULLIF(trim(pi."vaccineName"), ''), {(hasPhilHealthImmunLibTable ? "NULLIF(trim(lib.name), ''), " : string.Empty)}'Vaccine'),
+                               COALESCE(NULLIF(trim(pi."doseNumber"), ''), {(hasPhilHealthImmunLibTable ? "NULLIF(trim(lib.\"defaultDoseLabel\"), ''), " : string.Empty)}NULL::text),
+                               pi."dateGiven", pi."administeredBy", pi."createdAt", pi."updatedAt",
+                               COALESCE(pi.category::text, {(hasPhilHealthImmunLibTable ? "lib.category::text, " : string.Empty)}'OTHER') AS vtype
+                        FROM public."PatientImmunization" pi
+                        {(hasPhilHealthImmunLibTable ? "LEFT JOIN public.\"PhilHealthImmunizationLibrary\" lib ON lib.id = pi.\"immunizationLibId\"" : string.Empty)}
+                        WHERE pi."userId" = ANY(@ids) AND pi."deletedAt" IS NULL AND pi."isActive" = true
+                        ORDER BY pi.id ASC
+                        """;
                 await using (var cmd = new NpgsqlCommand(vaxSql, v1))
                 {
                     cmd.Parameters.AddWithValue("ids", ids);
@@ -3244,7 +3271,10 @@ public sealed class Track2PatientSyncEngine
         var hasMedPhilHealth = RunSection("PatientPrescription") && await TableExistsAsync(v1, "MedicinePhilHealthData", ct);
         var hasMedCertTable = RunSection("PatientMedicalCertificate") && await TableExistsAsync(v1, "ClinicMedicalCertificate", ct);
         var hasMedCertReason = hasMedCertTable && await TableExistsAsync(v1, "MedicalCertificateReason", ct);
-        var hasRouteTable = RunSection("VaccinationAdministered") && await TableExistsAsync(v1, "Route", ct);
+        var hasUserVaccinationTable = RunSection("VaccinationAdministered") && await TableExistsAsync(v1, "UserVaccination", ct);
+        var hasVaccineTable = hasUserVaccinationTable && await TableExistsAsync(v1, "Vaccine", ct);
+        var hasDoseTable = hasUserVaccinationTable && await TableExistsAsync(v1, "Dose", ct);
+        var hasRouteTable = hasUserVaccinationTable && await TableExistsAsync(v1, "Route", ct);
 
         await foreach (var chunk in EnumerateBatchesAsync(cohortUserIds, ct))
         {
@@ -4293,16 +4323,18 @@ public sealed class Track2PatientSyncEngine
                     isDryRun, forceV1OnConflict, targetV1IdFilter, summary, ct, shieldedInRun: shieldedInRun);
             }
 
-            // B8. vaccinations_administered (UserVaccination where hpId IS NOT NULL for active ClinicPatient)
-            if (RunSection("VaccinationAdministered"))
+            // B8. vaccinations_administered (legacy UserVaccination where hpId IS NOT NULL for active ClinicPatient)
+            if (RunSection("VaccinationAdministered") && hasUserVaccinationTable)
             {
                 var vaxAdminSql = $"""
-                    SELECT uv.id, uv."userId", COALESCE(v.name, 'Vaccine'), d.dose,
+                    SELECT uv.id, uv."userId",
+                           {(hasVaccineTable ? "COALESCE(v.name, 'Vaccine')" : "'Vaccine'::text")},
+                           {(hasDoseTable ? "d.dose" : "NULL::text")},
                            {(hasRouteTable ? "rt.route" : "NULL::text")} AS route_name,
                            uv."dateGiven", uv."administeredBy", uv."hpId", uv."createdAt", uv."updatedAt"
                     FROM public."UserVaccination" uv
-                    LEFT JOIN public."Vaccine" v ON v.id = uv."vaccineId"
-                    LEFT JOIN public."Dose" d ON d.id = uv."doseId"
+                    {(hasVaccineTable ? "LEFT JOIN public.\"Vaccine\" v ON v.id = uv.\"vaccineId\"" : string.Empty)}
+                    {(hasDoseTable ? "LEFT JOIN public.\"Dose\" d ON d.id = uv.\"doseId\"" : string.Empty)}
                     {(hasRouteTable ? "LEFT JOIN public.\"Route\" rt ON rt.id = uv.\"routeId\"" : string.Empty)}
                     WHERE uv."userId" = ANY(@ids) AND uv."deletedAt" IS NULL AND uv."isActive" = true
                       AND uv."hpId" IS NOT NULL
@@ -4613,9 +4645,12 @@ public sealed class Track2PatientSyncEngine
                     ? await QueryOptionalIntAsync(v1, """SELECT "userId" FROM public."UserDisability" WHERE id = @id""", disId, null, ct)
                     : null;
             case "PatientImmunizationSelf":
-                return int.TryParse(v1Id, out var immId)
-                    ? await QueryOptionalIntAsync(v1, """SELECT "userId" FROM public."UserVaccination" WHERE id = @id AND "deletedAt" IS NULL AND "isActive" = true AND "hpId" IS NULL""", immId, null, ct)
-                    : null;
+                if (!int.TryParse(v1Id, out var immId)) return null;
+                if (await TableExistsAsync(v1, "UserVaccination", ct))
+                    return await QueryOptionalIntAsync(v1, """SELECT "userId" FROM public."UserVaccination" WHERE id = @id AND "deletedAt" IS NULL AND "isActive" = true AND "hpId" IS NULL""", immId, null, ct);
+                if (await TableExistsAsync(v1, "PatientImmunization", ct))
+                    return await QueryOptionalIntAsync(v1, """SELECT "userId" FROM public."PatientImmunization" WHERE id = @id AND "deletedAt" IS NULL AND "isActive" = true""", immId, null, ct);
+                return null;
             case "PatientMedication":
             {
                 var basePart = v1Id.Contains(':', StringComparison.Ordinal) ? v1Id.Split(':')[0] : v1Id;
@@ -4681,7 +4716,8 @@ public sealed class Track2PatientSyncEngine
                     return await QueryOptionalIntAsync(v1, """SELECT cp."patientId" FROM public."ClinicHeartStationRequest" r JOIN public."ClinicPatient" cp ON cp.id = r."clinicPatientId" WHERE r.id = @id AND r."clinicId" = @cid AND r."deletedAt" IS NULL AND r."isActive" = true""", ecgId, cid, ct);
                 return null;
             case "VaccinationAdministered":
-                return cid.HasValue && int.TryParse(v1Id, out var vaId)
+                if (!cid.HasValue || !int.TryParse(v1Id, out var vaId)) return null;
+                return await TableExistsAsync(v1, "UserVaccination", ct)
                     ? await QueryOptionalIntAsync(v1, """SELECT uv."userId" FROM public."UserVaccination" uv WHERE uv.id = @id AND uv."deletedAt" IS NULL AND uv."isActive" = true AND uv."hpId" IS NOT NULL AND EXISTS (SELECT 1 FROM public."ClinicPatient" cp WHERE cp."patientId" = uv."userId" AND cp."clinicId" = @cid AND cp."deletedAt" IS NULL)""", vaId, cid, ct)
                     : null;
             default:

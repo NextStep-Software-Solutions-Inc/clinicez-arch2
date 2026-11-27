@@ -1085,6 +1085,95 @@ public sealed class Track1ClinicSyncIntegrationTests
         Assert.Contains(conflicts, c => c.EntityType == "RecordAttachment" && c.V1Id == "file:8904" && c.ConflictType == SyncConflictType.V1SoftDeletedShielded);
     }
 
+    [Fact]
+    public async Task ModernPatientImmunizationSchema_WithoutLegacyUserVaccination_SyncsAndReconcilesParity()
+    {
+        await using var fx = await CreateInitializedTrack1FixtureAsync();
+        var binding = await CreateClinicBindingAsync(fx, "Track1 Modern PatientImmunization");
+
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, """
+            DROP TABLE IF EXISTS public."UserVaccination" CASCADE;
+            DROP TABLE IF EXISTS public."Vaccine" CASCADE;
+            DROP TABLE IF EXISTS public."Dose" CASCADE;
+            DROP TABLE IF EXISTS public."Route" CASCADE;
+
+            DO $$ BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ImmunizationCategory') THEN
+                    CREATE TYPE public."ImmunizationCategory" AS ENUM ('CHILD', 'YOUNG_WOMAN', 'PREGNANT', 'ELDERLY', 'OTHER');
+                END IF;
+            END $$;
+
+            CREATE TABLE public."PhilHealthImmunizationLibrary" (
+                id SERIAL PRIMARY KEY,
+                category public."ImmunizationCategory" NOT NULL DEFAULT 'OTHER',
+                code TEXT NOT NULL,
+                name TEXT NOT NULL,
+                "defaultDoseLabel" TEXT,
+                "defaultRoute" TEXT,
+                "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
+                "sortOrder" INT NOT NULL DEFAULT 0,
+                "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+                "updatedAt" TIMESTAMP NOT NULL DEFAULT now()
+            );
+
+            CREATE TABLE public."PatientImmunization" (
+                id SERIAL PRIMARY KEY,
+                "userId" INT NOT NULL,
+                "immunizationLibId" INT REFERENCES public."PhilHealthImmunizationLibrary"(id),
+                category public."ImmunizationCategory" NOT NULL DEFAULT 'OTHER',
+                code TEXT,
+                "vaccineName" TEXT NOT NULL,
+                "doseNumber" TEXT,
+                route TEXT,
+                "dateGiven" TIMESTAMP,
+                "administeredBy" TEXT,
+                "facilityName" TEXT,
+                "lotNumber" TEXT,
+                "expirationDate" TIMESTAMP,
+                notes TEXT,
+                "reportStatus" TEXT,
+                "deficiencyRemarks" TEXT,
+                "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+                "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+                "deletedAt" TIMESTAMP,
+                "isActive" BOOLEAN NOT NULL DEFAULT TRUE
+            );
+
+            INSERT INTO public."User" (id, "firstName", "lastName", dob, gender, mobile, email, "isActive")
+            VALUES (9101, 'Imm', 'Patient', '1995-04-12', 'FEMALE', '09170009101', 'imm9101@example.test', true);
+            INSERT INTO public."ClinicPatient" (id, "clinicId", "patientId") VALUES (9101, 101, 9101);
+            INSERT INTO public."PhilHealthImmunizationLibrary" (id, category, code, name, "defaultDoseLabel", "defaultRoute")
+            VALUES (7, 'ELDERLY', 'FLU-25', 'Influenza Vaccine', 'Annual', 'IM');
+            INSERT INTO public."PatientImmunization" (id, "userId", "immunizationLibId", category, "vaccineName", "doseNumber", route, "dateGiven", "administeredBy", notes)
+            VALUES
+                (601, 9101, NULL, 'CHILD', 'Hepatitis B', 'Dose 1', 'IM', '2025-02-01 09:00:00', 'Nurse Ana', 'Left arm'),
+                (602, 9101, 7, 'ELDERLY', '', NULL, NULL, '2025-03-15 10:00:00', 'Dr. Cruz', 'Clinic drive');
+            """);
+
+        var dryRun = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.DryRun, null, false, "test", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, dryRun.Status);
+
+        var backfill = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.Backfill, null, false, "test", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, backfill.Status);
+
+        await using var v2 = new NpgsqlConnection(fx.ClinicConnectionString);
+        await v2.OpenAsync();
+        Assert.Equal(2L, await ScalarInt64Async(v2, """SELECT COUNT(*) FROM public."PatientImmunizations" WHERE "IsDeleted" = false"""));
+        Assert.Equal("Influenza Vaccine", await ScalarStringAsync(v2, """SELECT "VaccineName" FROM public."PatientImmunizations" WHERE "AdministeredByStaffName" = 'Dr. Cruz'"""));
+        Assert.Equal("IM", await ScalarStringAsync(v2, """SELECT "Route" FROM public."PatientImmunizations" WHERE "AdministeredByStaffName" = 'Dr. Cruz'"""));
+
+        var parity = await fx.Coordinator.GetParityReportAsync(binding.Id, CancellationToken.None);
+        var immCheck = Assert.Single(parity.Checks, c => c.EntityType == "PatientImmunizations");
+        Assert.Equal(2L, immCheck.V1ExpectedCount);
+        Assert.Equal(2L, immCheck.V2ActualCount);
+        Assert.True(immCheck.IsMatched);
+
+        // Also verify clean skip when neither UserVaccination nor PatientImmunization exists
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, """DROP TABLE IF EXISTS public."PatientImmunization" CASCADE;""");
+        var noTableDryRun = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.DryRun, null, false, "test", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, noTableDryRun.Status);
+    }
+
     private static async Task<Pg17TestFixture> CreateInitializedTrack1FixtureAsync()
     {
         var fx = new Pg17TestFixture();
