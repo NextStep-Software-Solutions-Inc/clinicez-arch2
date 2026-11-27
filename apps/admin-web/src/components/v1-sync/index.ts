@@ -46,3 +46,7 @@ export {
   MappingGuideModal,
   type MappingGuideModalProps,
 } from './MappingGuideModal';
+export {
+  ConflictDiffDrawer,
+  type ConflictDiffDrawerProps,
+} from './ConflictDiffDrawer';

@@ -3,6 +3,8 @@ import {
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
+  IconDownload,
+  IconGitCompare,
   IconRefresh,
   IconRotateClockwise,
   IconSparkles,
@@ -150,9 +152,12 @@ export interface ConflictsReviewCardProps {
   conflictsHasMore: boolean;
   conflictStatusFilter: string;
   busyAction: string | null;
+  exportingFormat?: 'csv' | 'json' | null;
   onChangeStatusFilter: (nextStatus: string) => void;
   onResolve: (conflict: SyncConflictDto, resolution: ConflictResolution) => void;
   onRequestForceV1: (conflict: SyncConflictDto) => void;
+  onInspectDiff?: (conflict: SyncConflictDto) => void;
+  onExportReport?: (format: 'csv' | 'json') => void;
   onChangeOffset: (nextOffset: number) => void;
 }
 
@@ -163,11 +168,16 @@ export function ConflictsReviewCard({
   conflictsHasMore,
   conflictStatusFilter,
   busyAction,
+  exportingFormat = null,
   onChangeStatusFilter,
   onResolve,
   onRequestForceV1,
+  onInspectDiff,
+  onExportReport,
   onChangeOffset,
 }: ConflictsReviewCardProps) {
+  const canExport = Boolean(onExportReport) && !exportingFormat && (conflicts.length > 0 || (conflictsTotal ?? 0) > 0);
+
   return (
     <div className="rounded-2xl bg-surface border border-border">
       <div className="px-5 py-3.5 border-b border-border rounded-t-2xl flex flex-wrap items-center justify-between gap-3">
@@ -180,16 +190,42 @@ export function ConflictsReviewCard({
             Records edited in Clinic EZ v2 or protected from deletion in Classic v1.
           </div>
         </div>
-        <div className="w-44 shrink-0">
-          <SelectField
-            ariaLabel="Filter review items by status"
-            size="sm"
-            align="right"
-            value={conflictStatusFilter}
-            onValueChange={onChangeStatusFilter}
-            options={CONFLICT_STATUS_OPTIONS}
-            searchable={false}
-          />
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {onExportReport && (
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!canExport}
+                onClick={() => onExportReport('csv')}
+                leadingIcon={<IconDownload className="h-3.5 w-3.5" />}
+                tooltip="Export Zero-PHI conflict review report as CSV"
+              >
+                {exportingFormat === 'csv' ? 'Exporting CSV...' : 'Export CSV'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!canExport}
+                onClick={() => onExportReport('json')}
+                leadingIcon={<IconDownload className="h-3.5 w-3.5" />}
+                tooltip="Export Zero-PHI conflict review report as JSON"
+              >
+                {exportingFormat === 'json' ? 'Exporting JSON...' : 'Export JSON'}
+              </Button>
+            </div>
+          )}
+          <div className="w-44 shrink-0">
+            <SelectField
+              ariaLabel="Filter review items by status"
+              size="sm"
+              align="right"
+              value={conflictStatusFilter}
+              onValueChange={onChangeStatusFilter}
+              options={CONFLICT_STATUS_OPTIONS}
+              searchable={false}
+            />
+          </div>
         </div>
       </div>
       <div className="divide-y divide-border text-xs">
@@ -224,37 +260,50 @@ export function ConflictsReviewCard({
                   <span className="text-text-secondary">{cf.changedFields.join(', ') || '—'}</span>
                 </Text>
               </div>
-              {cf.status === 'OPEN' && (
-                <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                {onInspectDiff && (
                   <Button
-                    variant="unstyled"
+                    variant="secondary"
                     size="xs"
                     disabled={!!busyAction}
-                    onClick={() => onResolve(cf, 'KEEP_V2')}
-                    className="font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20"
+                    onClick={() => onInspectDiff(cf)}
+                    leadingIcon={<IconGitCompare className="h-3.5 w-3.5" />}
                   >
-                    Keep v2
+                    Review Diff
                   </Button>
-                  <Button
-                    variant="unstyled"
-                    size="xs"
-                    disabled={!!busyAction}
-                    onClick={() => onRequestForceV1(cf)}
-                    className="font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 hover:bg-amber-500/20"
-                  >
-                    Use Classic (v1)
-                  </Button>
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    disabled={!!busyAction}
-                    onClick={() => onResolve(cf, 'IGNORE')}
-                    className="border border-border text-text-secondary hover:text-text font-semibold"
-                  >
-                    Dismiss
-                  </Button>
-                </div>
-              )}
+                )}
+                {cf.status === 'OPEN' && (
+                  <>
+                    <Button
+                      variant="unstyled"
+                      size="xs"
+                      disabled={!!busyAction}
+                      onClick={() => onResolve(cf, 'KEEP_V2')}
+                      className="font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20"
+                    >
+                      Keep v2
+                    </Button>
+                    <Button
+                      variant="unstyled"
+                      size="xs"
+                      disabled={!!busyAction}
+                      onClick={() => onRequestForceV1(cf)}
+                      className="font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 hover:bg-amber-500/20"
+                    >
+                      Use Classic (v1)
+                    </Button>
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      disabled={!!busyAction}
+                      onClick={() => onResolve(cf, 'IGNORE')}
+                      className="border border-border text-text-secondary hover:text-text font-semibold"
+                    >
+                      Dismiss
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           ))
         )}

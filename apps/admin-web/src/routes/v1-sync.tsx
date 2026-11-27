@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoute } from '@tanstack/react-router';
+import { useUser } from '@clerk/clerk-react';
 import { Route as authRoute } from './_auth';
 import { adminService, AdminMeDto, AdminTenantDto } from '@/services/admin.service';
+import { hasVerifiedMfa } from '@/lib/mfaGuard';
 import {
   Button,
   Chip,
@@ -14,6 +16,7 @@ import {
 import {
   v1SyncService,
   isValidUuid,
+  ConflictDetailDto,
   ConflictResolution,
   MappingGuideResponseDto,
   StorageObjectItemDto,
@@ -37,6 +40,7 @@ import {
   buildSyncStatusFingerprint,
   ChangeDetailsCard,
   CONFLICTS_PAGE_SIZE,
+  ConflictDiffDrawer,
   ConflictsReviewCard,
   ConnectionActionDeck,
   ConnectionHealthStrip,
@@ -123,6 +127,7 @@ export interface V1SyncPageProps {
   initialProfile?: AdminMeDto | null;
   initialPermissionsLoading?: boolean;
   initialSelectedBindingId?: string | null;
+  initialMfaVerified?: boolean;
 }
 
 function extractApiErrorMessage(err: unknown, fallback: string, sanitizeStorage = false): string {
@@ -151,7 +156,17 @@ export function V1SyncPage({
   initialProfile,
   initialPermissionsLoading,
   initialSelectedBindingId = null,
+  initialMfaVerified,
 }: V1SyncPageProps = {}) {
+  let clerkUser: Parameters<typeof hasVerifiedMfa>[0] = null;
+  try {
+    const userState = useUser();
+    clerkUser = userState.user;
+  } catch {
+    // Outside ClerkProvider in unit tests
+  }
+  const mfaVerified = initialMfaVerified ?? hasVerifiedMfa(clerkUser);
+
   const [adminProfile, setAdminProfile] = useState<AdminMeDto | null>(initialProfile ?? null);
   const [permissionsLoading, setPermissionsLoading] = useState<boolean>(
     initialPermissionsLoading ?? initialProfile === undefined
@@ -210,6 +225,13 @@ export function V1SyncPage({
 
   // Confirmation & edit modals
   const [forceV1Target, setForceV1Target] = useState<SyncConflictDto | null>(null);
+  const [diffTargetConflict, setDiffTargetConflict] = useState<SyncConflictDto | null>(null);
+  const [conflictDetail, setConflictDetail] = useState<ConflictDetailDto | null>(null);
+  const [conflictDetailLoading, setConflictDetailLoading] = useState(false);
+  const [conflictDetailError, setConflictDetailError] = useState<string | null>(null);
+  const [conflictDetailRevealing, setConflictDetailRevealing] = useState(false);
+  const [exportingReportFormat, setExportingReportFormat] = useState<'csv' | 'json' | null>(null);
+  const conflictDetailReqSeqRef = useRef(0);
   const [freezeTarget, setFreezeTarget] = useState<SyncBindingDto | null>(null);
   const [freezeToken, setFreezeToken] = useState('');
   const [freezeReason, setFreezeReason] = useState('');
@@ -743,6 +765,12 @@ export function V1SyncPage({
     conflictStatusFilterRef.current = '';
     setParity(null);
     setSelectedRunDiffs(null);
+    conflictDetailReqSeqRef.current += 1;
+    setDiffTargetConflict(null);
+    setConflictDetail(null);
+    setConflictDetailError(null);
+    setConflictDetailLoading(false);
+    setConflictDetailRevealing(false);
     setStorageObjects([]);
     setStorageObjectsTotal(0);
     setStorageFailedRetryableCount(null);
@@ -1659,6 +1687,8 @@ export function V1SyncPage({
         toast.success(`Dismissed review item for ${conflict.entityType} #${conflict.v1Id}.`);
       }
       setForceV1Target(null);
+      setDiffTargetConflict((prev) => (prev?.id === conflict.id ? null : prev));
+      setConflictDetail((prev) => (prev?.conflict.id === conflict.id ? null : prev));
       await Promise.all([loadAll(), loadBindingDetails(activeBinding.id)]);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : `${label} failed.`);
@@ -1666,6 +1696,93 @@ export function V1SyncPage({
       setBusyAction(null);
     }
   };
+
+  const loadConflictDetail = useCallback(
+    async (
+      conflict: SyncConflictDto,
+      opts?: { revealValues?: boolean; reason?: string }
+    ) => {
+      const reqSeq = ++conflictDetailReqSeqRef.current;
+      const isReveal = Boolean(opts?.revealValues);
+      try {
+        if (isReveal) {
+          setConflictDetailRevealing(true);
+        } else {
+          setConflictDetailLoading(true);
+        }
+        setConflictDetailError(null);
+        const data = await v1SyncService.getConflictDetail(conflict.id, opts);
+        if (reqSeq !== conflictDetailReqSeqRef.current) return;
+        setConflictDetail(data);
+        if (isReveal) {
+          toast.success('Unmasked values loaded transiently and logged to audit trail.');
+        }
+      } catch (err: unknown) {
+        if (reqSeq !== conflictDetailReqSeqRef.current) return;
+        const msg = extractApiErrorMessage(err, 'Unable to inspect live conflict diff.');
+        setConflictDetailError(msg);
+        if (isReveal) {
+          toast.error(msg);
+        }
+      } finally {
+        if (reqSeq === conflictDetailReqSeqRef.current) {
+          setConflictDetailLoading(false);
+          setConflictDetailRevealing(false);
+        }
+      }
+    },
+    []
+  );
+
+  const handleOpenConflictDiff = useCallback(
+    (conflict: SyncConflictDto) => {
+      setDiffTargetConflict(conflict);
+      setConflictDetail(null);
+      setConflictDetailError(null);
+      void loadConflictDetail(conflict, { revealValues: false });
+    },
+    [loadConflictDetail]
+  );
+
+  const handleCloseConflictDiff = useCallback(() => {
+    conflictDetailReqSeqRef.current += 1;
+    setDiffTargetConflict(null);
+    setConflictDetail(null);
+    setConflictDetailError(null);
+    setConflictDetailLoading(false);
+    setConflictDetailRevealing(false);
+  }, []);
+
+  const handleExportConflictsReport = useCallback(
+    async (format: 'csv' | 'json') => {
+      if (!activeBinding) return;
+      try {
+        setExportingReportFormat(format);
+        const result = await v1SyncService.exportConflictsReport(activeBinding.id, {
+          status: conflictStatusFilter || 'ALL',
+          format,
+        });
+        if (typeof document !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {
+          const url = URL.createObjectURL(result.blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = result.fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+        }
+        toast.success(`Exported Zero-PHI conflict review report (${result.fileName}).`);
+      } catch (err: unknown) {
+        toast.error(
+          extractApiErrorMessage(err, `Unable to export ${format.toUpperCase()} conflict report.`)
+        );
+      } finally {
+        setExportingReportFormat(null);
+      }
+    },
+    [activeBinding, conflictStatusFilter]
+  );
 
   const handleInspectDiffs = async (
     targetId: string,
@@ -2661,6 +2778,7 @@ export function V1SyncPage({
                     conflictsHasMore={conflictsHasMore}
                     conflictStatusFilter={conflictStatusFilter}
                     busyAction={busyAction}
+                    exportingFormat={exportingReportFormat}
                     onChangeStatusFilter={(nextStatus) => {
                       setConflictStatusFilter(nextStatus);
                       setConflictsOffset(0);
@@ -2671,6 +2789,8 @@ export function V1SyncPage({
                     }}
                     onResolve={(cf, res) => void handleResolveConflict(cf, res)}
                     onRequestForceV1={setForceV1Target}
+                    onInspectDiff={handleOpenConflictDiff}
+                    onExportReport={(format) => void handleExportConflictsReport(format)}
                     onChangeOffset={(nextOffset) => {
                       setConflictsOffset(nextOffset);
                       void loadBindingDetails(activeBinding.id, { conflictsOffset: nextOffset });
@@ -2722,6 +2842,30 @@ export function V1SyncPage({
               selectedRunDiffs.scope
             )
           }
+        />
+      )}
+
+      {diffTargetConflict && (
+        <ConflictDiffDrawer
+          conflict={diffTargetConflict}
+          detail={conflictDetail}
+          loading={conflictDetailLoading}
+          error={conflictDetailError}
+          busyAction={busyAction}
+          revealingValues={conflictDetailRevealing}
+          canRevealBreakGlass={hasPermission && mfaVerified}
+          hasVerifiedMfa={mfaVerified}
+          disableEscapeClose={Boolean(forceV1Target)}
+          onRetry={() => void loadConflictDetail(diffTargetConflict, { revealValues: false })}
+          onRevealValues={(reason) =>
+            void loadConflictDetail(diffTargetConflict, { revealValues: true, reason })
+          }
+          onReturnToMasked={() =>
+            void loadConflictDetail(diffTargetConflict, { revealValues: false })
+          }
+          onResolve={(cf, res) => void handleResolveConflict(cf, res)}
+          onRequestForceV1={setForceV1Target}
+          onClose={handleCloseConflictDiff}
         />
       )}
 

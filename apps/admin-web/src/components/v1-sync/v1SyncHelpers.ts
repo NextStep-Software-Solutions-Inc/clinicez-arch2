@@ -2,6 +2,8 @@ import type { AdminMeDto, AdminTenantDto } from '@/services/admin.service';
 import { canManageMigrations } from '@/constants/permissions';
 import type { SelectFieldOption } from '@/components/ui';
 import type {
+  ConflictRecordStatus,
+  FieldDiffClassification,
   StorageObjectStatus,
   StorageSourceProvider,
   StorageTargetPlane,
@@ -1011,4 +1013,52 @@ export function buildRunsHeadFingerprint(runs: readonly SyncRunRecordDto[]): str
     .map((r) => `${r.id}:${r.status}:${r.completedAt ?? ''}:${r.errorMessage ?? ''}`)
     .join(',');
   return `${runs.length}|${runningCount}|${head}`;
+}
+
+export function formatFieldDiffClassification(
+  classification: FieldDiffClassification | string
+): { label: string; tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral' } {
+  switch (classification) {
+    case 'V2_FILLED_EMPTY':
+      return { label: 'v2 Filled Empty', tone: 'success' };
+    case 'V2_CLEARED_VALUE':
+      return { label: 'v2 Cleared Value', tone: 'danger' };
+    case 'FORMAT_ONLY':
+      return { label: 'Format Only', tone: 'info' };
+    case 'MODIFIED':
+      return { label: 'Modified', tone: 'warning' };
+    case 'UNCHANGED':
+    default:
+      return { label: 'Unchanged', tone: 'neutral' };
+  }
+}
+
+export function formatConflictRecordStatus(
+  status: ConflictRecordStatus | string
+): { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' } {
+  switch (status) {
+    case 'ACTIVE':
+      return { label: 'Active', tone: 'success' };
+    case 'SOFT_DELETED':
+      return { label: 'Soft-Deleted', tone: 'danger' };
+    case 'MISSING_OR_OUT_OF_SCOPE':
+      return { label: 'Missing / Out of Scope', tone: 'warning' };
+    case 'MISSING':
+      return { label: 'Missing', tone: 'danger' };
+    case 'UNAVAILABLE':
+    default:
+      return { label: 'Metadata Only', tone: 'neutral' };
+  }
+}
+
+export function compareConflictTimestamps(
+  v1Iso: string | null | undefined,
+  v2Iso: string | null | undefined
+): 'v1' | 'v2' | 'equal' | 'unknown' {
+  if (!v1Iso || !v2Iso) return 'unknown';
+  const t1 = Date.parse(v1Iso);
+  const t2 = Date.parse(v2Iso);
+  if (Number.isNaN(t1) || Number.isNaN(t2)) return 'unknown';
+  if (Math.abs(t1 - t2) < 1000) return 'equal';
+  return t2 > t1 ? 'v2' : 'v1';
 }

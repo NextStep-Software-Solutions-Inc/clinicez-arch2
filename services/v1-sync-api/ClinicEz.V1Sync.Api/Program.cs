@@ -11,6 +11,7 @@ using ClinicEz.V1Sync.Api.Auth;
 using ClinicEz.V1Sync.Api.Data;
 using ClinicEz.V1Sync.Api.Models;
 using ClinicEz.V1Sync.Api.Services;
+using ClinicEz.V1Sync.Api.Services.ConflictDiff;
 using ClinicEz.V1Sync.Api.Services.Storage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
@@ -88,7 +89,8 @@ builder.Services.AddCors(options =>
             policy.SetIsOriginAllowed(_ => true)
                 .AllowAnyHeader()
                 .AllowAnyMethod()
-                .AllowCredentials();
+                .AllowCredentials()
+                .WithExposedHeaders("Content-Disposition");
         }
         else
         {
@@ -142,7 +144,8 @@ builder.Services.AddCors(options =>
             })
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .AllowCredentials();
+            .AllowCredentials()
+            .WithExposedHeaders("Content-Disposition");
         }
     });
 });
@@ -190,6 +193,12 @@ builder.Services.AddSingleton<Track3R2ClientPool>();
 builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<LegacyBlobSourceDownloader>(sp));
 builder.Services.AddSingleton<Track3StorageSyncEngine>();
 builder.Services.AddSingleton<SyncCoordinator>();
+builder.Services.AddSingleton<IConflictDiffInspector, Track2PatientAccountConflictInspector>();
+builder.Services.AddSingleton<IConflictDiffInspector, Track2PatientSocialHistoryConflictInspector>();
+builder.Services.AddSingleton<IConflictDiffInspector, Track1PatientConflictInspector>();
+builder.Services.AddSingleton<IConflictDiffInspector, Track1PatientSocialHistoryConflictInspector>();
+builder.Services.AddSingleton<IConflictDiffInspector, Track1PatientVitalsConflictInspector>();
+builder.Services.AddSingleton<ConflictDiffService>();
 builder.Services.AddSingleton<V1SyncAdminGuard>();
 builder.Services.AddSingleton<V1SyncCdcWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<V1SyncCdcWorker>());
@@ -728,6 +737,78 @@ group.MapGet("/bindings/{id:guid}/conflicts", async (
     var resolvedOffset = Math.Max(0, offset ?? 0);
     var (items, total) = await ledger.ListConflictsAsync(id, status, resolvedLimit, resolvedOffset, ct);
     return Results.Ok(new PaginatedSyncResponse<SyncConflictRecord>(items, total, resolvedLimit, resolvedOffset));
+});
+
+group.MapGet("/bindings/{id:guid}/conflicts/report", async (
+    Guid id,
+    string? status,
+    string? format,
+    ConflictDiffService diffService,
+    HttpContext ctx,
+    CancellationToken ct) =>
+{
+    ctx.Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+    ctx.Response.Headers.Pragma = "no-cache";
+
+    var normFormat = string.IsNullOrWhiteSpace(format) ? "csv" : format.Trim().ToLowerInvariant();
+    if (normFormat is not ("csv" or "json"))
+    {
+        return Results.BadRequest(new { message = "Format must be 'csv' or 'json'." });
+    }
+
+    var report = await diffService.BuildReviewReportAsync(id, status, ct);
+    var stamp = report.GeneratedAtUtc.ToString("yyyyMMdd-HHmmss");
+    var slug = Regex.Replace(report.BindingName.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+    if (string.IsNullOrEmpty(slug)) slug = id.ToString("N")[..8];
+
+    if (normFormat == "csv")
+    {
+        var csv = ConflictDiffService.FormatReportCsv(report);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
+        return Results.File(bytes, "text/csv; charset=utf-8", $"v1-sync-conflicts-{slug}-{stamp}.csv");
+    }
+
+    ctx.Response.Headers.ContentDisposition = $"attachment; filename=\"v1-sync-conflicts-{slug}-{stamp}.json\"";
+    return Results.Ok(report);
+});
+
+group.MapGet("/conflicts/{conflictId:guid}/detail", async (
+    Guid conflictId,
+    bool? revealValues,
+    string? reason,
+    V1SyncAdminGuard guard,
+    ConflictDiffService diffService,
+    HttpContext ctx,
+    CancellationToken ct) =>
+{
+    ctx.Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+    ctx.Response.Headers.Pragma = "no-cache";
+
+    var reveal = revealValues ?? false;
+    var mfaVerified = false;
+    if (reveal)
+    {
+        var mfaDecision = guard.AuthorizeBreakGlassMfa(ctx);
+        if (!mfaDecision.Allowed)
+        {
+            return Results.Json(new { message = mfaDecision.Error }, statusCode: mfaDecision.StatusCode);
+        }
+
+        var trimmedReason = reason?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedReason) || trimmedReason.Length < 5 || trimmedReason.Length > 500)
+        {
+            return Results.BadRequest(new
+            {
+                message = "A break-glass justification reason (5 to 500 characters) is required to reveal unmasked values."
+            });
+        }
+
+        mfaVerified = V1SyncAdminGuard.HasVerifiedMfaClaims(ctx.User);
+    }
+
+    var detail = await diffService.GetConflictDetailAsync(
+        conflictId, reveal, reason, ActorOf(ctx), mfaVerified, ct);
+    return Results.Ok(detail);
 });
 
 group.MapPost("/conflicts/{conflictId:guid}/resolve", async (

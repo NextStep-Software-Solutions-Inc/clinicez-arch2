@@ -69,6 +69,118 @@ public sealed class V1SyncAdminGuard
 
     public int CacheCount => _cache.Count;
 
+    private static readonly HashSet<string> MfaAmrMethods = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "mfa",
+        "totp",
+        "otp",
+        "webauthn",
+        "backup_code",
+        "2fa",
+        "sms",
+        "hwk",
+        "swk"
+    };
+
+    /// <summary>
+    /// Enforces active Multi-Factor Authentication (MFA) for Tier 2 break-glass unmasked inspection.
+    /// Fails closed unless the validated Clerk session principal proves a verified 2nd factor (`fva[1] >= 0`
+    /// or an MFA `amr` method), or an explicit dev-only override is enabled in Development.
+    /// </summary>
+    public (bool Allowed, int StatusCode, string? Error) AuthorizeBreakGlassMfa(HttpContext ctx)
+    {
+        if (HasVerifiedMfaClaims(ctx.User))
+        {
+            return (true, StatusCodes.Status200OK, null);
+        }
+
+        if (_env.IsDevelopment() &&
+            _config.GetValue("V1Sync:AllowBreakGlassWithoutMfaInDev", false))
+        {
+            return (true, StatusCodes.Status200OK, null);
+        }
+
+        return (
+            false,
+            StatusCodes.Status403Forbidden,
+            "Break-glass unmasked view requires active Multi-Factor Authentication (MFA) on your admin session.");
+    }
+
+    public static bool HasVerifiedMfaClaims(ClaimsPrincipal? user)
+    {
+        if (user?.Identity?.IsAuthenticated != true)
+        {
+            return false;
+        }
+
+        // 1. Clerk session JWT v2 `fva` claim: [firstFactorAgeMinutes, secondFactorAgeMinutes] (-1 = not verified)
+        var fvaClaims = user.FindAll("fva").Select(c => c.Value).ToList();
+        if (fvaClaims.Count >= 2 &&
+            int.TryParse(fvaClaims[1], out var secondFactorAge) &&
+            secondFactorAge >= 0)
+        {
+            return true;
+        }
+
+        if (fvaClaims.Count == 1)
+        {
+            var raw = fvaClaims[0].Trim();
+            if (raw.StartsWith('[') && raw.EndsWith(']'))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(raw);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Array &&
+                        doc.RootElement.GetArrayLength() >= 2 &&
+                        doc.RootElement[1].ValueKind == JsonValueKind.Number &&
+                        doc.RootElement[1].TryGetInt32(out var secondAge) &&
+                        secondAge >= 0)
+                    {
+                        return true;
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Ignore malformed fva claim
+                }
+            }
+        }
+
+        // 2. Standard OIDC `amr` (Authentication Methods References) claim
+        foreach (var amrClaim in user.FindAll("amr"))
+        {
+            var raw = amrClaim.Value.Trim();
+            if (raw.StartsWith('[') && raw.EndsWith(']'))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(raw);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var el in doc.RootElement.EnumerateArray())
+                        {
+                            if (el.ValueKind == JsonValueKind.String &&
+                                MfaAmrMethods.Contains(el.GetString() ?? string.Empty))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Ignore malformed amr JSON
+                }
+            }
+            else if (MfaAmrMethods.Contains(raw))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public async Task<(bool Allowed, int StatusCode, string Actor, string? Error)> AuthorizeAsync(
         HttpContext ctx,
         CancellationToken ct)

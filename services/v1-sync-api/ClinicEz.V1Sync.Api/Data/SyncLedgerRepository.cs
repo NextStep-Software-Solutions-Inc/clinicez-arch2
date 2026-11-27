@@ -1373,6 +1373,56 @@ public sealed class SyncLedgerRepository
         return (list, total);
     }
 
+    public async Task<(List<ConflictHashMetadata> Items, long Total)> ListConflictsWithHashesForReportAsync(
+        Guid bindingId,
+        string? status = null,
+        int maxRows = 2000,
+        CancellationToken ct = default)
+    {
+        var clampedMax = Math.Clamp(maxRows, 1, 5000);
+        await using var conn = await _connections.OpenSyncLedgerDbAsync(ct);
+
+        long total;
+        const string countSql = """
+            SELECT COUNT(*)
+            FROM sync_conflicts
+            WHERE binding_id = @bindingId
+              AND (@status IS NULL OR status = @status)
+            """;
+        await using (var countCmd = new NpgsqlCommand(countSql, conn))
+        {
+            countCmd.Parameters.AddWithValue("bindingId", bindingId);
+            countCmd.Parameters.Add(new NpgsqlParameter("status", NpgsqlDbType.Text) { Value = (object?)status ?? DBNull.Value });
+            total = Convert.ToInt64(await countCmd.ExecuteScalarAsync(ct));
+        }
+
+        const string sql = """
+            SELECT id, binding_id, run_id, entity_type, v1_id, v2_id, conflict_type, changed_fields_json::text,
+                   status, resolved_by, resolved_at, created_at, incoming_v1_hash, live_v2_hash
+            FROM sync_conflicts
+            WHERE binding_id = @bindingId
+              AND (@status IS NULL OR status = @status)
+            ORDER BY created_at DESC
+            LIMIT @limit
+            """;
+        var list = new List<ConflictHashMetadata>();
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("bindingId", bindingId);
+        cmd.Parameters.Add(new NpgsqlParameter("status", NpgsqlDbType.Text) { Value = (object?)status ?? DBNull.Value });
+        cmd.Parameters.AddWithValue("limit", clampedMax);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var conflict = ReadConflict(r);
+            list.Add(new ConflictHashMetadata(
+                Conflict: conflict,
+                IncomingV1Hash: r.IsDBNull(12) ? null : r.GetString(12),
+                LiveV2Hash: r.IsDBNull(13) ? null : r.GetString(13)));
+        }
+
+        return (list, total);
+    }
+
     public async Task<SyncConflictRecord?> ResolveConflictStatusAsync(
         Guid conflictId,
         string nextStatus,

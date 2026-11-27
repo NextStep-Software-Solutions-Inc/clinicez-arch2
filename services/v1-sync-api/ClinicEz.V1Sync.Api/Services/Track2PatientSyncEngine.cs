@@ -2320,14 +2320,8 @@ public sealed class Track2PatientSyncEngine
                         var cat = GetUtc(r, 8) ?? TruncateUtcNow();
                         var uat = GetUtc(r, 9) ?? cat;
 
-                        var canonical = new Dictionary<string, string?>(StringComparer.Ordinal)
-                        {
-                            ["smoking_status"] = smoke,
-                            ["pack_years"] = FmtDec(packYears, 1),
-                            ["alcohol_use"] = alc,
-                            ["uses_substances"] = FmtBool(usesSub),
-                            ["is_sexually_active"] = FmtBool(sexActive)
-                        };
+                        var canonical = BuildPatientSocialHistoryCanonicalMap(
+                            smoke, packYears, alc, usesSub, sexActive);
 
                         candidates.Add(new ChildSyncCandidate(v1Key, detId, adoptedId, canonical, targetId =>
                         {
@@ -2368,14 +2362,8 @@ public sealed class Track2PatientSyncEngine
                         SELECT id, smoking_status, pack_years, alcohol_use, uses_substances, is_sexually_active
                         FROM public.patient_social_histories
                         WHERE id = ANY(@ids) AND is_deleted = false
-                        """, tIds, r => new Dictionary<string, string?>(StringComparer.Ordinal)
-                        {
-                            ["smoking_status"] = GetStr(r, 1),
-                            ["pack_years"] = FmtDec(GetDecNullable(r, 2), 1),
-                            ["alcohol_use"] = GetStr(r, 3),
-                            ["uses_substances"] = FmtBool(r.GetBoolean(4)),
-                            ["is_sexually_active"] = r.IsDBNull(5) ? null : FmtBool(r.GetBoolean(5))
-                        }, ct),
+                        """, tIds, r => BuildPatientSocialHistoryCanonicalMap(
+                            GetStr(r, 1), GetDecNullable(r, 2), GetStr(r, 3), r.GetBoolean(4), r.IsDBNull(5) ? null : r.GetBoolean(5)), ct),
                     isDryRun, forceV1OnConflict, targetV1IdFilter, summary, ct, shieldedInRun: shieldedInRun);
             }
 
@@ -4760,7 +4748,7 @@ public sealed class Track2PatientSyncEngine
 
     private sealed record LabSlipItemDto(string Code, string Name, string Category);
 
-    private static Dictionary<string, string?> BuildPatientCanonicalMap(
+    public static Dictionary<string, string?> BuildPatientCanonicalMap(
         string fn, string? mn, string ln, string? suf, string? sex, DateOnly? dob,
         string? pob, string? civil, string? blood, string? nat, string? rel,
         string? mob, string? alt, string? email) =>
@@ -4780,6 +4768,17 @@ public sealed class Track2PatientSyncEngine
             ["mobile"] = mob,
             ["alt_phone"] = alt,
             ["email"] = email
+        };
+
+    public static Dictionary<string, string?> BuildPatientSocialHistoryCanonicalMap(
+        string? smokingStatus, decimal? packYears, string? alcoholUse, bool usesSubstances, bool? isSexuallyActive) =>
+        new(StringComparer.Ordinal)
+        {
+            ["smoking_status"] = smokingStatus,
+            ["pack_years"] = FmtDec(packYears, 1),
+            ["alcohol_use"] = alcoholUse,
+            ["uses_substances"] = FmtBool(usesSubstances),
+            ["is_sexually_active"] = isSexuallyActive.HasValue ? FmtBool(isSexuallyActive.Value) : null
         };
 
     private static string? GetV2TableNameForEntity(string entityType) => entityType switch
