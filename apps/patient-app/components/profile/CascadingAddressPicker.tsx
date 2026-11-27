@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import ProfileFormField from './ProfileFormField';
 import ProfileToggle from './ProfileToggle';
@@ -9,6 +9,8 @@ import {
   shouldBypassProvinceTier,
   fetchRegionDependentLocations,
   fetchProvinceDependentCities,
+  resolveRegionPsgc,
+  resolveLocationPsgc,
   type AddressValidationErrors,
 } from '../../utils/addressValidation';
 import type { StructuredPsgcAddress, PsgcLocationDto } from '@shared/safe';
@@ -34,7 +36,9 @@ export default function CascadingAddressPicker({
   const [provinces, setProvinces] = useState<PsgcLocationDto[]>([]);
   const [provincesLoadedForRegion, setProvincesLoadedForRegion] = useState<string | null>(null);
   const [cities, setCities] = useState<PsgcLocationDto[]>([]);
+  const [citiesLoadedForKey, setCitiesLoadedForKey] = useState<string | null>(null);
   const [barangays, setBarangays] = useState<PsgcLocationDto[]>([]);
+  const [barangaysLoadedForCity, setBarangaysLoadedForCity] = useState<string | null>(null);
 
   const [loadingRegions, setLoadingRegions] = useState(false);
   const [loadingProvinces, setLoadingProvinces] = useState(false);
@@ -43,13 +47,164 @@ export default function CascadingAddressPicker({
 
   const [activeModal, setActiveModal] = useState<'region' | 'province' | 'city' | 'barangay' | null>(null);
 
-  const isKnownNcr = isNcrRegion(value.regionPsgc, value.regionName);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const lastBackfillSignatureRef = useRef<string | null>(null);
+
+  const effectiveRegionPsgc = useMemo(
+    () =>
+      resolveRegionPsgc(
+        { regionPsgc: value.regionPsgc, regionName: value.regionName },
+        regions,
+      ),
+    [value.regionPsgc, value.regionName, regions],
+  );
+
+  const isKnownNcr = isNcrRegion(effectiveRegionPsgc, value.regionName);
   const isNcrWithoutProvinces = shouldBypassProvinceTier({
-    regionPsgc: value.regionPsgc,
+    regionPsgc: effectiveRegionPsgc,
     regionName: value.regionName,
     provincesCount: provinces.length,
     provincesLoadedForRegion,
   });
+
+  const effectiveProvinceMatch = useMemo(() => {
+    if (isNcrWithoutProvinces) {
+      return null;
+    }
+    const existing = value.provincePsgc?.trim();
+    if (existing) {
+      return { code: existing, matched: null };
+    }
+    if (!effectiveRegionPsgc || provincesLoadedForRegion !== effectiveRegionPsgc) {
+      return null;
+    }
+    return resolveLocationPsgc(null, value.provinceName, provinces);
+  }, [
+    isNcrWithoutProvinces,
+    value.provincePsgc,
+    value.provinceName,
+    effectiveRegionPsgc,
+    provincesLoadedForRegion,
+    provinces,
+  ]);
+  const effectiveProvincePsgc = effectiveProvinceMatch?.code ?? null;
+
+  const expectedCitiesKey = isNcrWithoutProvinces
+    ? effectiveRegionPsgc
+      ? `region:${effectiveRegionPsgc}`
+      : null
+    : effectiveProvincePsgc
+      ? `province:${effectiveRegionPsgc ?? ''}:${effectiveProvincePsgc}`
+      : null;
+
+  const effectiveCityMatch = useMemo(() => {
+    const existing = value.cityMunicipalityPsgc?.trim();
+    if (existing) {
+      return { code: existing, matched: null };
+    }
+    if (!expectedCitiesKey || citiesLoadedForKey !== expectedCitiesKey) {
+      return null;
+    }
+    return resolveLocationPsgc(null, value.cityMunicipalityName, cities);
+  }, [
+    value.cityMunicipalityPsgc,
+    value.cityMunicipalityName,
+    expectedCitiesKey,
+    citiesLoadedForKey,
+    cities,
+  ]);
+  const effectiveCityPsgc = effectiveCityMatch?.code ?? null;
+
+  const effectiveBarangayMatch = useMemo(() => {
+    const existing = value.barangayPsgc?.trim();
+    if (existing) {
+      return { code: existing, matched: null };
+    }
+    if (!effectiveCityPsgc || barangaysLoadedForCity !== effectiveCityPsgc) {
+      return null;
+    }
+    return resolveLocationPsgc(null, value.barangayName, barangays);
+  }, [
+    value.barangayPsgc,
+    value.barangayName,
+    effectiveCityPsgc,
+    barangaysLoadedForCity,
+    barangays,
+  ]);
+  const effectiveBarangayPsgc = effectiveBarangayMatch?.code ?? null;
+
+  // Backfill resolved PSGC codes for hydrated/legacy addresses that only persisted location names
+  useEffect(() => {
+    const current = valueRef.current;
+    const patch: Partial<StructuredPsgcAddress> = {};
+    let hasPatch = false;
+
+    if (!current.regionPsgc?.trim() && effectiveRegionPsgc) {
+      patch.regionPsgc = effectiveRegionPsgc;
+      hasPatch = true;
+    }
+
+    if (!isNcrWithoutProvinces && !current.provincePsgc?.trim() && effectiveProvincePsgc) {
+      patch.provincePsgc = effectiveProvincePsgc;
+      hasPatch = true;
+    }
+
+    if (!current.cityMunicipalityPsgc?.trim() && effectiveCityPsgc) {
+      patch.cityMunicipalityPsgc = effectiveCityPsgc;
+      const existingZip = (current.postalCode ?? current.zipCode ?? '').trim();
+      if (!existingZip && effectiveCityMatch?.matched?.zipCode) {
+        patch.postalCode = effectiveCityMatch.matched.zipCode;
+        patch.zipCode = effectiveCityMatch.matched.zipCode;
+      }
+      hasPatch = true;
+    }
+
+    if (!current.barangayPsgc?.trim() && effectiveBarangayPsgc) {
+      patch.barangayPsgc = effectiveBarangayPsgc;
+      hasPatch = true;
+    }
+
+    if (!hasPatch) {
+      lastBackfillSignatureRef.current = null;
+      return;
+    }
+
+    const signature = JSON.stringify({
+      regionName: current.regionName ?? '',
+      provinceName: current.provinceName ?? '',
+      cityMunicipalityName: current.cityMunicipalityName ?? '',
+      barangayName: current.barangayName ?? '',
+      patch,
+    });
+
+    if (lastBackfillSignatureRef.current === signature) {
+      return;
+    }
+
+    lastBackfillSignatureRef.current = signature;
+    onChangeRef.current({
+      ...current,
+      ...patch,
+    });
+  }, [
+    effectiveRegionPsgc,
+    effectiveProvincePsgc,
+    effectiveCityPsgc,
+    effectiveCityMatch,
+    effectiveBarangayPsgc,
+    isNcrWithoutProvinces,
+    value.regionPsgc,
+    value.provincePsgc,
+    value.cityMunicipalityPsgc,
+    value.barangayPsgc,
+    value.regionName,
+    value.provinceName,
+    value.cityMunicipalityName,
+    value.barangayName,
+  ]);
 
   // Load Regions on mount
   useEffect(() => {
@@ -73,36 +228,40 @@ export default function CascadingAddressPicker({
 
   // Cascading: Load Provinces (non-NCR) or direct Cities (NCR / zero-province regions) when Region changes
   useEffect(() => {
-    if (!value.regionPsgc) {
+    if (!effectiveRegionPsgc) {
       setProvinces([]);
       setProvincesLoadedForRegion(null);
       setCities([]);
+      setCitiesLoadedForKey(null);
       setBarangays([]);
+      setBarangaysLoadedForCity(null);
       setLoadingProvinces(false);
       setLoadingCities(false);
       return;
     }
 
     let active = true;
-    const regionCode = value.regionPsgc;
+    const regionCode = effectiveRegionPsgc;
 
     setProvinces([]);
     setProvincesLoadedForRegion(null);
     if (isKnownNcr) {
       setCities([]);
+      setCitiesLoadedForKey(null);
       setLoadingProvinces(false);
       setLoadingCities(true);
     } else {
       setLoadingProvinces(true);
     }
 
-    fetchRegionDependentLocations(regionCode, value.regionName, locationService)
+    fetchRegionDependentLocations(regionCode, valueRef.current.regionName, locationService)
       .then((result) => {
         if (!active) return;
         setProvinces(result.provinces);
         setProvincesLoadedForRegion(regionCode);
         if (result.cities !== null) {
           setCities(result.cities);
+          setCitiesLoadedForKey(`region:${regionCode}`);
         }
       })
       .catch(() => {})
@@ -118,7 +277,7 @@ export default function CascadingAddressPicker({
     return () => {
       active = false;
     };
-  }, [value.regionPsgc, isKnownNcr]);
+  }, [effectiveRegionPsgc, isKnownNcr]);
 
   // Cascading: Load Cities when Province changes (non-NCR regions only)
   useEffect(() => {
@@ -126,18 +285,25 @@ export default function CascadingAddressPicker({
       return;
     }
 
-    if (!value.provincePsgc) {
+    if (!effectiveProvincePsgc) {
       setCities([]);
+      setCitiesLoadedForKey(null);
       setLoadingCities(false);
       return;
     }
 
     let active = true;
+    const provinceCode = effectiveProvincePsgc;
+    const regionCode = effectiveRegionPsgc;
+    const citiesKey = `province:${regionCode ?? ''}:${provinceCode}`;
+
+    setCities([]);
+    setCitiesLoadedForKey(null);
     setLoadingCities(true);
     fetchProvinceDependentCities(
       {
-        regionPsgc: value.regionPsgc,
-        provincePsgc: value.provincePsgc,
+        regionPsgc: regionCode,
+        provincePsgc: provinceCode,
         bypassProvince: isNcrWithoutProvinces,
       },
       locationService,
@@ -145,6 +311,7 @@ export default function CascadingAddressPicker({
       .then((result) => {
         if (active && !result.preserveCities && result.cities !== null) {
           setCities(result.cities);
+          setCitiesLoadedForKey(citiesKey);
         }
       })
       .catch(() => {})
@@ -155,22 +322,30 @@ export default function CascadingAddressPicker({
     return () => {
       active = false;
     };
-  }, [value.provincePsgc, value.regionPsgc, isNcrWithoutProvinces]);
+  }, [effectiveProvincePsgc, effectiveRegionPsgc, isNcrWithoutProvinces]);
 
   // Cascading: Load Barangays when City changes
   useEffect(() => {
-    if (!value.cityMunicipalityPsgc) {
+    if (!effectiveCityPsgc) {
       setBarangays([]);
+      setBarangaysLoadedForCity(null);
       setLoadingBarangays(false);
       return;
     }
 
     let active = true;
+    const cityCode = effectiveCityPsgc;
+
+    setBarangays([]);
+    setBarangaysLoadedForCity(null);
     setLoadingBarangays(true);
     locationService
-      .getBarangays(value.cityMunicipalityPsgc)
+      .getBarangays(cityCode)
       .then((data) => {
-        if (active) setBarangays(data);
+        if (active) {
+          setBarangays(data);
+          setBarangaysLoadedForCity(cityCode);
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -180,7 +355,7 @@ export default function CascadingAddressPicker({
     return () => {
       active = false;
     };
-  }, [value.cityMunicipalityPsgc]);
+  }, [effectiveCityPsgc]);
 
   const regionOptions: SelectOption[] = useMemo(
     () => regions.map((r) => ({ label: r.name, value: r.psgcCode || r.code || r.name })),
@@ -204,6 +379,7 @@ export default function CascadingAddressPicker({
 
   const handleSelectRegion = useCallback(
     (code: string) => {
+      lastBackfillSignatureRef.current = null;
       const found = regions.find((r) => (r.psgcCode || r.code || r.name) === code);
       onChange({
         ...value,
@@ -223,9 +399,11 @@ export default function CascadingAddressPicker({
 
   const handleSelectProvince = useCallback(
     (code: string) => {
+      lastBackfillSignatureRef.current = null;
       const found = provinces.find((p) => (p.psgcCode || p.code || p.name) === code);
       onChange({
         ...value,
+        regionPsgc: value.regionPsgc?.trim() || effectiveRegionPsgc || null,
         provincePsgc: code,
         provinceName: found?.name ?? code,
         cityMunicipalityPsgc: null,
@@ -235,14 +413,19 @@ export default function CascadingAddressPicker({
       });
       setActiveModal(null);
     },
-    [provinces, value, onChange]
+    [provinces, value, effectiveRegionPsgc, onChange]
   );
 
   const handleSelectCity = useCallback(
     (code: string) => {
+      lastBackfillSignatureRef.current = null;
       const found = cities.find((c) => (c.psgcCode || c.code || c.name) === code);
       onChange({
         ...value,
+        regionPsgc: value.regionPsgc?.trim() || effectiveRegionPsgc || null,
+        provincePsgc: isNcrWithoutProvinces
+          ? null
+          : (value.provincePsgc?.trim() || effectiveProvincePsgc || null),
         cityMunicipalityPsgc: code,
         cityMunicipalityName: found?.name ?? code,
         barangayPsgc: null,
@@ -252,28 +435,46 @@ export default function CascadingAddressPicker({
       });
       setActiveModal(null);
     },
-    [cities, value, onChange]
+    [cities, value, effectiveRegionPsgc, effectiveProvincePsgc, isNcrWithoutProvinces, onChange]
   );
 
   const handleSelectBarangay = useCallback(
     (code: string) => {
+      lastBackfillSignatureRef.current = null;
       const found = barangays.find((b) => (b.psgcCode || b.code || b.name) === code);
       onChange({
         ...value,
+        regionPsgc: value.regionPsgc?.trim() || effectiveRegionPsgc || null,
+        provincePsgc: isNcrWithoutProvinces
+          ? null
+          : (value.provincePsgc?.trim() || effectiveProvincePsgc || null),
+        cityMunicipalityPsgc: value.cityMunicipalityPsgc?.trim() || effectiveCityPsgc || null,
         barangayPsgc: code,
         barangayName: found?.name ?? code,
       });
       setActiveModal(null);
     },
-    [barangays, value, onChange]
+    [barangays, value, effectiveRegionPsgc, effectiveProvincePsgc, effectiveCityPsgc, isNcrWithoutProvinces, onChange]
   );
 
   const isLocked = disabled || Boolean(value.isSameAsPermanent);
   const showRequired = required && !value.isSameAsPermanent;
   const activeErrors = value.isSameAsPermanent ? undefined : errors;
+  const canSelectProvince = Boolean(effectiveRegionPsgc);
   const canSelectCity = isNcrWithoutProvinces
-    ? Boolean(value.regionPsgc)
-    : Boolean(value.provincePsgc);
+    ? Boolean(effectiveRegionPsgc)
+    : Boolean(effectiveProvincePsgc);
+  const canSelectBarangay = Boolean(effectiveCityPsgc);
+  const isResolvingRegion = !effectiveRegionPsgc && loadingRegions && Boolean(value.regionName?.trim());
+  const isResolvingProvince =
+    !isNcrWithoutProvinces &&
+    !effectiveProvincePsgc &&
+    (loadingRegions || loadingProvinces) &&
+    Boolean(value.provinceName?.trim());
+  const isResolvingCity =
+    !effectiveCityPsgc &&
+    (loadingRegions || loadingProvinces || loadingCities) &&
+    Boolean(value.cityMunicipalityName?.trim());
 
   return (
     <View style={styles.container}>
@@ -294,7 +495,7 @@ export default function CascadingAddressPicker({
       {/* Region Picker */}
       <ProfileFormField
         label="Region"
-        value={value.regionName || (value.regionPsgc ? `Region (${value.regionPsgc})` : '')}
+        value={value.regionName || (effectiveRegionPsgc ? `Region (${effectiveRegionPsgc})` : '')}
         placeholder={loadingRegions ? 'Loading regions...' : 'Select Region'}
         picker
         required={showRequired}
@@ -307,10 +508,12 @@ export default function CascadingAddressPicker({
       {!isNcrWithoutProvinces && (
         <ProfileFormField
           label="Province"
-          value={value.provinceName || (value.provincePsgc ? `Province (${value.provincePsgc})` : '')}
+          value={value.provinceName || (effectiveProvincePsgc ? `Province (${effectiveProvincePsgc})` : '')}
           placeholder={
-            !value.regionPsgc
-              ? 'Select Region first'
+            !canSelectProvince
+              ? isResolvingRegion
+                ? 'Loading provinces...'
+                : 'Select Region first'
               : loadingProvinces
                 ? 'Loading provinces...'
                 : 'Select Province'
@@ -318,20 +521,22 @@ export default function CascadingAddressPicker({
           picker
           required={showRequired}
           error={activeErrors?.province}
-          editable={!isLocked && Boolean(value.regionPsgc)}
-          onPressIn={() => !isLocked && Boolean(value.regionPsgc) && setActiveModal('province')}
+          editable={!isLocked && canSelectProvince}
+          onPressIn={() => !isLocked && canSelectProvince && setActiveModal('province')}
         />
       )}
 
       {/* City / Municipality Picker */}
       <ProfileFormField
         label="City / Municipality"
-        value={value.cityMunicipalityName || (value.cityMunicipalityPsgc ? `City (${value.cityMunicipalityPsgc})` : '')}
+        value={value.cityMunicipalityName || (effectiveCityPsgc ? `City (${effectiveCityPsgc})` : '')}
         placeholder={
           !canSelectCity
-            ? isNcrWithoutProvinces
-              ? 'Select Region first'
-              : 'Select Province first'
+            ? isResolvingProvince
+              ? 'Loading cities...'
+              : isNcrWithoutProvinces
+                ? 'Select Region first'
+                : 'Select Province first'
             : loadingCities
               ? 'Loading cities...'
               : 'Select City / Municipality'
@@ -346,10 +551,12 @@ export default function CascadingAddressPicker({
       {/* Barangay Picker */}
       <ProfileFormField
         label="Barangay"
-        value={value.barangayName || (value.barangayPsgc ? `Barangay (${value.barangayPsgc})` : '')}
+        value={value.barangayName || (effectiveBarangayPsgc ? `Barangay (${effectiveBarangayPsgc})` : '')}
         placeholder={
-          !value.cityMunicipalityPsgc
-            ? 'Select City first'
+          !canSelectBarangay
+            ? isResolvingCity
+              ? 'Loading barangays...'
+              : 'Select City first'
             : loadingBarangays
               ? 'Loading barangays...'
               : 'Select Barangay'
@@ -357,8 +564,8 @@ export default function CascadingAddressPicker({
         picker
         required={showRequired}
         error={activeErrors?.barangay}
-        editable={!isLocked && Boolean(value.cityMunicipalityPsgc)}
-        onPressIn={() => !isLocked && Boolean(value.cityMunicipalityPsgc) && setActiveModal('barangay')}
+        editable={!isLocked && canSelectBarangay}
+        onPressIn={() => !isLocked && canSelectBarangay && setActiveModal('barangay')}
       />
 
       {/* Street Address / House / Unit / Building */}
@@ -398,7 +605,7 @@ export default function CascadingAddressPicker({
         visible={activeModal === 'region'}
         title="Select Region"
         options={regionOptions}
-        selected={value.regionPsgc}
+        selected={effectiveRegionPsgc}
         loading={loadingRegions}
         emptyText="No regions available"
         onSelect={handleSelectRegion}
@@ -409,7 +616,7 @@ export default function CascadingAddressPicker({
         visible={activeModal === 'province'}
         title="Select Province"
         options={provinceOptions}
-        selected={value.provincePsgc}
+        selected={effectiveProvincePsgc}
         loading={loadingProvinces}
         emptyText="No provinces available"
         onSelect={handleSelectProvince}
@@ -420,7 +627,7 @@ export default function CascadingAddressPicker({
         visible={activeModal === 'city'}
         title="Select City / Municipality"
         options={cityOptions}
-        selected={value.cityMunicipalityPsgc}
+        selected={effectiveCityPsgc}
         loading={loadingCities}
         emptyText="No cities or municipalities available"
         onSelect={handleSelectCity}
@@ -431,7 +638,7 @@ export default function CascadingAddressPicker({
         visible={activeModal === 'barangay'}
         title="Select Barangay"
         options={barangayOptions}
-        selected={value.barangayPsgc}
+        selected={effectiveBarangayPsgc}
         loading={loadingBarangays}
         emptyText="No barangays available"
         onSelect={handleSelectBarangay}

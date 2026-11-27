@@ -13,6 +13,10 @@ import {
   hasAddressValidationErrors,
   fetchRegionDependentLocations,
   fetchProvinceDependentCities,
+  normalizePsgcName,
+  matchPsgcLocationByName,
+  resolveRegionPsgc,
+  resolveLocationPsgc,
   type AddressValidationInput,
 } from '../utils/addressValidation';
 import type { PsgcLocationDto } from '@shared/safe';
@@ -503,6 +507,8 @@ describe('Issue #238: NCR PSGC cascading selection & incomplete address validati
       expect(source).toContain('error={activeErrors?.province}');
       expect(source).toContain('error={activeErrors?.cityMunicipality}');
       expect(source).toContain('error={activeErrors?.barangay}');
+      expect(source).toContain('resolveRegionPsgc');
+      expect(source).toContain('resolveLocationPsgc');
     });
 
     test('Addresses.screen validates before saving to SQLite and passes required + validationErrors to CascadingAddressPicker', () => {
@@ -529,6 +535,78 @@ describe('Issue #238: NCR PSGC cascading selection & incomplete address validati
       expect(source).toContain('color="emergencyText"');
       expect(source).toContain('accessibilityRole="alert"');
       expect(source).toContain('disabled={!editable}');
+    });
+  });
+
+  describe('Issue #298: PSGC name-to-code resolution for legacy/hydrated addresses', () => {
+    const ALL_REGIONS: PsgcLocationDto[] = [
+      { psgcCode: '0400000000', name: 'Region IV-A (CALABARZON)', level: 'Region', regionPsgc: '0400000000' },
+      { psgcCode: '1300000000', name: 'National Capital Region (NCR)', level: 'Region', regionPsgc: '1300000000' },
+      { psgcCode: '1700000000', name: 'MIMAROPA Region', level: 'Region', regionPsgc: '1700000000' },
+    ];
+
+    test('normalizePsgcName strips diacritics, lowercases, and collapses punctuation', () => {
+      expect(normalizePsgcName('City of Parañaque')).toBe('city of paranaque');
+      expect(normalizePsgcName('  Region IV-A (CALABARZON)  ')).toBe('region iv a calabarzon');
+      expect(normalizePsgcName(null)).toBe('');
+    });
+
+    test('resolveRegionPsgc resolves NCR immediately even before regions load or when offline', () => {
+      expect(
+        resolveRegionPsgc({ regionPsgc: null, regionName: 'National Capital Region (NCR)' }, []),
+      ).toBe(NCR_REGION_PSGC);
+      expect(
+        resolveRegionPsgc({ regionPsgc: '', regionName: 'National Capital Region' }, []),
+      ).toBe(NCR_REGION_PSGC);
+      expect(
+        resolveRegionPsgc({ regionPsgc: null, regionName: 'NCR' }, ALL_REGIONS),
+      ).toBe(NCR_REGION_PSGC);
+    });
+
+    test('resolveRegionPsgc resolves non-NCR regions by canonical name, prefix, or parenthetical alias', () => {
+      expect(
+        resolveRegionPsgc({ regionPsgc: null, regionName: 'Region IV-A (CALABARZON)' }, ALL_REGIONS),
+      ).toBe('0400000000');
+      expect(
+        resolveRegionPsgc({ regionPsgc: null, regionName: 'Region IV-A' }, ALL_REGIONS),
+      ).toBe('0400000000');
+      expect(
+        resolveRegionPsgc({ regionPsgc: null, regionName: 'CALABARZON' }, ALL_REGIONS),
+      ).toBe('0400000000');
+      expect(
+        resolveRegionPsgc({ regionPsgc: null, regionName: 'MIMAROPA' }, ALL_REGIONS),
+      ).toBe('1700000000');
+      expect(
+        resolveRegionPsgc({ regionPsgc: null, regionName: 'Unknown Region' }, ALL_REGIONS),
+      ).toBeNull();
+    });
+
+    test('matchPsgcLocationByName matches provinces, cities (with affixes/diacritics), and barangays without false partial matches', () => {
+      const citiesWithDiacritics: PsgcLocationDto[] = [
+        ...NCR_CITIES,
+        { psgcCode: '1376040000', name: 'City of Parañaque', level: 'CityMunicipality', regionPsgc: NCR_REGION_PSGC, zipCode: '1700' },
+        { psgcCode: '0314200000', name: 'City of San Jose del Monte', level: 'CityMunicipality', regionPsgc: '0300000000' },
+      ];
+
+      expect(matchPsgcLocationByName('Cavite', CALABARZON_PROVINCES)?.psgcCode).toBe('0421000000');
+      expect(matchPsgcLocationByName('Makati', citiesWithDiacritics)?.psgcCode).toBe('1376020000');
+      expect(matchPsgcLocationByName('Makati City', citiesWithDiacritics)?.psgcCode).toBe('1376020000');
+      expect(matchPsgcLocationByName('Paranaque', citiesWithDiacritics)?.psgcCode).toBe('1376040000');
+      expect(matchPsgcLocationByName('Parañaque City', citiesWithDiacritics)?.psgcCode).toBe('1376040000');
+      expect(matchPsgcLocationByName('Brgy. Bel-Air', MAKATI_BARANGAYS)?.psgcCode).toBe('137602002');
+      // Must NOT falsely match "San Jose" to "City of San Jose del Monte"
+      expect(matchPsgcLocationByName('San Jose', citiesWithDiacritics)).toBeNull();
+    });
+
+    test('resolveLocationPsgc preserves existing code and backfills from name when missing', () => {
+      expect(resolveLocationPsgc('1376020000', 'City of Makati', NCR_CITIES)).toEqual({
+        code: '1376020000',
+        matched: null,
+      });
+
+      const resolved = resolveLocationPsgc(null, 'City of Makati', NCR_CITIES);
+      expect(resolved?.code).toBe('1376020000');
+      expect(resolved?.matched?.zipCode).toBe('1200');
     });
   });
 });
