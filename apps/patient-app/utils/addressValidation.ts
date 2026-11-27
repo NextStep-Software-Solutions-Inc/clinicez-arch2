@@ -59,6 +59,185 @@ export function isNcrRegion(
 }
 
 /**
+ * Normalizes Philippine PSGC location names for resilient name-to-code matching:
+ * strips diacritics (e.g. Parañaque -> paranaque), lowercases, and collapses
+ * punctuation/whitespace.
+ */
+export function normalizePsgcName(name?: string | null): string {
+  if (!name) {
+    return '';
+  }
+
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function stripLocationAffixes(normalized: string): string {
+  return normalized
+    .replace(/^(?:city of|municipality of|province of|barangay|brgy)\s+/, '')
+    .replace(/\s+(?:city|municipality|province|region)$/, '')
+    .trim();
+}
+
+function extractLocationNameVariants(rawName: string): string[] {
+  const variants = new Set<string>();
+  const withoutParens = normalizePsgcName(rawName.replace(/\([^)]*\)/g, ' '));
+  if (withoutParens) {
+    variants.add(withoutParens);
+    const strippedOutside = stripLocationAffixes(withoutParens);
+    if (strippedOutside) {
+      variants.add(strippedOutside);
+    }
+  }
+
+  const parenMatches = rawName.match(/\(([^)]+)\)/g);
+  if (parenMatches) {
+    for (const segment of parenMatches) {
+      const inner = normalizePsgcName(segment.slice(1, -1));
+      if (inner) {
+        variants.add(inner);
+        const strippedInner = stripLocationAffixes(inner);
+        if (strippedInner) {
+          variants.add(strippedInner);
+        }
+      }
+    }
+  }
+
+  return Array.from(variants);
+}
+
+export function getPsgcLocationCode(location: PsgcLocationDto): string {
+  return (location.psgcCode || location.code || '').trim();
+}
+
+/**
+ * Matches a persisted legacy/text-only location name against a parent-scoped
+ * list of PSGC catalog entries without introducing false-positive partial matches.
+ */
+export function matchPsgcLocationByName(
+  name: string | null | undefined,
+  options: ReadonlyArray<PsgcLocationDto>,
+): PsgcLocationDto | null {
+  const raw = name?.trim();
+  if (!raw || options.length === 0) {
+    return null;
+  }
+
+  // Direct PSGC code match if a legacy field stored the code itself
+  const exactCodeMatch = options.find((opt) => getPsgcLocationCode(opt) === raw);
+  if (exactCodeMatch) {
+    return exactCodeMatch;
+  }
+
+  const normalizedTarget = normalizePsgcName(raw);
+  if (!normalizedTarget) {
+    return null;
+  }
+
+  // Pass 1: Exact normalized name match
+  const exactMatches = options.filter((opt) => normalizePsgcName(opt.name) === normalizedTarget);
+  if (exactMatches.length > 0) {
+    return exactMatches[0];
+  }
+
+  // Pass 2: Unambiguous administrative affix-stripped match
+  // (e.g. "Makati" / "Makati City" <-> "City of Makati", "Brgy. Bel-Air" <-> "Bel-Air")
+  const strippedTarget = stripLocationAffixes(normalizedTarget);
+  if (strippedTarget) {
+    const affixMatches = options.filter(
+      (opt) => stripLocationAffixes(normalizePsgcName(opt.name)) === strippedTarget,
+    );
+    if (affixMatches.length === 1) {
+      return affixMatches[0];
+    }
+  }
+
+  // Pass 3: Unambiguous parenthetical shorthand match
+  // (e.g. "Region IV-A" or "CALABARZON" <-> "Region IV-A (CALABARZON)",
+  //  "National Capital Region" or "NCR" <-> "National Capital Region (NCR)")
+  const targetVariants = new Set<string>([
+    normalizedTarget,
+    ...(strippedTarget ? [strippedTarget] : []),
+    ...extractLocationNameVariants(raw),
+  ]);
+
+  const variantMatches = options.filter((opt) => {
+    const optNormalized = normalizePsgcName(opt.name);
+    const optStripped = stripLocationAffixes(optNormalized);
+    const optVariants = extractLocationNameVariants(opt.name);
+    return (
+      targetVariants.has(optNormalized) ||
+      (optStripped.length > 0 && targetVariants.has(optStripped)) ||
+      optVariants.some((variant) => variant === normalizedTarget || (strippedTarget.length > 0 && variant === strippedTarget))
+    );
+  });
+
+  if (variantMatches.length === 1) {
+    return variantMatches[0];
+  }
+
+  return null;
+}
+
+/**
+ * Resolves the effective Region PSGC code from an existing code, loaded regions,
+ * or immediate NCR canonical fallback (`1300000000`) when regionName indicates NCR.
+ */
+export function resolveRegionPsgc(
+  params: { regionPsgc?: string | null; regionName?: string | null },
+  regions: ReadonlyArray<PsgcLocationDto>,
+): string | null {
+  const existing = params.regionPsgc?.trim();
+  if (existing) {
+    return existing;
+  }
+
+  const matched = matchPsgcLocationByName(params.regionName, regions);
+  if (matched) {
+    return getPsgcLocationCode(matched) || null;
+  }
+
+  if (isNcrRegion(null, params.regionName)) {
+    return NCR_REGION_PSGC;
+  }
+
+  return null;
+}
+
+export interface ResolvedLocationPsgc {
+  code: string;
+  matched: PsgcLocationDto | null;
+}
+
+/**
+ * Resolves the effective PSGC code for a province, city/municipality, or barangay
+ * from an existing code or by matching its persisted name against parent-scoped options.
+ */
+export function resolveLocationPsgc(
+  existingCode: string | null | undefined,
+  name: string | null | undefined,
+  options: ReadonlyArray<PsgcLocationDto>,
+): ResolvedLocationPsgc | null {
+  const existing = existingCode?.trim();
+  if (existing) {
+    return { code: existing, matched: null };
+  }
+
+  const matched = matchPsgcLocationByName(name, options);
+  if (!matched) {
+    return null;
+  }
+
+  const code = getPsgcLocationCode(matched);
+  return code ? { code, matched } : null;
+}
+
+/**
  * Determines whether the Province picker should be bypassed and cities loaded
  * directly under the Region. Handles NCR (even when the PSGC API returns NCR's
  * 4 statistical districts) as well as any generic region whose fetched province
