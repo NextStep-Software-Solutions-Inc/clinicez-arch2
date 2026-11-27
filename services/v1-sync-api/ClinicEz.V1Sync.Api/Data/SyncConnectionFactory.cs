@@ -158,11 +158,15 @@ public sealed class SyncConnectionFactory : IAsyncDisposable
                     await using var cmd = new NpgsqlCommand("SELECT 1", conn) { CommandTimeout = 3 };
                     await cmd.ExecuteScalarAsync(tok);
 
+                    // Query pg_trigger (not information_schema.triggers, which PostgreSQL hides from SELECT-only roles like v1_sync_reader)
                     await using var trigCmd = new NpgsqlCommand("""
-                        SELECT COUNT(DISTINCT event_object_table)
-                        FROM information_schema.triggers
-                        WHERE trigger_schema = 'public'
-                          AND trigger_name = 'trg_v1_sync_capture'
+                        SELECT COUNT(DISTINCT c.relname)
+                        FROM pg_trigger t
+                        JOIN pg_class c ON c.oid = t.tgrelid
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public'
+                          AND t.tgname = 'trg_v1_sync_capture'
+                          AND NOT t.tgisinternal
                         """, conn) { CommandTimeout = 3 };
                     var triggerTables = Convert.ToInt32(await trigCmd.ExecuteScalarAsync(tok));
                     var triggersOk = triggerTables > 0;

@@ -136,6 +136,68 @@ public sealed class Pg17SqlAndControlPlaneTests : IClassFixture<Pg17TestFixture>
     }
 
     [Fact]
+    public async Task ProbeHealthAsync_DetectsTriggersForReadOnlySelectOnlyRole_AndReflectsUninstall()
+    {
+        var installSql = await File.ReadAllTextAsync(Path.Combine(Pg17TestFixture.SqlDirectory, "01_install_v1_sync_changelog.sql"));
+        var uninstallSql = await File.ReadAllTextAsync(Path.Combine(Pg17TestFixture.SqlDirectory, "02_uninstall_v1_sync_changelog.sql"));
+        var roRole = $"v1_ro_{Guid.NewGuid():N}"[..20];
+        const string roPass = "V1SyncReadOnlyTest!99";
+
+        var v1Csb = new NpgsqlConnectionStringBuilder(_fx.V1ConnectionString);
+        var dbName = v1Csb.Database!;
+
+        try
+        {
+            await Pg17TestFixture.ExecuteSqlAsync(_fx.V1ConnectionString, $"""
+                CREATE ROLE "{roRole}" LOGIN PASSWORD '{roPass}';
+                GRANT CONNECT ON DATABASE "{dbName}" TO "{roRole}";
+                GRANT USAGE ON SCHEMA public TO "{roRole}";
+                GRANT SELECT ON ALL TABLES IN SCHEMA public TO "{roRole}";
+                """);
+
+            // 1. Enable tracking and grant read-only access to _v1_sync.changelog (mirrors Neon v1_sync_reader)
+            await Pg17TestFixture.ExecuteSqlAsync(_fx.V1ConnectionString, installSql);
+            await Pg17TestFixture.ExecuteSqlAsync(_fx.V1ConnectionString, $"""
+                GRANT USAGE ON SCHEMA _v1_sync TO "{roRole}";
+                GRANT SELECT ON TABLE _v1_sync.changelog TO "{roRole}";
+                """);
+
+            var roCsb = new NpgsqlConnectionStringBuilder(_fx.V1ConnectionString)
+            {
+                Username = roRole,
+                Password = roPass
+            };
+            var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:V1Source"] = roCsb.ConnectionString
+            }).Build();
+            var roFactory = new ClinicEz.V1Sync.Api.Data.SyncConnectionFactory(cfg, NullLogger<ClinicEz.V1Sync.Api.Data.SyncConnectionFactory>.Instance);
+
+            var enabledProbe = await roFactory.ProbeHealthAsync(CancellationToken.None);
+            enabledProbe.V1Ok.Should().BeTrue();
+            enabledProbe.TriggersOk.Should().BeTrue();
+            enabledProbe.TriggerTables.Should().BeGreaterThan(0);
+
+            // 2. Disable tracking -> probe MUST immediately report TriggersOk = false and TriggerTables = 0 while V1Ok stays true
+            await Pg17TestFixture.ExecuteSqlAsync(_fx.V1ConnectionString, uninstallSql);
+
+            var disabledProbe = await roFactory.ProbeHealthAsync(CancellationToken.None);
+            disabledProbe.V1Ok.Should().BeTrue();
+            disabledProbe.TriggersOk.Should().BeFalse();
+            disabledProbe.TriggerTables.Should().Be(0);
+            disabledProbe.MaxSeq.Should().Be(0);
+        }
+        finally
+        {
+            await Pg17TestFixture.ExecuteSqlAsync(_fx.V1ConnectionString, $"""
+                REASSIGN OWNED BY "{roRole}" TO CURRENT_USER;
+                DROP OWNED BY "{roRole}";
+                DROP ROLE IF EXISTS "{roRole}";
+                """);
+        }
+    }
+
+    [Fact]
     public async Task ScopedCdcIdResolver_ResolvesPrescriptionPatientId_AppointmentRequesterConsult_DeletesAndHasMore()
     {
         var installSql = await File.ReadAllTextAsync(Path.Combine(Pg17TestFixture.SqlDirectory, "01_install_v1_sync_changelog.sql"));

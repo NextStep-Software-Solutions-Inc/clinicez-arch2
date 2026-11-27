@@ -12,11 +12,13 @@ DECLARE
     v_rec RECORD;
 BEGIN
     FOR v_rec IN
-        SELECT event_object_table AS tbl
-        FROM information_schema.triggers
-        WHERE (trigger_schema = 'public' OR event_object_schema = 'public')
-          AND trigger_name = 'trg_v1_sync_capture'
-        GROUP BY event_object_table
+        SELECT DISTINCT c.relname AS tbl
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid = t.tgrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND t.tgname = 'trg_v1_sync_capture'
+          AND NOT t.tgisinternal
     LOOP
         EXECUTE format('DROP TRIGGER IF EXISTS trg_v1_sync_capture ON public.%I', v_rec.tbl);
     END LOOP;
