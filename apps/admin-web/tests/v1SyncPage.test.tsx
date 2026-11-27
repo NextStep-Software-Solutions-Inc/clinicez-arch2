@@ -129,6 +129,8 @@ function mountReactTree(initialElement: React.ReactElement) {
             !prev || !deps || !prev.deps || deps.some((d, i) => !Object.is(d, prev.deps[i]));
           targetInst.effectSlots[idx] = { fn, deps, hasChanged, cleanup: prev?.cleanup };
         },
+        useLayoutEffect: (fn: any, deps: any[]) => mockHooks.useEffect(fn, deps),
+        useId: () => 'test-id',
         useContext: (context: React.Context<any>) => (context as any)._currentValue,
         useSyncExternalStore: (_sub: any, getSnap: () => any) => getSnap(),
       };

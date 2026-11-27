@@ -9,30 +9,7 @@ export function ensureV1SyncPrefix(url?: string | null): string {
 
 export function resolveV1SyncBaseUrl(env?: Record<string, string | undefined>): string {
   const explicit = env?.VITE_V1_SYNC_API_URL?.trim();
-  if (explicit) return ensureV1SyncPrefix(explicit);
-
-  const portalApi = env?.VITE_PORTAL_API_URL?.trim();
-  if (portalApi) {
-    try {
-      const parsed = new URL(portalApi);
-      if (/^portal\./i.test(parsed.hostname)) {
-        const host = parsed.hostname.replace(/^portal\./i, 'v1-sync.');
-        return ensureV1SyncPrefix(
-          `${parsed.protocol}//${host}${parsed.port ? `:${parsed.port}` : ''}`
-        );
-      }
-      if (/^clinicez-portal\./i.test(parsed.hostname)) {
-        const host = parsed.hostname.replace(/^clinicez-portal\./i, 'clinicez-v1-sync.');
-        return ensureV1SyncPrefix(
-          `${parsed.protocol}//${host}${parsed.port ? `:${parsed.port}` : ''}`
-        );
-      }
-    } catch {
-      // Relative or non-URL portal API — fall back to local proxy path
-    }
-  }
-
-  return '/api/v1/v1-sync';
+  return explicit ? ensureV1SyncPrefix(explicit) : '/api/v1/v1-sync';
 }
 
 export const v1SyncBaseUrl = resolveV1SyncBaseUrl(

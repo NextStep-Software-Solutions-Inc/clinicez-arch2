@@ -64,7 +64,7 @@ describe('v1 Migration & Sync Admin Integration', () => {
     expect(ensureV1SyncPrefix('http://localhost:5099/api/v1/v1-sync')).toBe('http://localhost:5099/api/v1/v1-sync');
   });
 
-  test('resolveV1SyncBaseUrl prefers explicit VITE_V1_SYNC_API_URL and auto-derives remote dev/prod host from VITE_PORTAL_API_URL', () => {
+  test('resolveV1SyncBaseUrl strictly uses VITE_V1_SYNC_API_URL without manipulating VITE_PORTAL_API_URL', () => {
     expect(
       resolveV1SyncBaseUrl({
         VITE_V1_SYNC_API_URL: 'http://localhost:5099',
@@ -74,21 +74,23 @@ describe('v1 Migration & Sync Admin Integration', () => {
 
     expect(
       resolveV1SyncBaseUrl({
-        VITE_PORTAL_API_URL: 'https://portal.api.example.com/api/v1',
+        VITE_V1_SYNC_API_URL: 'https://v1-sync.api.example.com',
       })
     ).toBe('https://v1-sync.api.example.com/api/v1/v1-sync');
 
     expect(
       resolveV1SyncBaseUrl({
-        VITE_PORTAL_API_URL: 'https://clinicez-portal.api.example.com/api/v1',
+        VITE_V1_SYNC_API_URL: 'https://v1-sync.api.example.com/api/v1/v1-sync',
       })
-    ).toBe('https://clinicez-v1-sync.api.example.com/api/v1/v1-sync');
+    ).toBe('https://v1-sync.api.example.com/api/v1/v1-sync');
 
     expect(
       resolveV1SyncBaseUrl({
-        VITE_PORTAL_API_URL: 'http://localhost:5000/api/v1',
+        VITE_PORTAL_API_URL: 'https://portal.api.example.com/api/v1',
       })
     ).toBe('/api/v1/v1-sync');
+
+    expect(resolveV1SyncBaseUrl({})).toBe('/api/v1/v1-sync');
   });
 
   test('resolveV1SyncPermissionState never defaults to true while permissions are loading or missing', () => {
