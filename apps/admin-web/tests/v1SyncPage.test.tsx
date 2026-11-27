@@ -4155,4 +4155,159 @@ describe('V1SyncPage UI/UX, Custom SelectField & Hierarchical Tenant Scoping', (
       (globalThis as any).performance = origPerformance;
     }
   });
+
+  test('realtime reactive revalidation automatically updates live tracking, cursor, runs, and parity without manual refresh', async () => {
+    const bindingAId = '11111111-1111-1111-1111-111111111111';
+    const origSetTimeout = globalThis.setTimeout;
+    const origClearTimeout = globalThis.clearTimeout;
+    const origWindow = (globalThis as any).window;
+
+    let scheduledPollCallback: (() => void) | null = null;
+    let nextTimerId = 500;
+    const focusListeners: Array<() => void> = [];
+
+    (globalThis as any).setTimeout = ((cb: () => void, ms?: number) => {
+      if (ms === 4000) {
+        scheduledPollCallback = cb;
+        return nextTimerId++;
+      }
+      return origSetTimeout(cb, ms);
+    }) as any;
+    (globalThis as any).clearTimeout = ((id: any) => {
+      if (typeof id === 'number' && id >= 500) {
+        scheduledPollCallback = null;
+        return;
+      }
+      origClearTimeout(id);
+    }) as any;
+    (globalThis as any).window = {
+      addEventListener: (ev: string, fn: () => void) => {
+        if (ev === 'focus') focusListeners.push(fn);
+      },
+      removeEventListener: (ev: string, fn: () => void) => {
+        if (ev === 'focus') {
+          const idx = focusListeners.indexOf(fn);
+          if (idx >= 0) focusListeners.splice(idx, 1);
+        }
+      },
+    };
+
+    let currentStatus: SyncSystemStatusDto = {
+      ...sampleStatus,
+      v1SyncTriggersInstalled: false,
+      v1SyncTriggerTableCount: 0,
+      v1ChangelogMaxSeq: 0,
+    };
+    let currentRuns: SyncRunRecordDto[] = [];
+    let currentParity: ParityReportDto = {
+      ...sampleParity,
+      changelogLag: 0,
+      checks: [
+        {
+          entityType: 'Patients',
+          v1ExpectedCount: 100,
+          v2ActualCount: 100,
+          mappedCount: 100,
+          isMatched: true,
+        },
+      ],
+    };
+
+    v1SyncService.getStatus = mock(async () => currentStatus);
+    v1SyncService.listRuns = mock(async () => currentRuns);
+    v1SyncService.getParityReport = mock(async () => currentParity);
+
+    try {
+      const tree = mountReactTree(
+        <V1SyncPage
+          initialProfile={adminWithPerm}
+          initialPermissionsLoading={false}
+          initialSelectedBindingId={bindingAId}
+        />
+      );
+      await flushMicrotasks();
+
+      expect(tree.html).toContain('Tracking not enabled');
+      expect(tree.html).toContain('Change cursor #0');
+      expect(v1SyncService.getParityReport).toHaveBeenCalledTimes(1);
+      expect(v1SyncService.getCatalog).toHaveBeenCalledTimes(1);
+      expect(scheduledPollCallback).not.toBeNull();
+
+      // 1. Unchanged heartbeat tick (even with a newer workerLastHeartbeatUtc) MUST NOT re-fetch heavy parity/catalog
+      currentStatus = { ...currentStatus, workerLastHeartbeatUtc: '2026-11-27T11:30:05Z' };
+      const tick1 = scheduledPollCallback!;
+      scheduledPollCallback = null;
+      tick1();
+      await flushMicrotasks();
+
+      expect(v1SyncService.getParityReport).toHaveBeenCalledTimes(1);
+      expect(v1SyncService.getCatalog).toHaveBeenCalledTimes(1);
+      expect(scheduledPollCallback).not.toBeNull();
+
+      // 2. External change: tracking installed (65 tables), cursor advances to #4, and AutoSyncWorker completes a Live Sync run
+      currentStatus = {
+        ...currentStatus,
+        v1SyncTriggersInstalled: true,
+        v1SyncTriggerTableCount: 65,
+        v1ChangelogMaxSeq: 4,
+      };
+      currentRuns = [
+        {
+          id: 'run-autosync-live-1',
+          bindingId: bindingAId,
+          mode: 'INCREMENTAL',
+          sampleLimit: null,
+          status: 'COMPLETED',
+          triggeredBy: 'AutoSyncWorker',
+          startedAt: '2026-11-27T11:31:00Z',
+          completedAt: '2026-11-27T11:31:01Z',
+          summary: { cohortPatientCount: 3, durationMs: 240 },
+          errorMessage: null,
+        },
+      ];
+      currentParity = {
+        ...currentParity,
+        checks: [
+          {
+            entityType: 'Patients',
+            v1ExpectedCount: 103,
+            v2ActualCount: 103,
+            mappedCount: 103,
+            isMatched: true,
+          },
+        ],
+      };
+
+      const tick2 = scheduledPollCallback!;
+      scheduledPollCallback = null;
+      tick2();
+      await flushMicrotasks();
+
+      // UI automatically reflects triggers, cursor, new AutoSync run, and invalidated parity/catalog with zero manual refresh
+      expect(tree.html).toContain('Live tracking (65 tables)');
+      expect(tree.html).toContain('Change cursor #4');
+      expect(tree.html).toContain('AutoSyncWorker');
+      expect(tree.html).toContain('103');
+      expect(v1SyncService.getParityReport).toHaveBeenCalledTimes(2);
+      expect(v1SyncService.getCatalog).toHaveBeenCalledTimes(2);
+
+      // 3. Returning focus to the tab triggers immediate silent revalidation
+      const statusCallsBeforeFocus = (v1SyncService.getStatus as any).mock.calls.length;
+      expect(focusListeners.length).toBeGreaterThan(0);
+      focusListeners[0]();
+      await flushMicrotasks();
+      expect((v1SyncService.getStatus as any).mock.calls.length).toBe(statusCallsBeforeFocus + 1);
+
+      tree.unmount();
+      expect(focusListeners.length).toBe(0);
+    } finally {
+      globalThis.setTimeout = origSetTimeout;
+      globalThis.clearTimeout = origClearTimeout;
+      if (origWindow === undefined) {
+        delete (globalThis as any).window;
+      } else {
+        (globalThis as any).window = origWindow;
+      }
+    }
+  });
 });

@@ -9,6 +9,7 @@ import type {
   SyncChangeDiffDto,
   SyncConflictDto,
   SyncRunRecordDto,
+  SyncSystemStatusDto,
   V1CatalogResponseDto,
   V1ClinicCatalogItemDto,
   V1OrgCatalogItemDto,
@@ -954,4 +955,60 @@ export function formatSyncEntityLabel(entityType: string): string {
     .replace(/\bIds\b/g, 'IDs')
     .replace(/\bNcd\b/g, 'NCD')
     .trim();
+}
+
+export function buildSyncStatusFingerprint(status: SyncSystemStatusDto | null): string {
+  if (!status) return '';
+  return [
+    status.v1SourceConnected ? 1 : 0,
+    status.clinicDbConnected ? 1 : 0,
+    status.patientDbConnected ? 1 : 0,
+    status.syncLedgerConnected ? 1 : 0,
+    status.v1SyncTriggersInstalled ? 1 : 0,
+    status.v1SyncTriggerTableCount ?? 0,
+    status.v1ChangelogMaxSeq ?? 0,
+    status.backgroundWorkerEnabled ? 1 : 0,
+    status.activeBindingsCount ?? 0,
+    status.openConflictsCount ?? 0,
+    status.clinicR2Connected ? 1 : 0,
+    status.patientR2Connected ? 1 : 0,
+    status.clinicEncryptionConfigured ? 1 : 0,
+    status.patientEncryptionConfigured ? 1 : 0,
+    status.azureBlob1Configured ? 1 : 0,
+    status.clinicPendingStorageCount ?? 0,
+    status.patientPendingStorageCount ?? 0,
+    status.clinicTotalStorageCount ?? 0,
+    status.patientTotalStorageCount ?? 0,
+    status.clinicSkippedStorageCount ?? 0,
+    status.patientSkippedStorageCount ?? 0,
+  ].join('|');
+}
+
+export function buildBindingStateFingerprint(binding: SyncBindingDto | null): string {
+  if (!binding) return '';
+  return [
+    binding.id,
+    binding.name,
+    binding.autoSyncEnabled ? 1 : 0,
+    binding.isFrozen ? 1 : 0,
+    binding.patientCohortMode,
+    binding.batchSize,
+    binding.pollIntervalSeconds,
+    binding.lastChangelogSeq ?? 0,
+    binding.lastSyncedAt ?? '',
+    binding.openConflictCount ?? 0,
+    binding.hasSyncHistory ? 1 : 0,
+    binding.hasCompletedPreview ? 1 : 0,
+    binding.hasCompletedMigration ? 1 : 0,
+  ].join('|');
+}
+
+export function buildRunsHeadFingerprint(runs: readonly SyncRunRecordDto[]): string {
+  if (!runs.length) return '0';
+  const runningCount = runs.filter((r) => r.status === 'RUNNING').length;
+  const head = runs
+    .slice(0, 3)
+    .map((r) => `${r.id}:${r.status}:${r.completedAt ?? ''}:${r.errorMessage ?? ''}`)
+    .join(',');
+  return `${runs.length}|${runningCount}|${head}`;
 }

@@ -32,6 +32,9 @@ import {
   ParityReportDto,
 } from '@/services/v1Sync.service';
 import {
+  buildBindingStateFingerprint,
+  buildRunsHeadFingerprint,
+  buildSyncStatusFingerprint,
   ChangeDetailsCard,
   CONFLICTS_PAGE_SIZE,
   ConflictsReviewCard,
@@ -315,6 +318,8 @@ export function V1SyncPage({
 
   const activeBindingIdRef = useRef<string | null>(activeBindingId);
   activeBindingIdRef.current = activeBindingId;
+  const activeBindingRef = useRef<SyncBindingDto | null>(activeBinding);
+  activeBindingRef.current = activeBinding;
   const selectedConnectionIdRef = useRef<string | null>(selectedConnectionId);
   selectedConnectionIdRef.current = selectedConnectionId;
   const activeDetailTrackRef = useRef<SyncTrack>(activeDetailTrack);
@@ -341,6 +346,14 @@ export function V1SyncPage({
   storageSourceFilterRef.current = storageSourceFilter;
   const notifiedCompletedRunsRef = useRef<Set<string>>(new Set());
   const observedRunningRunIdsRef = useRef<Set<string>>(new Set());
+  const lastStatusRef = useRef<SyncSystemStatusDto | null>(null);
+  const lastStatusFingerprintRef = useRef<string>('');
+  const lastBindingFingerprintRef = useRef<string>('');
+  const lastRunsHeadFingerprintRef = useRef<string>('');
+  const selectedRunDiffsRef = useRef<SyncDiffsState | null>(selectedRunDiffs);
+  selectedRunDiffsRef.current = selectedRunDiffs;
+  const realtimePollInFlightRef = useRef(false);
+  const lastFocusRevalidateAtRef = useRef(0);
 
   const { loading: isAuthLoading, hasPermission } = resolveV1SyncPermissionState(
     adminProfile,
@@ -377,6 +390,69 @@ export function V1SyncPage({
     };
   }, [initialProfile, initialPermissionsLoading]);
 
+  const applyFetchedBindings = useCallback((nextBindings: SyncBindingDto[]) => {
+    const nextUnified = groupUnifiedConnections(nextBindings);
+    setBindings(nextBindings);
+    const prevSelectedId = selectedConnectionIdRef.current;
+    if (!prevSelectedId) {
+      setSelectedConnectionId(null);
+      lastBindingFingerprintRef.current = '';
+      return;
+    }
+    const match = findConnectionForId(nextUnified, prevSelectedId);
+    if (!match) {
+      selectedConnectionIdRef.current = null;
+      setSelectedConnectionId(null);
+      lastBindingFingerprintRef.current = '';
+      return;
+    }
+
+    const isDirectSubBindingSelection =
+      prevSelectedId !== match.id &&
+      (match.clinicBinding?.id === prevSelectedId ||
+        match.patientBinding?.id === prevSelectedId ||
+        match.storageBinding?.id === prevSelectedId);
+
+    let effectiveTrack = activeDetailTrackRef.current;
+    if (isDirectSubBindingSelection) {
+      effectiveTrack =
+        match.clinicBinding?.id === prevSelectedId
+          ? 'TRACK1_CLINIC'
+          : match.patientBinding?.id === prevSelectedId
+            ? 'TRACK2_PATIENT'
+            : 'TRACK3_STORAGE';
+      activeDetailTrackRef.current = effectiveTrack;
+      setActiveDetailTrack(effectiveTrack);
+    } else if (!userChangedTrackRef.current) {
+      const currentTrackHasBinding =
+        (effectiveTrack === 'TRACK1_CLINIC' && Boolean(match.clinicBinding)) ||
+        (effectiveTrack === 'TRACK2_PATIENT' && Boolean(match.patientBinding)) ||
+        (effectiveTrack === 'TRACK3_STORAGE' && Boolean(match.storageBinding));
+      if (!currentTrackHasBinding) {
+        effectiveTrack = match.clinicBinding
+          ? 'TRACK1_CLINIC'
+          : match.patientBinding
+            ? 'TRACK2_PATIENT'
+            : 'TRACK3_STORAGE';
+        activeDetailTrackRef.current = effectiveTrack;
+        setActiveDetailTrack(effectiveTrack);
+      }
+    }
+
+    if (prevSelectedId !== match.id) {
+      selectedConnectionIdRef.current = match.id;
+      setSelectedConnectionId(match.id);
+    }
+
+    const matchedBinding =
+      effectiveTrack === 'TRACK1_CLINIC'
+        ? match.clinicBinding
+        : effectiveTrack === 'TRACK2_PATIENT'
+          ? match.patientBinding
+          : match.storageBinding;
+    lastBindingFingerprintRef.current = buildBindingStateFingerprint(matchedBinding);
+  }, []);
+
   const loadAll = useCallback(async () => {
     try {
       setLoading(true);
@@ -400,58 +476,13 @@ export function V1SyncPage({
       if (portalClinicsRes.status === 'fulfilled' || v2ClinicsRes.status === 'fulfilled') {
         setV2Clinics(mergedFetchedClinics);
       }
-      if (statusRes.status === 'fulfilled') setStatus(statusRes.value);
+      if (statusRes.status === 'fulfilled') {
+        lastStatusRef.current = statusRes.value;
+        lastStatusFingerprintRef.current = buildSyncStatusFingerprint(statusRes.value);
+        setStatus(statusRes.value);
+      }
       if (bindingsRes.status === 'fulfilled') {
-        const nextBindings = bindingsRes.value;
-        const nextUnified = groupUnifiedConnections(nextBindings);
-        setBindings(nextBindings);
-        const prevSelectedId = selectedConnectionIdRef.current;
-        if (!prevSelectedId) {
-          setSelectedConnectionId(null);
-        } else {
-          const match = findConnectionForId(nextUnified, prevSelectedId);
-          if (!match) {
-            selectedConnectionIdRef.current = null;
-            setSelectedConnectionId(null);
-          } else {
-            const isDirectSubBindingSelection =
-              prevSelectedId !== match.id &&
-              (match.clinicBinding?.id === prevSelectedId ||
-                match.patientBinding?.id === prevSelectedId ||
-                match.storageBinding?.id === prevSelectedId);
-
-            if (isDirectSubBindingSelection) {
-              const nextTrack: SyncTrack =
-                match.clinicBinding?.id === prevSelectedId
-                  ? 'TRACK1_CLINIC'
-                  : match.patientBinding?.id === prevSelectedId
-                    ? 'TRACK2_PATIENT'
-                    : 'TRACK3_STORAGE';
-              activeDetailTrackRef.current = nextTrack;
-              setActiveDetailTrack(nextTrack);
-            } else if (!userChangedTrackRef.current) {
-              const currentTrack = activeDetailTrackRef.current;
-              const currentTrackHasBinding =
-                (currentTrack === 'TRACK1_CLINIC' && Boolean(match.clinicBinding)) ||
-                (currentTrack === 'TRACK2_PATIENT' && Boolean(match.patientBinding)) ||
-                (currentTrack === 'TRACK3_STORAGE' && Boolean(match.storageBinding));
-              if (!currentTrackHasBinding) {
-                const nextTrack: SyncTrack = match.clinicBinding
-                  ? 'TRACK1_CLINIC'
-                  : match.patientBinding
-                    ? 'TRACK2_PATIENT'
-                    : 'TRACK3_STORAGE';
-                activeDetailTrackRef.current = nextTrack;
-                setActiveDetailTrack(nextTrack);
-              }
-            }
-
-            if (prevSelectedId !== match.id) {
-              selectedConnectionIdRef.current = match.id;
-              setSelectedConnectionId(match.id);
-            }
-          }
-        }
+        applyFetchedBindings(bindingsRes.value);
       } else {
         setError(bindingsRes.reason?.message || 'Unable to connect to the sync service.');
       }
@@ -461,7 +492,7 @@ export function V1SyncPage({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyFetchedBindings]);
 
   const loadBindingDetails = useCallback(
     async (
@@ -649,7 +680,10 @@ export function V1SyncPage({
 
         if (runsAreFresh) {
           setDetailsBindingId(bindingId);
-          if (freshRuns) setRuns(freshRuns);
+          if (freshRuns) {
+            lastRunsHeadFingerprintRef.current = buildRunsHeadFingerprint(freshRuns);
+            setRuns(freshRuns);
+          }
         } else if (
           (finalConflicts && finalConflictsSeq === conflictsRequestSeqRef.current) ||
           (finalParity && finalParitySeq === parityRequestSeqRef.current) ||
@@ -696,6 +730,8 @@ export function V1SyncPage({
     diffsRequestSeqRef.current += 1;
     setDetailsBindingId(null);
     setRuns([]);
+    lastRunsHeadFingerprintRef.current = '';
+    lastBindingFingerprintRef.current = buildBindingStateFingerprint(activeBindingRef.current);
     setRunModeFilter('');
     runModeFilterRef.current = '';
     setConflicts([]);
@@ -940,6 +976,153 @@ export function V1SyncPage({
     wasRunningRef.current = { bindingId: activeBindingId, wasRunning: hasRunningRun };
   }, [activeBindingId, hasRunningRun, hasPermission, loadAll, loadBindingDetails]);
 
+  const revalidateRealtimeState = useCallback(async () => {
+    if (!hasPermission || realtimePollInFlightRef.current) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
+    realtimePollInFlightRef.current = true;
+    const targetBindingId = activeBindingIdRef.current;
+    const targetTrack = activeDetailTrackRef.current;
+    const targetRunMode = runModeFilterRef.current;
+    const runsSeq = targetBindingId ? ++runsRequestSeqRef.current : runsRequestSeqRef.current;
+
+    try {
+      const [statusRes, bindingsRes, runsRes] = await Promise.allSettled([
+        v1SyncService.getStatus(),
+        v1SyncService.listBindings(),
+        targetBindingId
+          ? targetRunMode
+            ? v1SyncService.listRuns(targetBindingId, 15, targetRunMode)
+            : v1SyncService.listRuns(targetBindingId, 15)
+          : Promise.resolve(null),
+      ]);
+
+      let statusChanged = false;
+      let catalogInvalidated = false;
+      if (statusRes.status === 'fulfilled') {
+        const nextStatus = statusRes.value;
+        const prevStatus = lastStatusRef.current;
+        const prevFp = lastStatusFingerprintRef.current;
+        const nextFp = buildSyncStatusFingerprint(nextStatus);
+        statusChanged = Boolean(prevFp) && nextFp !== prevFp;
+        catalogInvalidated =
+          Boolean(prevStatus) &&
+          (prevStatus!.v1SourceConnected !== nextStatus.v1SourceConnected ||
+            prevStatus!.v1SyncTriggersInstalled !== nextStatus.v1SyncTriggersInstalled ||
+            prevStatus!.v1ChangelogMaxSeq !== nextStatus.v1ChangelogMaxSeq);
+        lastStatusRef.current = nextStatus;
+        lastStatusFingerprintRef.current = nextFp;
+        setStatus(nextStatus);
+      }
+
+      let bindingChanged = false;
+      if (bindingsRes.status === 'fulfilled') {
+        const prevBindingFp = lastBindingFingerprintRef.current;
+        const nextBindings = bindingsRes.value;
+        const matchedNextBinding = targetBindingId
+          ? nextBindings.find((b) => b.id === targetBindingId) ?? null
+          : null;
+        const nextBindingFp = buildBindingStateFingerprint(matchedNextBinding);
+        bindingChanged =
+          Boolean(targetBindingId) &&
+          targetBindingId === activeBindingIdRef.current &&
+          Boolean(prevBindingFp) &&
+          nextBindingFp !== prevBindingFp;
+        applyFetchedBindings(nextBindings);
+      }
+
+      let runsChanged = false;
+      if (
+        targetBindingId &&
+        targetBindingId === activeBindingIdRef.current &&
+        runsSeq === runsRequestSeqRef.current &&
+        runsRes.status === 'fulfilled' &&
+        Array.isArray(runsRes.value)
+      ) {
+        const freshRuns = runsRes.value;
+        const prevRunsFp = lastRunsHeadFingerprintRef.current;
+        const nextRunsFp = buildRunsHeadFingerprint(freshRuns);
+        runsChanged = Boolean(prevRunsFp) && nextRunsFp !== prevRunsFp;
+        for (const run of freshRuns) {
+          if (run.status === 'RUNNING') {
+            observedRunningRunIdsRef.current.add(run.id);
+          }
+        }
+        const settledRun =
+          freshRuns.find(
+            (r) =>
+              r.status !== 'RUNNING' &&
+              observedRunningRunIdsRef.current.has(r.id) &&
+              !notifiedCompletedRunsRef.current.has(r.id)
+          ) ?? null;
+        if (settledRun) {
+          observedRunningRunIdsRef.current.delete(settledRun.id);
+          notifiedCompletedRunsRef.current.add(settledRun.id);
+          const runLabel = formatSyncRunMode(settledRun.mode, settledRun.sampleLimit);
+          if (settledRun.status === 'FAILED') {
+            const rawErr = settledRun.errorMessage || `${runLabel} failed.`;
+            toast.error(
+              targetTrack === 'TRACK3_STORAGE' ? sanitizeStorageDisplayText(rawErr) : rawErr
+            );
+          } else {
+            toast.success(`${runLabel} completed.`);
+          }
+        }
+        lastRunsHeadFingerprintRef.current = nextRunsFp;
+        setDetailsBindingId(targetBindingId);
+        setRuns(freshRuns);
+      }
+
+      const shouldInvalidateDetails = statusChanged || bindingChanged || runsChanged;
+      if (shouldInvalidateDetails) {
+        if (catalogInvalidated) {
+          void v1SyncService
+            .getCatalog()
+            .then((nextCatalog) => setCatalog(nextCatalog))
+            .catch(() => {
+              // Non-fatal background catalog refresh error
+            });
+        }
+        if (targetBindingId && targetBindingId === activeBindingIdRef.current) {
+          await loadBindingDetails(targetBindingId, {
+            track: targetTrack,
+            includeConflicts: true,
+            includeParity: true,
+            includeStorageObjects: true,
+          });
+          const openDiffs = selectedRunDiffsRef.current;
+          if (openDiffs?.scope === 'binding' && openDiffs.targetId === targetBindingId) {
+            const diffSeq = ++diffsRequestSeqRef.current;
+            void v1SyncService
+              .listBindingDiffs(targetBindingId, DIFFS_PAGE_SIZE, openDiffs.offset)
+              .then((page) => {
+                if (
+                  diffSeq === diffsRequestSeqRef.current &&
+                  activeBindingIdRef.current === targetBindingId
+                ) {
+                  setSelectedRunDiffs({
+                    scope: 'binding',
+                    targetId: targetBindingId,
+                    diffs: page.items,
+                    total: page.total,
+                    offset: page.offset,
+                    hasMore: page.hasMore,
+                  });
+                }
+              })
+              .catch(() => {
+                // Non-fatal background diff drawer refresh error
+              });
+          }
+        }
+      }
+    } catch {
+      // Non-fatal background realtime poll error
+    } finally {
+      realtimePollInFlightRef.current = false;
+    }
+  }, [hasPermission, applyFetchedBindings, loadBindingDetails]);
+
   useEffect(() => {
     if (!hasPermission || !activeBindingId || !hasRunningRun) return;
     let inFlight = false;
@@ -952,9 +1135,19 @@ export function V1SyncPage({
       if (refreshHeavy) {
         void v1SyncService
           .getStatus()
-          .then((nextStatus) => setStatus(nextStatus))
+          .then((nextStatus) => {
+            lastStatusRef.current = nextStatus;
+            lastStatusFingerprintRef.current = buildSyncStatusFingerprint(nextStatus);
+            setStatus(nextStatus);
+          })
           .catch(() => {
             // Non-fatal live status tick error
+          });
+        void v1SyncService
+          .listBindings()
+          .then((nextBindings) => applyFetchedBindings(nextBindings))
+          .catch(() => {
+            // Non-fatal live bindings tick error
           });
       }
       void loadBindingDetails(activeBindingId, {
@@ -966,7 +1159,63 @@ export function V1SyncPage({
       });
     }, 1200);
     return () => clearInterval(timer);
-  }, [hasPermission, activeBindingId, hasRunningRun, loadBindingDetails]);
+  }, [hasPermission, activeBindingId, hasRunningRun, applyFetchedBindings, loadBindingDetails]);
+
+  // Continuous lightweight realtime revalidation when idle (visible tab only; self-scheduling setTimeout prevents overlaps)
+  useEffect(() => {
+    if (!hasPermission || hasRunningRun) return;
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      timerId = setTimeout(() => {
+        if (cancelled) return;
+        void revalidateRealtimeState().finally(() => {
+          scheduleNext();
+        });
+      }, 4000);
+    };
+
+    scheduleNext();
+    return () => {
+      cancelled = true;
+      if (timerId !== null) clearTimeout(timerId);
+    };
+  }, [hasPermission, hasRunningRun, activeBindingId, revalidateRealtimeState]);
+
+  // Instant revalidation when returning focus / visibility to this browser tab (e.g. after running SQL or editing v1)
+  useEffect(() => {
+    if (!hasPermission) return;
+
+    const triggerImmediateRevalidate = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastFocusRevalidateAtRef.current < 1000) return;
+      lastFocusRevalidateAtRef.current = now;
+      void revalidateRealtimeState();
+    };
+
+    const canListenWindow =
+      typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+    const canListenDoc =
+      typeof document !== 'undefined' && typeof document.addEventListener === 'function';
+
+    if (canListenWindow) {
+      window.addEventListener('focus', triggerImmediateRevalidate);
+    }
+    if (canListenDoc) {
+      document.addEventListener('visibilitychange', triggerImmediateRevalidate);
+    }
+    return () => {
+      if (canListenWindow && typeof window.removeEventListener === 'function') {
+        window.removeEventListener('focus', triggerImmediateRevalidate);
+      }
+      if (canListenDoc && typeof document.removeEventListener === 'function') {
+        document.removeEventListener('visibilitychange', triggerImmediateRevalidate);
+      }
+    };
+  }, [hasPermission, revalidateRealtimeState]);
 
   const needsManualClinicInput =
     v2ClinicManualMode ||
@@ -2536,7 +2785,10 @@ export function V1SyncPage({
               void loadAll();
             })();
           }}
-          onClose={() => setTrackingScriptModalTab(null)}
+          onClose={() => {
+            setTrackingScriptModalTab(null);
+            void revalidateRealtimeState();
+          }}
         />
       )}
 
