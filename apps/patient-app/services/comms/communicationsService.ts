@@ -419,6 +419,48 @@ export const communicationsService = {
   },
 
   /**
+   * Fetch and normalize a decrypted communication attachment Blob for preview or download.
+   */
+  async fetchAttachmentBlob(
+    getToken: () => Promise<string | null>,
+    attachmentId: string,
+    contentType?: string,
+  ): Promise<{ blob: Blob; mimeType: string }> {
+    const rawBlob = await api.getBlob(
+      getToken,
+      `/patient/communications/attachments/${attachmentId}/download`,
+    );
+    const mimeType = contentType || rawBlob.type || 'application/octet-stream';
+    const blob = rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
+    return { blob, mimeType };
+  },
+
+  /**
+   * Persist an attachment Blob to local cache on native platforms and return its file URI.
+   */
+  async writeAttachmentBlobToCache(blob: Blob, fileName: string): Promise<string> {
+    const { File, Paths } = await import('expo-file-system');
+    const safeName = (fileName || 'attachment').replace(/[^\w.\-_]/g, '_');
+    const targetFile = new File(Paths.cache, safeName);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    targetFile.write(bytes);
+    return targetFile.uri;
+  },
+
+  /**
+   * Invoke the native OS share/save sheet for a cached attachment URI.
+   */
+  async shareAttachmentFile(uri: string, mimeType: string, fileName?: string): Promise<void> {
+    const Sharing = await import('expo-sharing');
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, {
+        mimeType,
+        dialogTitle: fileName || 'Attachment',
+      });
+    }
+  },
+
+  /**
    * Download and open a decrypted communication attachment.
    */
   async downloadAttachment(
@@ -427,12 +469,11 @@ export const communicationsService = {
     fileName: string,
     contentType?: string,
   ): Promise<void> {
-    const rawBlob = await api.getBlob(
+    const { blob: typedBlob, mimeType } = await this.fetchAttachmentBlob(
       getToken,
-      `/patient/communications/attachments/${attachmentId}/download`,
+      attachmentId,
+      contentType,
     );
-    const mimeType = contentType || rawBlob.type || 'application/octet-stream';
-    const typedBlob = rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
 
     if (
       Platform.OS === 'web' &&
@@ -454,16 +495,7 @@ export const communicationsService = {
       return;
     }
 
-    const [{ File, Paths }, Sharing] = await Promise.all([
-      import('expo-file-system'),
-      import('expo-sharing'),
-    ]);
-    const safeName = (fileName || 'attachment').replace(/[^\w.\-_]/g, '_');
-    const targetFile = new File(Paths.cache, safeName);
-    const bytes = new Uint8Array(await typedBlob.arrayBuffer());
-    targetFile.write(bytes);
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(targetFile.uri, { mimeType });
-    }
+    const fileUri = await this.writeAttachmentBlobToCache(typedBlob, fileName);
+    await this.shareAttachmentFile(fileUri, mimeType, fileName);
   },
 };

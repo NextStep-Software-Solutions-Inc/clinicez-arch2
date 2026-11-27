@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import * as DocumentPicker from 'expo-document-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
-import { MessageThread } from '@clinicez/comms-sdk/native-ui';
-import type { ThreadAttachment, ThreadMessage } from '@clinicez/comms-sdk/native-ui';
+import { AttachmentPreviewModal, MessageThread } from '@clinicez/comms-sdk/native-ui';
+import type {
+  AttachmentPreviewData,
+  ThreadAttachment,
+  ThreadMessage,
+} from '@clinicez/comms-sdk/native-ui';
 import {
   formatMessageCategory,
   isRedundantCategorySubject,
@@ -14,6 +18,10 @@ import {
 import Screen from '../../../components/layout/Screen';
 import IconButton from '../../../components/ui/IconButton';
 import ThemedText from '../../../components/ui/ThemedText';
+import {
+  renderNativePdfPreview,
+  supportsNativeInlinePdf,
+} from '../../../components/files/NativePdfPreview';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePrivacy } from '../../../contexts/PrivacyContext';
@@ -57,6 +65,7 @@ export default function ConversationThreadScreen({ route }: Props) {
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<ThreadAttachment | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -158,24 +167,71 @@ export default function ConversationThreadScreen({ route }: Props) {
     }
   }, [getToken]);
 
-  const handleOpenAttachment = useCallback(
-    async (att: ThreadAttachment) => {
-      try {
-        if (!att.attachmentId) {
-          dialog.alert('Attachment Pending', 'This attachment is still syncing. Please try again shortly.');
-          return;
-        }
-        await communicationsService.downloadAttachment(
-          getToken,
-          att.attachmentId,
-          att.fileName,
-          att.contentType,
-        );
-      } catch (err: any) {
-        dialog.alert('Download Failed', err?.message ?? 'Could not open attachment.');
+  const handleOpenAttachment = useCallback((att: ThreadAttachment) => {
+    if (!att.attachmentId) {
+      dialog.alert('Attachment Pending', 'This attachment is still syncing. Please try again shortly.');
+      return;
+    }
+    setPreviewAttachment(att);
+  }, []);
+
+  const handleLoadAttachmentPreview = useCallback(
+    async (att: ThreadAttachment): Promise<AttachmentPreviewData> => {
+      if (!att.attachmentId) {
+        throw new Error('This attachment is still syncing. Please try again shortly.');
       }
+
+      const { blob, mimeType } = await communicationsService.fetchAttachmentBlob(
+        getToken,
+        att.attachmentId,
+        att.contentType,
+      );
+
+      if (
+        Platform.OS === 'web' &&
+        typeof URL !== 'undefined' &&
+        typeof URL.createObjectURL === 'function'
+      ) {
+        const objectUrl = URL.createObjectURL(blob);
+        return {
+          uri: objectUrl,
+          mimeType,
+          fileName: att.fileName,
+          sizeBytes: att.sizeBytes,
+          blob,
+          revoke: () => {
+            if (typeof URL.revokeObjectURL === 'function') {
+              URL.revokeObjectURL(objectUrl);
+            }
+          },
+        };
+      }
+
+      const fileUri = await communicationsService.writeAttachmentBlobToCache(blob, att.fileName);
+      return {
+        uri: fileUri,
+        mimeType,
+        fileName: att.fileName,
+        sizeBytes: att.sizeBytes,
+        blob,
+      };
     },
     [getToken],
+  );
+
+  const handleDownloadNativeAttachment = useCallback(
+    async (att: ThreadAttachment, preview: AttachmentPreviewData) => {
+      try {
+        await communicationsService.shareAttachmentFile(
+          preview.uri,
+          preview.mimeType,
+          preview.fileName || att.fileName,
+        );
+      } catch (err: any) {
+        dialog.alert('Download Failed', err?.message ?? 'Could not save or open attachment.');
+      }
+    },
+    [],
   );
 
   const handleSendMessage = useCallback(
@@ -394,9 +450,26 @@ export default function ConversationThreadScreen({ route }: Props) {
           canWriteInternalNotes={false}
           isLoading={isLoading}
           error={error}
+          colors={colors}
           style={styles.threadContent}
         />
       </View>
+
+      {previewAttachment ? (
+        <AttachmentPreviewModal
+          visible={Boolean(previewAttachment)}
+          attachment={previewAttachment}
+          onClose={() => setPreviewAttachment(null)}
+          loadPreview={handleLoadAttachmentPreview}
+          onDownload={Platform.OS === 'web' ? undefined : handleDownloadNativeAttachment}
+          renderNativePdf={
+            supportsNativeInlinePdf
+              ? (uri) => renderNativePdfPreview({ uri, backgroundColor: colors.background })
+              : undefined
+          }
+          colors={colors}
+        />
+      ) : null}
     </Screen>
   );
 }

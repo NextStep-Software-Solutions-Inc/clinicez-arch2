@@ -168,6 +168,7 @@ mock.module('@clinicez/comms-sdk/react', () => ({
 mock.module('@clinicez/comms-sdk/native-ui', () => ({
   ChatDrawer: createMockComponent('ChatDrawer'),
   MessageThread: createMockComponent('MessageThread'),
+  AttachmentPreviewModal: createMockComponent('AttachmentPreviewModal'),
   TriageQueueView: createMockComponent('TriageQueueView'),
 }));
 

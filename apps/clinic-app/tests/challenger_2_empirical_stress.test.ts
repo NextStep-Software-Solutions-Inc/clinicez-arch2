@@ -325,6 +325,7 @@ let capturedSelectCard: ((id: string) => void) | null = null;
 mock.module('@clinicez/comms-sdk/native-ui', () => ({
   ChatDrawer: createMockComponent('ChatDrawer'),
   MessageThread: createMockComponent('MessageThread'),
+  AttachmentPreviewModal: createMockComponent('AttachmentPreviewModal'),
   TriageQueueView: (props: any) => {
     capturedSelectCard = props.onSelectCard;
     return React.createElement('div', {

@@ -92,6 +92,7 @@ mock.module('../components/BottomTabsHeaderRight', () => ({
 }));
 mock.module('@clinicez/comms-sdk/native-ui', () => ({
   MessageThread: makeStub('MessageThread'),
+  AttachmentPreviewModal: makeStub('AttachmentPreviewModal'),
 }));
 
 mock.module('../contexts/ThemeContext', () => ({

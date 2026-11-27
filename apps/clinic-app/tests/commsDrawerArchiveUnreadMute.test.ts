@@ -406,6 +406,7 @@ mock.module('@clinicez/comms-sdk/react', () => ({
 
 const { ChatDrawer: RealChatDrawer } = await import('../../../packages/comms-sdk/src/native-ui/ChatDrawer');
 const { MessageThread: RealMessageThread } = await import('../../../packages/comms-sdk/src/native-ui/MessageThread');
+const { AttachmentPreviewModal: RealAttachmentPreviewModal } = await import('../../../packages/comms-sdk/src/native-ui/AttachmentPreviewModal');
 const { TriageQueueView: RealTriageQueueView } = await import('../../../packages/comms-sdk/src/native-ui/TriageQueueView');
 const { CallWaitingRoom: RealCallWaitingRoom } = await import('../../../packages/comms-sdk/src/native-ui/CallWaitingRoom');
 const { CallStage: RealCallStage } = await import('../../../packages/comms-sdk/src/native-ui/CallStage');
@@ -419,6 +420,7 @@ mock.module('@clinicez/comms-sdk/native-ui', () => ({
     capturedMessageThreadProps = props;
     return React.createElement(RealMessageThread, props);
   },
+  AttachmentPreviewModal: RealAttachmentPreviewModal,
   TriageQueueView: RealTriageQueueView,
   CallWaitingRoom: RealCallWaitingRoom,
   CallStage: RealCallStage,
