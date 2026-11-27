@@ -62,6 +62,41 @@ export interface ThreadAttachment {
   isClean: boolean;
 }
 
+export type AttachmentPreviewKind = 'image' | 'pdf' | 'other';
+
+export interface AttachmentPreviewData {
+  uri: string;
+  mimeType: string;
+  fileName: string;
+  sizeBytes?: number;
+  blob?: Blob;
+  /** Optional cleanup function invoked when the preview closes or switches files. */
+  revoke?: () => void;
+}
+
+export interface AttachmentPreviewModalProps {
+  visible: boolean;
+  attachment: ThreadAttachment | null;
+  onClose: () => void;
+  /** Async loader that fetches/decrypts the attachment and resolves to a previewable URI. */
+  loadPreview?: (attachment: ThreadAttachment) => Promise<AttachmentPreviewData>;
+  /** Optional controlled preview data (useful when caller manages preview state or in SSR/tests). */
+  preview?: AttachmentPreviewData | null;
+  /** Optional controlled loading state. */
+  isLoading?: boolean;
+  /** Optional controlled error message. */
+  error?: string | null;
+  /** Optional custom download/share handler (e.g. native expo-sharing or custom save). */
+  onDownload?: (attachment: ThreadAttachment, preview: AttachmentPreviewData) => void | Promise<void>;
+  /** Optional custom handler for opening in a new tab / external viewer. */
+  onOpenInNewTab?: (attachment: ThreadAttachment, preview: AttachmentPreviewData) => void | Promise<void>;
+  /** Optional native PDF renderer (e.g. react-native-pdf on iOS/Android). */
+  renderNativePdf?: (uri: string, fileName: string) => React.ReactNode;
+  colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
+  testID?: string;
+}
+
 export interface ThreadMessage {
   id: string;
   clientMessageId?: string;

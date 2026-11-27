@@ -66,14 +66,15 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   style
 }) => {
   const colorsKey = colors
-    ? `${colors.primary ?? ''}|${colors.primaryLight ?? ''}|${colors.primarySubtle ?? ''}|${colors.primaryBorder ?? ''}|${colors.primaryDark ?? ''}|${colors.background ?? ''}|${colors.surface ?? ''}|${colors.text ?? ''}`
+    ? `${colors.primary ?? ''}|${colors.primaryLight ?? ''}|${colors.primarySubtle ?? ''}|${colors.primaryBorder ?? ''}|${colors.primaryDark ?? ''}|${colors.primaryText ?? ''}|${colors.background ?? ''}|${colors.surface ?? ''}|${colors.surfaceSubtle ?? ''}|${colors.border ?? ''}|${colors.text ?? ''}|${colors.textSecondary ?? ''}|${colors.textMuted ?? ''}`
     : '';
   const c = useMemo<ResolvedCommsColors>(() => ({ ...lightColors, ...colors }), [colors, colorsKey]);
+  const brandLabelColor = colors?.primaryText ?? c.primaryDark;
   const s = useMemo(
     () => ({ ...createShadows(c, isLiveWebDom), ...(shadowsProp ?? {}) }),
     [c, shadowsProp]
   );
-  const styles = useMemo(() => createStyles(c, s), [c, s]);
+  const styles = useMemo(() => createStyles(c, s, brandLabelColor), [c, s, brandLabelColor]);
 
   const [inputText, setInputText] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -520,7 +521,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                             </Text>
                             <Text style={styles.attachmentMeta}>
                               {formatAttachmentSize(att.sizeBytes)}
-                              {att.isClean === false ? ' • Pending scan' : onOpenAttachment ? ' • Download' : ''}
+                              {att.isClean === false ? ' • Pending scan' : onOpenAttachment ? ' • Preview' : ''}
                             </Text>
                           </View>
                         </TouchableOpacity>
@@ -684,7 +685,8 @@ type ResolvedCommsColors = Record<keyof typeof lightColors, string>;
 
 function createStyles(
   c: ResolvedCommsColors,
-  s: ReturnType<typeof createShadows>
+  s: ReturnType<typeof createShadows>,
+  brandLabelColor: string
 ) {
   return StyleSheet.create({
     container: {
@@ -910,7 +912,7 @@ function createStyles(
     },
     timeTextMe: {
       fontSize: fontSizeScale.xs,
-      color: c.primaryDark,
+      color: brandLabelColor,
       opacity: 0.8
     },
     timeTextOther: {
@@ -1125,7 +1127,7 @@ function createStyles(
     attachmentName: {
       fontSize: fontSizeScale.xs,
       fontWeight: '600',
-      color: c.primaryDark,
+      color: brandLabelColor,
     },
     attachmentMeta: {
       fontSize: fontSizeScale.xs,
@@ -1153,7 +1155,7 @@ function createStyles(
     },
     pendingAttachmentText: {
       fontSize: fontSizeScale.xs,
-      color: c.primaryDark,
+      color: brandLabelColor,
       fontWeight: '600',
       flexShrink: 1,
     },
@@ -1165,7 +1167,7 @@ function createStyles(
     },
     pendingAttachmentRemoveText: {
       fontSize: fontSizeScale.sm,
-      color: c.primaryDark,
+      color: brandLabelColor,
       fontWeight: '700',
       lineHeight: 16,
     },

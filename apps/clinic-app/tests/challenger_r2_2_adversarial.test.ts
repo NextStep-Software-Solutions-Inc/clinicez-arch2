@@ -322,6 +322,7 @@ mock.module('@clinicez/comms-sdk/react', () => ({
 
 mock.module('@clinicez/comms-sdk/native-ui', () => ({
   ChatDrawer: createMockComponent('ChatDrawer'),
+  AttachmentPreviewModal: createMockComponent('AttachmentPreviewModal'),
   MessageThread: (props: any) => {
     return React.createElement('div', {
       'data-component': 'MessageThread',

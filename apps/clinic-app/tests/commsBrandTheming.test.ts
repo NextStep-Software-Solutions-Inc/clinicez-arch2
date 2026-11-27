@@ -483,6 +483,7 @@ mock.module('@clinicez/comms-sdk/react', () => ({
 
 const { ChatDrawer } = await import('../../../packages/comms-sdk/src/native-ui/ChatDrawer');
 const { MessageThread } = await import('../../../packages/comms-sdk/src/native-ui/MessageThread');
+const { AttachmentPreviewModal } = await import('../../../packages/comms-sdk/src/native-ui/AttachmentPreviewModal');
 const { TriageQueueView } = await import('../../../packages/comms-sdk/src/native-ui/TriageQueueView');
 const { CallWaitingRoom } = await import('../../../packages/comms-sdk/src/native-ui/CallWaitingRoom');
 const { CallStage } = await import('../../../packages/comms-sdk/src/native-ui/CallStage');
@@ -493,6 +494,7 @@ mock.module('@clinicez/comms-sdk/native-ui', () => ({
     capturedMessageThreadProps = props;
     return React.createElement(MessageThread, props);
   },
+  AttachmentPreviewModal,
   TriageQueueView,
   CallWaitingRoom,
   CallStage,

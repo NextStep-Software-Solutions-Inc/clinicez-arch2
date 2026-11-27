@@ -55,6 +55,7 @@ mock.module('react-native', () => ({
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   TextInput: 'TextInput',
   ActivityIndicator: 'ActivityIndicator',
+  Image: 'Image',
   Modal: 'Modal',
   NativeEventEmitter: class {
     addListener() {

@@ -31,6 +31,7 @@ import {
 } from '../../../services/comms/communicationsService';
 import {
   formatMessageCategory,
+  formatRequestStatus,
   isRedundantCategorySubject,
 } from '@clinicez/comms-sdk/core';
 import { dialog } from '../../../utils/dialog';
@@ -282,7 +283,7 @@ export default function MessagesInboxScreen() {
                 {distinctSubject}
               </ThemedText>
             )}
-            <Badge label={item.status} tone={statusTone} size="sm" />
+            <Badge label={formatRequestStatus(item.status)} tone={statusTone} size="sm" />
           </View>
 
           {/* Snippet & Delivery State / Unread */}

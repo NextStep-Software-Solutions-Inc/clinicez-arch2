@@ -10,8 +10,12 @@ import {
   resolveConversationDisplayTitle,
   resolvePatientParticipantName,
 } from '@clinicez/comms-sdk/core';
-import { MessageThread } from '@clinicez/comms-sdk/native-ui';
-import type { ThreadAttachment, ThreadMessage } from '@clinicez/comms-sdk/native-ui';
+import { AttachmentPreviewModal, MessageThread } from '@clinicez/comms-sdk/native-ui';
+import type {
+  AttachmentPreviewData,
+  ThreadAttachment,
+  ThreadMessage,
+} from '@clinicez/comms-sdk/native-ui';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import Modal from '../ui/Modal';
@@ -289,6 +293,7 @@ export default function ClinicActiveThread({
   const [isHandoffModalOpen, setIsHandoffModalOpen] = useState(false);
   const [handoffInstructions, setHandoffInstructions] = useState('');
   const [selectedColleagueId, setSelectedColleagueId] = useState<string | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<ThreadAttachment | null>(null);
 
   const getCommsAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     let ticket = comms?.activeTicket?.ticket;
@@ -405,45 +410,86 @@ export default function ClinicActiveThread({
     }
   }, [getCommsAuthHeaders]);
 
-  const handleOpenAttachment = useCallback(
-    async (att: ThreadAttachment) => {
-      try {
-        if (!att.attachmentId) {
-          notify.info('Attachment is still syncing. Please try again in a moment.');
-          return;
-        }
-        const base = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
-        const headers = await getCommsAuthHeaders();
-        const res = await fetch(`${base}/api/v1/comms/attachments/${att.attachmentId}/download`, {
-          method: 'GET',
-          headers,
-        });
-        if (!res.ok) {
-          throw new Error(`Failed to download attachment (HTTP ${res.status})`);
-        }
-        const rawBlob = await res.blob();
-        const mimeType = att.contentType || rawBlob.type || 'application/octet-stream';
-        const typedBlob = rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
+  const handleOpenAttachment = useCallback((att: ThreadAttachment) => {
+    if (!att.attachmentId) {
+      notify.info('Attachment is still syncing. Please try again in a moment.');
+      return;
+    }
+    setPreviewAttachment(att);
+  }, []);
 
-        if (typeof window !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-          const objectUrl = URL.createObjectURL(typedBlob);
-          const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
-          if (!opened && typeof document !== 'undefined') {
-            const a = document.createElement('a');
-            a.href = objectUrl;
-            a.download = att.fileName || 'attachment';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-          }
-          setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60_000);
+  const handleLoadAttachmentPreview = useCallback(
+    async (att: ThreadAttachment): Promise<AttachmentPreviewData> => {
+      if (!att.attachmentId) {
+        throw new Error('Attachment is still syncing. Please try again in a moment.');
+      }
+
+      const base = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+      const headers = await getCommsAuthHeaders();
+      const res = await fetch(`${base}/api/v1/comms/attachments/${att.attachmentId}/download`, {
+        method: 'GET',
+        headers,
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to download attachment (HTTP ${res.status})`);
+      }
+      const rawBlob = await res.blob();
+      const mimeType = att.contentType || rawBlob.type || 'application/octet-stream';
+      const typedBlob =
+        rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
+
+      if (
+        Platform.OS === 'web' &&
+        typeof URL !== 'undefined' &&
+        typeof URL.createObjectURL === 'function'
+      ) {
+        const objectUrl = URL.createObjectURL(typedBlob);
+        return {
+          uri: objectUrl,
+          mimeType,
+          fileName: att.fileName,
+          sizeBytes: att.sizeBytes,
+          blob: typedBlob,
+          revoke: () => {
+            if (typeof URL.revokeObjectURL === 'function') {
+              URL.revokeObjectURL(objectUrl);
+            }
+          },
+        };
+      }
+
+      const { File, Paths } = await import('expo-file-system');
+      const safeName = (att.fileName || 'attachment').replace(/[^\w.\-_]/g, '_');
+      const targetFile = new File(Paths.cache, safeName);
+      const bytes = new Uint8Array(await typedBlob.arrayBuffer());
+      targetFile.write(bytes);
+      return {
+        uri: targetFile.uri,
+        mimeType,
+        fileName: att.fileName,
+        sizeBytes: att.sizeBytes,
+        blob: typedBlob,
+      };
+    },
+    [getCommsAuthHeaders],
+  );
+
+  const handleDownloadNativeAttachment = useCallback(
+    async (att: ThreadAttachment, preview: AttachmentPreviewData) => {
+      try {
+        const Sharing = await import('expo-sharing');
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(preview.uri, {
+            mimeType: preview.mimeType,
+            dialogTitle: preview.fileName || att.fileName,
+          });
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Failed to open attachment.';
         notify.error(msg);
       }
     },
-    [getCommsAuthHeaders],
+    [],
   );
 
   const handleResend = useCallback(
@@ -1323,6 +1369,17 @@ export default function ClinicActiveThread({
           </View>
         </ScrollView>
       </Modal>
+      {/* 5. In-App Attachment Preview Modal */}
+      {previewAttachment ? (
+        <AttachmentPreviewModal
+          visible={Boolean(previewAttachment)}
+          attachment={previewAttachment}
+          onClose={() => setPreviewAttachment(null)}
+          loadPreview={handleLoadAttachmentPreview}
+          onDownload={Platform.OS === 'web' ? undefined : handleDownloadNativeAttachment}
+          colors={resolvedCommsColors}
+        />
+      ) : null}
     </View>
   );
 }
