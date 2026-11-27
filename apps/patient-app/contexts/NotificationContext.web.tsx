@@ -65,31 +65,47 @@ interface NotificationProviderProps {
 }
 
 export function NotificationProvider({ children }: NotificationProviderProps) {
-  const { internalPatientId: patientId, clerkSessionId, getToken } = useAuth();
+  const {
+    internalPatientId: patientId,
+    clerkSessionId,
+    isClerkLoaded,
+    isClerkSignedIn,
+    getToken,
+  } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
+  const activePatientIdRef = useRef(patientId);
+  activePatientIdRef.current = patientId;
   const registeredSessionRef = useRef<string | null>(null);
+  const hasActiveClerkSession = Boolean(
+    patientId && clerkSessionId && isClerkLoaded && isClerkSignedIn,
+  );
 
   const refresh = useCallback(async () => {
     if (!patientId) {
       setUnreadCount(0);
       return;
     }
-    try {
-      await syncNotificationsFromBackend(getTokenRef.current, patientId);
-    } catch {
-      // Offline/transient failures are non-fatal: fall back to the local count.
+    if (hasActiveClerkSession) {
+      try {
+        await syncNotificationsFromBackend(getTokenRef.current, patientId);
+      } catch {
+        // Offline/transient failures are non-fatal: fall back to the local count.
+      }
     }
     try {
-      setUnreadCount(await getUnreadCount(patientId));
+      const count = await getUnreadCount(patientId);
+      if (activePatientIdRef.current === patientId) {
+        setUnreadCount(count);
+      }
     } catch {
       // ignore
     }
-  }, [patientId]);
+  }, [patientId, hasActiveClerkSession]);
 
   useEffect(() => {
-    if (!patientId || !clerkSessionId) {
+    if (!hasActiveClerkSession || !patientId || !clerkSessionId) {
       registeredSessionRef.current = null;
       return;
     }
@@ -109,11 +125,40 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         registeredSessionRef.current = null;
         console.warn('[DeviceSession] Failed to register web device session:', err);
       });
-  }, [patientId, clerkSessionId]);
+  }, [hasActiveClerkSession, patientId, clerkSessionId]);
 
   useEffect(() => {
+    if (!patientId) {
+      setUnreadCount(0);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const updateLocalCount = () => {
+      getUnreadCount(patientId)
+        .then((count) => {
+          if (!cancelled) setUnreadCount(count);
+        })
+        .catch(() => undefined);
+    };
+    updateLocalCount();
+
+    const documentsSub = DeviceEventEmitter.addListener(DOCUMENTS_SYNCED_EVENT, updateLocalCount);
+    const notificationsSub = DeviceEventEmitter.addListener(
+      NOTIFICATIONS_CHANGED_EVENT,
+      updateLocalCount,
+    );
+    return () => {
+      cancelled = true;
+      documentsSub.remove();
+      notificationsSub.remove();
+    };
+  }, [patientId]);
+
+  useEffect(() => {
+    if (!hasActiveClerkSession) return undefined;
+
     void refresh();
-    if (!patientId) return undefined;
 
     const interval = setInterval(() => {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') {
@@ -125,25 +170,13 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', onFocus);
     }
-    const updateLocalCount = () => {
-      getUnreadCount(patientId)
-        .then(setUnreadCount)
-        .catch(() => undefined);
-    };
-    const documentsSub = DeviceEventEmitter.addListener(DOCUMENTS_SYNCED_EVENT, updateLocalCount);
-    const notificationsSub = DeviceEventEmitter.addListener(
-      NOTIFICATIONS_CHANGED_EVENT,
-      updateLocalCount,
-    );
     return () => {
       clearInterval(interval);
-      documentsSub.remove();
-      notificationsSub.remove();
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', onFocus);
       }
     };
-  }, [patientId, refresh]);
+  }, [hasActiveClerkSession, clerkSessionId, refresh]);
 
   const value = useMemo<NotificationContextValue>(
     () => ({
