@@ -66,7 +66,8 @@ public class CommsTicketAuthenticationHandler : AuthenticationHandler<CommsTicke
 
         try
         {
-            var keyClient = Context.RequestServices.GetService<IHubKeyClient>();
+            var keyClient = Context.RequestServices.GetService<IHubKeyClient>()
+                ?? Context.RequestServices.GetService<IHubClient>() as IHubKeyClient;
             if (keyClient != null)
             {
                 validationResult = await CommsTicketValidator.ValidateAsync(

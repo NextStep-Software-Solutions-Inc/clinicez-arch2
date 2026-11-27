@@ -12,7 +12,7 @@ services:
     container_name: ${CONTAINER_NAME:-media-broker}
     labels:
       - "project=clinicez"
-      - "environment=dev"
+      - "environment=${ENVIRONMENT_LABEL:-prod}"
     expose:
       - "8080"
     networks:

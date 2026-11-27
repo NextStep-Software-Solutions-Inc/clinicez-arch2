@@ -12,7 +12,7 @@ services:
     container_name: ${CONTAINER_NAME:-comms-api}
     labels:
       - "project=clinicez"
-      - "environment=dev"
+      - "environment=${ENVIRONMENT_LABEL:-prod}"
     expose:
       - "8080"
     networks:
@@ -35,7 +35,8 @@ services:
       - DOTNET_GCHeapHardLimitPercent=75
       - DOTNET_gcServer=0
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
-      - DbSchema=comms
+      - DbSchema=${DB_SCHEMA:-comms}
+      - Comms__AutoMigrate=${COMMS_AUTO_MIGRATE:-true}
       # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
       - Messaging__Transport=Hub
       - Messaging__Service=comms
@@ -56,8 +57,8 @@ services:
       - Jwt__SigningKey=${COMMS_JWT_SIGNING_KEY:?COMMS_JWT_SIGNING_KEY must be set (at least 32 characters)}
       - Jwt__KeyDirectory=/app/keys
     volumes:
-      - comms-api-keys:/app/keys
-      - comms-storage:/app/Storage
+      - ${COMMS_KEYS_VOLUME:-comms-api-keys}:/app/keys
+      - ${COMMS_STORAGE_VOLUME:-comms-storage}:/app/Storage
     healthcheck:
       test:
         - CMD-SHELL
@@ -75,5 +76,7 @@ volumes:
 networks:
   data-network:
     external: true
+    name: ${DATA_NETWORK:-data-network}
   npm-default:
     external: true
+    name: ${NPM_NETWORK:-npm-default}
