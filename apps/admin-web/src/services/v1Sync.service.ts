@@ -383,6 +383,117 @@ export interface ResolveConflictResponseDto {
   message?: string | null;
 }
 
+export type FieldDiffClassification =
+  | 'V2_FILLED_EMPTY'
+  | 'V2_CLEARED_VALUE'
+  | 'FORMAT_ONLY'
+  | 'MODIFIED'
+  | 'UNCHANGED';
+
+export type FieldSensitivity =
+  | 'SAFE_ENUM_OR_BOOL'
+  | 'PII_MASKED'
+  | 'CLINICAL_MEASUREMENT'
+  | 'CLINICAL_NOTE'
+  | 'STRUCTURED_JSON';
+
+export type ConflictRecordStatus =
+  | 'ACTIVE'
+  | 'SOFT_DELETED'
+  | 'MISSING'
+  | 'MISSING_OR_OUT_OF_SCOPE'
+  | 'UNAVAILABLE';
+
+export type ConflictInspectorMode = 'FIELD_DIFF' | 'METADATA_ONLY';
+
+export interface ConflictSubFieldDiffDto {
+  key: string;
+  classification: FieldDiffClassification;
+  isChanged: boolean;
+  v1Preview: string | null;
+  v2Preview: string | null;
+  v1Value?: string | null;
+  v2Value?: string | null;
+}
+
+export interface ConflictFieldDiffDto {
+  fieldName: string;
+  label: string;
+  classification: FieldDiffClassification;
+  isChanged: boolean;
+  sensitivity: FieldSensitivity;
+  v1Preview: string | null;
+  v2Preview: string | null;
+  v1Value?: string | null;
+  v2Value?: string | null;
+  subFieldDiffs?: ConflictSubFieldDiffDto[] | null;
+}
+
+export interface ConflictDetailDto {
+  conflict: SyncConflictDto;
+  bindingName: string;
+  track: SyncTrack;
+  inspectorMode: ConflictInspectorMode;
+  v1RecordStatus: ConflictRecordStatus;
+  v2RecordStatus: ConflictRecordStatus;
+  v1UpdatedAtUtc: string | null;
+  v2UpdatedAtUtc: string | null;
+  isStale: boolean;
+  hasV1HashDrift: boolean;
+  hasV2HashDrift: boolean;
+  recordedV1Hash: string | null;
+  currentV1Hash: string | null;
+  recordedV2Hash: string | null;
+  currentV2Hash: string | null;
+  staleReasons: string[];
+  valuesRevealed: boolean;
+  clinicalNotesRedactedByPolicy: boolean;
+  note: string | null;
+  fields: ConflictFieldDiffDto[];
+}
+
+export interface ConflictReportFieldSummaryDto {
+  fieldName: string;
+  classification: FieldDiffClassification;
+}
+
+export interface ConflictReviewReportItemDto {
+  conflictId: string;
+  entityType: string;
+  v1Id: string;
+  v2Id: string;
+  conflictType: string;
+  status: string;
+  inspectorMode: ConflictInspectorMode;
+  v1RecordStatus: ConflictRecordStatus;
+  v2RecordStatus: ConflictRecordStatus;
+  isStale: boolean;
+  v1UpdatedAtUtc: string | null;
+  v2UpdatedAtUtc: string | null;
+  changedFields: string[];
+  fieldClassifications: ConflictReportFieldSummaryDto[];
+  resolvedBy: string | null;
+  resolvedAtUtc: string | null;
+  createdAtUtc: string;
+}
+
+export interface ConflictReviewReportDto {
+  bindingId: string;
+  bindingName: string;
+  track: SyncTrack;
+  statusFilter: string;
+  totalConflicts: number;
+  truncated: boolean;
+  generatedAtUtc: string;
+  items: ConflictReviewReportItemDto[];
+}
+
+export interface ExportConflictsReportResult {
+  blob: Blob;
+  fileName: string;
+  contentType: string;
+}
+
 export interface ParityEntityCheckDto {
   entityType: string;
   v1ExpectedCount: number;
@@ -757,6 +868,60 @@ export const v1SyncService = {
     }
 
     return { conflict: data as SyncConflictDto };
+  },
+
+  async getConflictDetail(
+    conflictId: string,
+    opts?: { revealValues?: boolean; reason?: string }
+  ): Promise<ConflictDetailDto> {
+    const revealValues = Boolean(opts?.revealValues);
+    const { data } = await v1SyncClient.get<ConflictDetailDto>(`/conflicts/${conflictId}/detail`, {
+      params: {
+        revealValues,
+        ...(revealValues && opts?.reason?.trim() ? { reason: opts.reason.trim() } : {}),
+      },
+      headers: {
+        'Cache-Control': 'no-store',
+      },
+    });
+    return data;
+  },
+
+  async exportConflictsReport(
+    bindingId: string,
+    opts?: { status?: string; format?: 'csv' | 'json' }
+  ): Promise<ExportConflictsReportResult> {
+    const format = opts?.format ?? 'csv';
+    const status = opts?.status?.trim() ? opts.status.trim() : 'ALL';
+    const response = await v1SyncClient.get<Blob>(`/bindings/${bindingId}/conflicts/report`, {
+      params: {
+        status,
+        format,
+      },
+      responseType: 'blob',
+      headers: {
+        'Cache-Control': 'no-store',
+      },
+    });
+
+    const contentDisposition = String(
+      (response.headers as Record<string, unknown>)?.['content-disposition'] ?? ''
+    );
+    const filenameMatch = /filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i.exec(contentDisposition);
+    const fallbackName = `v1-sync-conflicts-${bindingId.slice(0, 8)}.${format}`;
+    const fileName = filenameMatch?.[1]?.trim() || fallbackName;
+    const contentType =
+      String((response.headers as Record<string, unknown>)?.['content-type'] ?? '') ||
+      (format === 'csv' ? 'text/csv; charset=utf-8' : 'application/json; charset=utf-8');
+    const blob =
+      response.data instanceof Blob
+        ? response.data
+        : new Blob(
+            [typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2)],
+            { type: contentType }
+          );
+
+    return { blob, fileName, contentType };
   },
 
   async listPatientIdentities(params?: {

@@ -2731,15 +2731,8 @@ public sealed class Track1ClinicSyncEngine
                         var cat = GetUtc(r, 8) ?? DateTimeOffset.UtcNow;
                         var uat = GetUtc(r, 9) ?? cat;
 
-                        var canonical = new Dictionary<string, string?>(StringComparer.Ordinal)
-                        {
-                            ["isSmoker"] = isSmoke ? "true" : "false",
-                            ["smokingStatus"] = smoke,
-                            ["isAlcoholDrinker"] = isAlc ? "true" : "false",
-                            ["alcoholStatus"] = alc,
-                            ["usesIllicitDrugs"] = isDrug ? "true" : "false",
-                            ["isSexuallyActive"] = isSex ? "true" : "false"
-                        };
+                        var canonical = BuildClinicSocialHistoryCanonicalMap(
+                            isSmoke, smoke, isAlc, alc, isDrug, isSex);
 
                         candidates.Add(new ChildSyncCandidate(v1Id, detId, adoptedId, canonical, targetId =>
                         {
@@ -2786,15 +2779,8 @@ public sealed class Track1ClinicSyncEngine
                         SELECT "Id","IsSmoker","SmokingStatus","IsAlcoholDrinker","AlcoholStatus","UsesIllicitDrugs","IsSexuallyActive"
                         FROM public."PatientSocialHistories"
                         WHERE "Id" = ANY(@ids) AND "IsDeleted" = false
-                        """, targetIds, r => new Dictionary<string, string?>(StringComparer.Ordinal)
-                        {
-                            ["isSmoker"] = r.GetBoolean(1) ? "true" : "false",
-                            ["smokingStatus"] = GetStr(r, 2),
-                            ["isAlcoholDrinker"] = r.GetBoolean(3) ? "true" : "false",
-                            ["alcoholStatus"] = GetStr(r, 4),
-                            ["usesIllicitDrugs"] = r.GetBoolean(5) ? "true" : "false",
-                            ["isSexuallyActive"] = r.GetBoolean(6) ? "true" : "false"
-                        }, ct),
+                        """, targetIds, r => BuildClinicSocialHistoryCanonicalMap(
+                            r.GetBoolean(1), GetStr(r, 2), r.GetBoolean(3), GetStr(r, 4), r.GetBoolean(5), r.GetBoolean(6)), ct),
                     isDryRun, forceV1OnConflict, targetV1IdFilter, summary, ct);
             }
 
@@ -4097,18 +4083,8 @@ public sealed class Track1ClinicSyncEngine
                     var cat = GetUtc(r, 23) ?? recAt;
                     var uat = GetUtc(r, 24) ?? recAt;
 
-                    var canonical = new Dictionary<string, string?>(StringComparer.Ordinal)
-                    {
-                        ["systolicBp"] = sbp?.ToString(CultureInfo.InvariantCulture),
-                        ["diastolicBp"] = dbp?.ToString(CultureInfo.InvariantCulture),
-                        ["heartRateBpm"] = hr?.ToString(CultureInfo.InvariantCulture),
-                        ["temperatureCelsius"] = temp?.ToString("0.00", CultureInfo.InvariantCulture),
-                        ["oxygenSaturationPercent"] = spo2?.ToString("0.00", CultureInfo.InvariantCulture),
-                        ["heightCm"] = ht?.ToString("0.00", CultureInfo.InvariantCulture),
-                        ["weightKg"] = wt?.ToString("0.00", CultureInfo.InvariantCulture),
-                        ["bmi"] = bmi?.ToString("0.00", CultureInfo.InvariantCulture),
-                        ["notes"] = notes
-                    };
+                    var canonical = BuildClinicVitalsCanonicalMap(
+                        sbp, dbp, hr, temp, spo2, ht, wt, bmi, notes);
 
                     vitalsCandidates.Add(new ChildSyncCandidate(v1Key, v2Id, null, canonical, targetId =>
                     {
@@ -4178,18 +4154,16 @@ public sealed class Track1ClinicSyncEngine
                            "HeightCm","WeightKg","Bmi","Notes"
                     FROM public."PatientVitals"
                     WHERE "Id" = ANY(@ids) AND "IsDeleted" = false
-                    """, targetIds, r => new Dictionary<string, string?>(StringComparer.Ordinal)
-                    {
-                        ["systolicBp"] = r.IsDBNull(1) ? null : r.GetInt32(1).ToString(CultureInfo.InvariantCulture),
-                        ["diastolicBp"] = r.IsDBNull(2) ? null : r.GetInt32(2).ToString(CultureInfo.InvariantCulture),
-                        ["heartRateBpm"] = r.IsDBNull(3) ? null : r.GetInt32(3).ToString(CultureInfo.InvariantCulture),
-                        ["temperatureCelsius"] = r.IsDBNull(4) ? null : r.GetDecimal(4).ToString("0.00", CultureInfo.InvariantCulture),
-                        ["oxygenSaturationPercent"] = r.IsDBNull(5) ? null : r.GetDecimal(5).ToString("0.00", CultureInfo.InvariantCulture),
-                        ["heightCm"] = r.IsDBNull(6) ? null : r.GetDecimal(6).ToString("0.00", CultureInfo.InvariantCulture),
-                        ["weightKg"] = r.IsDBNull(7) ? null : r.GetDecimal(7).ToString("0.00", CultureInfo.InvariantCulture),
-                        ["bmi"] = r.IsDBNull(8) ? null : r.GetDecimal(8).ToString("0.00", CultureInfo.InvariantCulture),
-                        ["notes"] = GetStr(r, 9)
-                    }, ct),
+                    """, targetIds, r => BuildClinicVitalsCanonicalMap(
+                        r.IsDBNull(1) ? null : r.GetInt32(1),
+                        r.IsDBNull(2) ? null : r.GetInt32(2),
+                        r.IsDBNull(3) ? null : r.GetInt32(3),
+                        r.IsDBNull(4) ? null : r.GetDecimal(4),
+                        r.IsDBNull(5) ? null : r.GetDecimal(5),
+                        r.IsDBNull(6) ? null : r.GetDecimal(6),
+                        r.IsDBNull(7) ? null : r.GetDecimal(7),
+                        r.IsDBNull(8) ? null : r.GetDecimal(8),
+                        GetStr(r, 9)), ct),
                 isDryRun, forceV1OnConflict, targetV1IdFilter, summary, ct, skipChildDeletionShield: true);
 
             // 6d. PatientVitals: Part 2 -> PreAssessmentNote bridge (aggregated deterministically per appointmentId)
@@ -4285,13 +4259,8 @@ public sealed class Track1ClinicSyncEngine
                     continue;
                 }
 
-                var canonical = new Dictionary<string, string?>(StringComparer.Ordinal)
-                {
-                    ["preAssessmentNotes"] = paNotes,
-                    ["preAssessmentRemarks"] = paRem,
-                    ["homeInstructions"] = homeInst,
-                    ["rosCategory"] = rosCat
-                };
+                var canonical = BuildClinicPreAssessCanonicalMap(
+                    paNotes, paRem, homeInst, includeRosCategory: true, rosCategory: rosCat);
 
                 preAssessCandidates.Add(new ChildSyncCandidate(v1Key, v2Id, null, canonical, targetId =>
                 {
@@ -4351,12 +4320,8 @@ public sealed class Track1ClinicSyncEngine
 
                 foreach (var m in preAssessMergeItems)
                 {
-                    var canonical = new Dictionary<string, string?>(StringComparer.Ordinal)
-                    {
-                        ["preAssessmentNotes"] = m.PaNotes,
-                        ["preAssessmentRemarks"] = m.PaRem,
-                        ["homeInstructions"] = m.HomeInst
-                    };
+                    var canonical = BuildClinicPreAssessCanonicalMap(
+                        m.PaNotes, m.PaRem, m.HomeInst, includeRosCategory: false, rosCategory: null);
                     var v1Hash = DeterministicUuid.ComputeCanonicalHash(canonical);
 
                     if (!liveMergeStates.TryGetValue(m.OwnerId, out var live))
@@ -4371,12 +4336,8 @@ public sealed class Track1ClinicSyncEngine
                         continue;
                     }
 
-                    var liveFields = new Dictionary<string, string?>(StringComparer.Ordinal)
-                    {
-                        ["preAssessmentNotes"] = live.Notes,
-                        ["preAssessmentRemarks"] = live.Remarks,
-                        ["homeInstructions"] = live.HomeInst
-                    };
+                    var liveFields = BuildClinicPreAssessCanonicalMap(
+                        live.Notes, live.Remarks, live.HomeInst, includeRosCategory: false, rosCategory: null);
                     var liveV2Hash = DeterministicUuid.ComputeCanonicalHash(liveFields);
                     var changedFields = DeterministicUuid.ComputeChangedFieldNames(liveFields, canonical);
 
@@ -4484,13 +4445,8 @@ public sealed class Track1ClinicSyncEngine
                     SELECT "Id","PreAssessmentNotes","PreAssessmentRemarks","HomeInstructions","RosCategory"
                     FROM public."PatientVitals"
                     WHERE "Id" = ANY(@ids) AND "IsDeleted" = false
-                    """, targetIds, r => new Dictionary<string, string?>(StringComparer.Ordinal)
-                    {
-                        ["preAssessmentNotes"] = GetStr(r, 1),
-                        ["preAssessmentRemarks"] = GetStr(r, 2),
-                        ["homeInstructions"] = GetStr(r, 3),
-                        ["rosCategory"] = GetStr(r, 4)
-                    }, ct),
+                    """, targetIds, r => BuildClinicPreAssessCanonicalMap(
+                        GetStr(r, 1), GetStr(r, 2), GetStr(r, 3), includeRosCategory: true, rosCategory: GetStr(r, 4)), ct),
                 isDryRun, forceV1OnConflict, targetV1IdFilter, summary, ct, vitalsActiveForShield);
         }
 
@@ -6505,7 +6461,7 @@ public sealed class Track1ClinicSyncEngine
         return await cmd.ExecuteScalarAsync(ct) is true;
     }
 
-    private static Dictionary<string, string?> BuildClinicPatientCanonicalMap(
+    public static Dictionary<string, string?> BuildClinicPatientCanonicalMap(
         string fn, string ln, string? mn, string? suf, DateOnly? dob, string sex, string? civil, string? blood,
         string contact, string? landline, string? email, string? occupation, string? nat, string? rel, string? prefName, string? phPin,
         string? ecName, string? ecPhone, string? ecRel, string verificationStatus, string customFieldsJson) =>
@@ -6533,6 +6489,53 @@ public sealed class Track1ClinicSyncEngine
             ["verificationStatus"] = verificationStatus,
             ["customFields"] = customFieldsJson
         };
+
+    public static Dictionary<string, string?> BuildClinicSocialHistoryCanonicalMap(
+        bool isSmoker, string? smokingStatus, bool isAlcoholDrinker, string? alcoholStatus,
+        bool usesIllicitDrugs, bool isSexuallyActive) =>
+        new(StringComparer.Ordinal)
+        {
+            ["isSmoker"] = isSmoker ? "true" : "false",
+            ["smokingStatus"] = smokingStatus,
+            ["isAlcoholDrinker"] = isAlcoholDrinker ? "true" : "false",
+            ["alcoholStatus"] = alcoholStatus,
+            ["usesIllicitDrugs"] = usesIllicitDrugs ? "true" : "false",
+            ["isSexuallyActive"] = isSexuallyActive ? "true" : "false"
+        };
+
+    public static Dictionary<string, string?> BuildClinicVitalsCanonicalMap(
+        int? systolicBp, int? diastolicBp, int? heartRateBpm, decimal? temperatureCelsius,
+        decimal? oxygenSaturationPercent, decimal? heightCm, decimal? weightKg, decimal? bmi,
+        string? notes) =>
+        new(StringComparer.Ordinal)
+        {
+            ["systolicBp"] = systolicBp?.ToString(CultureInfo.InvariantCulture),
+            ["diastolicBp"] = diastolicBp?.ToString(CultureInfo.InvariantCulture),
+            ["heartRateBpm"] = heartRateBpm?.ToString(CultureInfo.InvariantCulture),
+            ["temperatureCelsius"] = temperatureCelsius?.ToString("0.00", CultureInfo.InvariantCulture),
+            ["oxygenSaturationPercent"] = oxygenSaturationPercent?.ToString("0.00", CultureInfo.InvariantCulture),
+            ["heightCm"] = heightCm?.ToString("0.00", CultureInfo.InvariantCulture),
+            ["weightKg"] = weightKg?.ToString("0.00", CultureInfo.InvariantCulture),
+            ["bmi"] = bmi?.ToString("0.00", CultureInfo.InvariantCulture),
+            ["notes"] = notes
+        };
+
+    public static Dictionary<string, string?> BuildClinicPreAssessCanonicalMap(
+        string? preAssessmentNotes, string? preAssessmentRemarks, string? homeInstructions,
+        bool includeRosCategory, string? rosCategory)
+    {
+        var map = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["preAssessmentNotes"] = preAssessmentNotes,
+            ["preAssessmentRemarks"] = preAssessmentRemarks,
+            ["homeInstructions"] = homeInstructions
+        };
+        if (includeRosCategory)
+        {
+            map["rosCategory"] = rosCategory;
+        }
+        return map;
+    }
 
     private static async Task<Dictionary<Guid, ExistingPatientState>> LoadExistingClinicPatientStatesAsync(
         NpgsqlConnection v2, Guid[] ids, CancellationToken ct)

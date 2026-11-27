@@ -568,6 +568,8 @@ describe('V1SyncPage UI/UX, Custom SelectField & Hierarchical Tenant Scoping', (
   const origListConflicts = v1SyncService.listConflicts;
   const origGetParity = v1SyncService.getParityReport;
   const origResolveConflict = v1SyncService.resolveConflict;
+  const origGetConflictDetail = v1SyncService.getConflictDetail;
+  const origExportConflictsReport = v1SyncService.exportConflictsReport;
   const origListRunDiffs = v1SyncService.listRunDiffs;
   const origCreateBinding = v1SyncService.createBinding;
   const origUpdateBinding = v1SyncService.updateBinding;
@@ -756,6 +758,65 @@ describe('V1SyncPage UI/UX, Custom SelectField & Hierarchical Tenant Scoping', (
       conflict: { ...sampleConflicts[0], status: 'RESOLVED_FORCE_V1' },
       message: 'Immediate forced re-sync completed.',
     }));
+    v1SyncService.getConflictDetail = mock(async (conflictId: string, opts?: any) => ({
+      conflict: sampleConflicts[0],
+      bindingName: 'Track 1 Binding A',
+      track: 'TRACK1_CLINIC' as const,
+      inspectorMode: 'FIELD_DIFF' as const,
+      v1RecordStatus: 'ACTIVE' as const,
+      v2RecordStatus: 'ACTIVE' as const,
+      v1UpdatedAtUtc: '2026-11-24T08:00:00Z',
+      v2UpdatedAtUtc: '2026-11-25T10:00:00Z',
+      isStale: false,
+      hasV1HashDrift: false,
+      hasV2HashDrift: false,
+      recordedV1Hash: 'h1',
+      currentV1Hash: 'h1',
+      recordedV2Hash: 'h2',
+      currentV2Hash: 'h2',
+      staleReasons: [],
+      valuesRevealed: Boolean(opts?.revealValues),
+      clinicalNotesRedactedByPolicy: false,
+      note: null,
+      fields: [
+        {
+          fieldName: 'firstName',
+          label: 'First Name',
+          classification: 'MODIFIED' as const,
+          isChanged: true,
+          sensitivity: 'PII_MASKED' as const,
+          v1Preview: 'J*** (4 chars)',
+          v2Preview: 'P*** (5 chars)',
+          ...(opts?.revealValues ? { v1Value: 'Juan', v2Value: 'Pedro' } : {}),
+        },
+        {
+          fieldName: 'middleName',
+          label: 'Middle Name',
+          classification: 'V2_FILLED_EMPTY' as const,
+          isChanged: true,
+          sensitivity: 'PII_MASKED' as const,
+          v1Preview: null,
+          v2Preview: 'C*** (4 chars)',
+          ...(opts?.revealValues ? { v1Value: null, v2Value: 'Cruz' } : {}),
+        },
+        {
+          fieldName: 'sex',
+          label: 'Sex',
+          classification: 'UNCHANGED' as const,
+          isChanged: false,
+          sensitivity: 'SAFE_ENUM_OR_BOOL' as const,
+          v1Preview: 'Male',
+          v2Preview: 'Male',
+        },
+      ],
+    }));
+    v1SyncService.exportConflictsReport = mock(async (_bindingId: string, opts?: any) => ({
+      blob: new Blob(['binding_id,entity_type\n1111,Patient\n'], {
+        type: opts?.format === 'json' ? 'application/json' : 'text/csv',
+      }),
+      fileName: `v1-sync-conflicts-test.${opts?.format ?? 'csv'}`,
+      contentType: opts?.format === 'json' ? 'application/json' : 'text/csv',
+    }));
     v1SyncService.listRunDiffs = mock(async (_runId: string, limit = 50, offset = 0) => ({
       items: sampleDiffs,
       total: 80,
@@ -868,6 +929,8 @@ describe('V1SyncPage UI/UX, Custom SelectField & Hierarchical Tenant Scoping', (
     v1SyncService.listConflicts = origListConflicts;
     v1SyncService.getParityReport = origGetParity;
     v1SyncService.resolveConflict = origResolveConflict;
+    v1SyncService.getConflictDetail = origGetConflictDetail;
+    v1SyncService.exportConflictsReport = origExportConflictsReport;
     v1SyncService.listRunDiffs = origListRunDiffs;
     v1SyncService.createBinding = origCreateBinding;
     v1SyncService.updateBinding = origUpdateBinding;
@@ -891,11 +954,18 @@ describe('V1SyncPage UI/UX, Custom SelectField & Hierarchical Tenant Scoping', (
       path.resolve(__dirname, '../src/components/v1-sync/MigrationSettingsModal.tsx'),
       path.resolve(__dirname, '../src/components/v1-sync/MappingGuideModal.tsx'),
       path.resolve(__dirname, '../src/components/v1-sync/ConnectionActionDeck.tsx'),
+      path.resolve(__dirname, '../src/components/v1-sync/ConflictDiffDrawer.tsx'),
+      path.resolve(__dirname, '../src/components/v1-sync/ConnectionDataSections.tsx'),
     ];
     for (const filePath of newUiFiles) {
       const source = fs.readFileSync(filePath, 'utf-8');
       expect(/<select(?:\s|>|\n|$)/.test(source)).toBe(false);
     }
+    const drawerSource = fs.readFileSync(
+      path.resolve(__dirname, '../src/components/v1-sync/ConflictDiffDrawer.tsx'),
+      'utf-8'
+    );
+    expect(drawerSource).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 
   test('does NOT default hasPermission to true while loading and blocks privileged UI until verified', () => {
@@ -4309,5 +4379,206 @@ describe('V1SyncPage UI/UX, Custom SelectField & Hierarchical Tenant Scoping', (
         (globalThis as any).window = origWindow;
       }
     }
+  });
+
+  test('Review Diff opens ConflictDiffDrawer with field classifications, stale warning, Tier 2 MFA break-glass, and direct resolution', async () => {
+    v1SyncService.getConflictDetail = mock(async (_id: string, opts?: any) => ({
+      conflict: sampleConflicts[0],
+      bindingName: 'Track 1 Binding A',
+      track: 'TRACK1_CLINIC' as const,
+      inspectorMode: 'FIELD_DIFF' as const,
+      v1RecordStatus: 'ACTIVE' as const,
+      v2RecordStatus: 'ACTIVE' as const,
+      v1UpdatedAtUtc: '2026-11-24T08:00:00Z',
+      v2UpdatedAtUtc: '2026-11-25T10:00:00Z',
+      isStale: true,
+      hasV1HashDrift: false,
+      hasV2HashDrift: true,
+      recordedV1Hash: 'h1',
+      currentV1Hash: 'h1',
+      recordedV2Hash: 'h2',
+      currentV2Hash: 'h2-drifted',
+      staleReasons: ['Clinic EZ v2 record changed since this conflict was logged.'],
+      valuesRevealed: Boolean(opts?.revealValues),
+      clinicalNotesRedactedByPolicy: true,
+      note: null,
+      fields: [
+        {
+          fieldName: 'firstName',
+          label: 'First Name',
+          classification: 'MODIFIED' as const,
+          isChanged: true,
+          sensitivity: 'PII_MASKED' as const,
+          v1Preview: 'J*** (4 chars)',
+          v2Preview: 'P*** (5 chars)',
+          ...(opts?.revealValues ? { v1Value: 'Juan', v2Value: 'Pedro' } : {}),
+        },
+        {
+          fieldName: 'middleName',
+          label: 'Middle Name',
+          classification: 'V2_FILLED_EMPTY' as const,
+          isChanged: true,
+          sensitivity: 'PII_MASKED' as const,
+          v1Preview: null,
+          v2Preview: 'C*** (4 chars)',
+          ...(opts?.revealValues ? { v1Value: null, v2Value: 'Cruz' } : {}),
+        },
+        {
+          fieldName: 'email',
+          label: 'Email Address',
+          classification: 'V2_CLEARED_VALUE' as const,
+          isChanged: true,
+          sensitivity: 'PII_MASKED' as const,
+          v1Preview: 'j***@***.ph (16 chars)',
+          v2Preview: null,
+        },
+        {
+          fieldName: 'contactNumber',
+          label: 'Contact Number',
+          classification: 'FORMAT_ONLY' as const,
+          isChanged: true,
+          sensitivity: 'PII_MASKED' as const,
+          v1Preview: '•••••• (13 chars)',
+          v2Preview: '•••••• (11 chars)',
+        },
+      ],
+    }));
+
+    const tree = mountReactTree(
+      <V1SyncPage
+        initialProfile={adminWithPerm}
+        initialPermissionsLoading={false}
+        initialSelectedBindingId="11111111-1111-1111-1111-111111111111"
+        initialMfaVerified={true}
+      />
+    );
+    await flushMicrotasks();
+
+    // Click Review Diff on conflict row
+    const reviewDiffBtn = findElements(
+      tree.tree,
+      (el) => el.type === 'button' && textContent(el).includes('Review Diff')
+    )[0];
+    expect(reviewDiffBtn).toBeDefined();
+    reviewDiffBtn.props.onClick();
+    await flushMicrotasks();
+
+    expect(v1SyncService.getConflictDetail).toHaveBeenCalledWith('conflict-1', { revealValues: false });
+    expect(tree.html).toContain('Stale Conflict Warning');
+    expect(tree.html).toContain('Clinic EZ v2 record changed since this conflict was logged.');
+    expect(tree.html).toContain('v2 Filled Empty');
+    expect(tree.html).toContain('v2 Cleared Value');
+    expect(tree.html).toContain('Modified');
+    expect(tree.html).toContain('Format Only');
+    expect(tree.html).toContain('Zero-PHI Mode');
+    expect(tree.html).not.toContain('Pedro');
+
+    // Trigger Tier 2 break-glass reveal
+    const revealToggleBtn = findElements(
+      tree.tree,
+      (el) => el.type === 'button' && textContent(el).includes('Reveal Unmasked Values')
+    )[0];
+    expect(revealToggleBtn).toBeDefined();
+    expect(revealToggleBtn.props.disabled).toBe(false);
+    revealToggleBtn.props.onClick();
+    await flushMicrotasks();
+
+    const reasonInput = findElements(
+      tree.tree,
+      (el) => el.type === 'input' && el.props.id === 'break-glass-reason'
+    )[0];
+    expect(reasonInput).toBeDefined();
+    reasonInput.props.onChange({ target: { value: 'Verifying clinic patient name correction' } });
+    await flushMicrotasks();
+
+    const confirmRevealBtn = findElements(
+      tree.tree,
+      (el) => el.type === 'button' && textContent(el).includes('Confirm & Reveal Unmasked')
+    )[0];
+    expect(confirmRevealBtn).toBeDefined();
+    expect(confirmRevealBtn.props.disabled).toBe(false);
+    confirmRevealBtn.props.onClick();
+    await flushMicrotasks();
+
+    expect(v1SyncService.getConflictDetail).toHaveBeenLastCalledWith('conflict-1', {
+      revealValues: true,
+      reason: 'Verifying clinic patient name correction',
+    });
+    expect(tree.html).toContain('Break-Glass Unmasked');
+    expect(tree.html).toContain('Pedro');
+
+    // Resolve directly from drawer via Keep v2 -> refreshes conflicts and parity
+    const parityCallsBefore = (v1SyncService.getParityReport as any).mock.calls.length;
+    const dialogEl = findElements(
+      tree.tree,
+      (el) => el.props?.role === 'dialog' && String(el.props['aria-label'] ?? '').includes('Conflict Diff Inspector')
+    )[0];
+    const keepV2InDrawer = findElements(
+      dialogEl,
+      (el) => el.type === 'button' && textContent(el).trim() === 'Keep v2'
+    )[0];
+    expect(keepV2InDrawer).toBeDefined();
+    keepV2InDrawer.props.onClick();
+    await flushMicrotasks();
+
+    expect(v1SyncService.resolveConflict).toHaveBeenCalledWith('conflict-1', 'KEEP_V2', adminWithPerm.email);
+    expect((v1SyncService.getParityReport as any).mock.calls.length).toBeGreaterThan(parityCallsBefore);
+
+    tree.unmount();
+  });
+
+  test('ConflictDiffDrawer disables break-glass without MFA and ConflictsReviewCard exports Zero-PHI CSV/JSON reports', async () => {
+    const tree = mountReactTree(
+      <V1SyncPage
+        initialProfile={adminWithPerm}
+        initialPermissionsLoading={false}
+        initialSelectedBindingId="11111111-1111-1111-1111-111111111111"
+        initialMfaVerified={false}
+      />
+    );
+    await flushMicrotasks();
+
+    const exportCsvBtn = findElements(
+      tree.tree,
+      (el) => el.type === 'button' && textContent(el).includes('Export CSV')
+    )[0];
+    const exportJsonBtn = findElements(
+      tree.tree,
+      (el) => el.type === 'button' && textContent(el).includes('Export JSON')
+    )[0];
+    expect(exportCsvBtn).toBeDefined();
+    expect(exportJsonBtn).toBeDefined();
+
+    exportCsvBtn.props.onClick();
+    await flushMicrotasks();
+    expect(v1SyncService.exportConflictsReport).toHaveBeenCalledWith(
+      '11111111-1111-1111-1111-111111111111',
+      { status: 'ALL', format: 'csv' }
+    );
+
+    exportJsonBtn.props.onClick();
+    await flushMicrotasks();
+    expect(v1SyncService.exportConflictsReport).toHaveBeenCalledWith(
+      '11111111-1111-1111-1111-111111111111',
+      { status: 'ALL', format: 'json' }
+    );
+
+    // Open Review Diff without MFA -> Reveal Unmasked Values is disabled
+    const reviewDiffBtn = findElements(
+      tree.tree,
+      (el) => el.type === 'button' && textContent(el).includes('Review Diff')
+    )[0];
+    reviewDiffBtn.props.onClick();
+    await flushMicrotasks();
+
+    const revealBtn = findElements(
+      tree.tree,
+      (el) => el.type === 'button' && textContent(el).includes('Reveal Unmasked Values')
+    )[0];
+    expect(revealBtn).toBeDefined();
+    expect(revealBtn.props.disabled).toBe(true);
+    expect(tree.html).toContain('Active Multi-Factor Authentication (MFA)');
+
+    tree.unmount();
   });
 });
