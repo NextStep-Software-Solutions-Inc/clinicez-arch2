@@ -6,9 +6,13 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.V1Sync.Api.Auth;
+using ClinicEz.V1Sync.Api.Services.Storage;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -254,5 +258,58 @@ public sealed class V1SyncAuthMiddlewareTests
 
         res.Allowed.Should().Be(expectedAllowed);
         res.StatusCode.Should().Be(expectedCode);
+    }
+
+    [Fact]
+    public async Task DevelopmentEnvironment_ExposesScalarAndOpenApi_UsesCloudflareR2WhenServiceUrlCleared_AndKeepsAuthStrict()
+    {
+        using var devFactory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment(Environments.Development);
+            builder.ConfigureAppConfiguration((_, cfg) =>
+            {
+                cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:SyncLedgerDb"] = "",
+                    ["ConnectionStrings:V1Source"] = "",
+                    ["ConnectionStrings:ClinicDb"] = "",
+                    ["ConnectionStrings:PatientDb"] = "",
+                    ["V1Sync:AllowUnauthenticatedLocalDev"] = "false",
+                    ["Track3Storage:ClinicR2:ServiceUrl"] = "",
+                    ["Track3Storage:ClinicR2:AccountId"] = "dev-account-id",
+                    ["Track3Storage:ClinicR2:BucketName"] = "clinicez-clinic-dev",
+                    ["Track3Storage:ClinicR2:AccessKeyId"] = "ak-dev",
+                    ["Track3Storage:ClinicR2:SecretAccessKey"] = "sk-dev",
+                    ["Track3Storage:ClinicR2:Region"] = "auto",
+                    ["Track3Storage:PatientR2:ServiceUrl"] = "",
+                    ["Track3Storage:PatientR2:AccountId"] = "dev-account-id",
+                    ["Track3Storage:PatientR2:BucketName"] = "clinicez-patient-dev",
+                    ["Track3Storage:PatientR2:AccessKeyId"] = "ak-dev",
+                    ["Track3Storage:PatientR2:SecretAccessKey"] = "sk-dev",
+                    ["Track3Storage:PatientR2:Region"] = "auto",
+                });
+            });
+        });
+
+        using var client = devFactory.CreateClient();
+
+        var scalarResp = await client.GetAsync("/scalar/v1");
+        scalarResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var scalarHtml = await scalarResp.Content.ReadAsStringAsync();
+        scalarHtml.Should().Contain("Clinic EZ v1 Migration");
+
+        var openApiResp = await client.GetAsync("/openapi/v1.json");
+        openApiResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var openApiJson = await openApiResp.Content.ReadAsStringAsync();
+        openApiJson.Should().Contain("/api/v1/v1-sync/status");
+
+        var statusResp = await client.GetAsync("/api/v1/v1-sync/status");
+        statusResp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var r2Pool = devFactory.Services.GetRequiredService<Track3R2ClientPool>();
+        r2Pool.ClinicEndpointKind.Should().Be("cloudflare-r2");
+        r2Pool.PatientEndpointKind.Should().Be("cloudflare-r2");
+        r2Pool.IsClinicConfigured.Should().BeTrue();
+        r2Pool.IsPatientConfigured.Should().BeTrue();
     }
 }

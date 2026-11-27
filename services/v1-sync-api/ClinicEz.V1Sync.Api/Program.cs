@@ -15,11 +15,14 @@ using ClinicEz.V1Sync.Api.Services.Storage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,6 +67,13 @@ if (!string.IsNullOrWhiteSpace(clerkAuthority))
 }
 
 builder.Services.AddAuthorization();
+builder.Services.AddOpenApi();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddHttpClient("PortalAdminAuth", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
@@ -196,12 +206,28 @@ if (connections.HasSyncLedgerDb)
     await runtimeSettings.InitializeAsync();
 }
 
+app.UseForwardedHeaders();
 app.UseCors();
 if (!string.IsNullOrWhiteSpace(clerkAuthority))
 {
     app.UseAuthentication();
     app.UseAuthorization();
 }
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi().AllowAnonymous();
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ v1 Migration & Sync API")).AllowAnonymous();
+}
+
+var startupR2Pool = app.Services.GetRequiredService<Track3R2ClientPool>();
+app.Logger.LogInformation(
+    "v1-sync-api storage endpoints initialized: Clinic={ClinicEndpoint} (configured={ClinicConfigured}), Patient={PatientEndpoint} (configured={PatientConfigured}), Environment={EnvironmentName}",
+    startupR2Pool.ClinicEndpointKind,
+    startupR2Pool.IsClinicConfigured,
+    startupR2Pool.PatientEndpointKind,
+    startupR2Pool.IsPatientConfigured,
+    app.Environment.EnvironmentName);
 
 app.MapGet("/health", () => Results.Ok(new
 {

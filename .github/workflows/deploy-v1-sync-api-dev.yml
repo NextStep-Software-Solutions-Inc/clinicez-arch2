@@ -124,9 +124,10 @@ jobs:
 
       - name: Create .env file
         env:
-          # Keep ASPNETCORE_ENVIRONMENT=Production on remote hosts so local appsettings.Development.json
-          # overrides (127.0.0.1 MinIO / AllowUnauthenticatedLocalDev) never activate remotely.
-          ASPNETCORE_ENVIRONMENT: Production
+          # Run ASPNETCORE_ENVIRONMENT=Development on remote dev so Scalar API docs (/scalar/v1) are available.
+          # docker-compose.yml explicitly enforces V1Sync__AllowUnauthenticatedLocalDev=false and clears
+          # Track3Storage__*__ServiceUrl + sets Region=auto so remote dev always uses Cloudflare R2 (never MinIO).
+          ASPNETCORE_ENVIRONMENT: Development
           ENVIRONMENT_LABEL: dev
           V1_SYNC_ENVIRONMENT_LABEL: DEV
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
@@ -168,7 +169,7 @@ jobs:
             echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
-          for var in CLINIC_DB_CONNECTION_STRING PATIENT_DB_CONNECTION_STRING CLERK_AUTHORITY; do
+          for var in CLINIC_DB_CONNECTION_STRING PATIENT_DB_CONNECTION_STRING CLERK_AUTHORITY CLINIC_R2_ACCOUNT_ID CLINIC_R2_BUCKET_NAME CLINIC_R2_ACCESS_KEY_ID CLINIC_R2_SECRET_ACCESS_KEY PATIENT_R2_ACCOUNT_ID PATIENT_R2_BUCKET_NAME PATIENT_R2_ACCESS_KEY_ID PATIENT_R2_SECRET_ACCESS_KEY; do
             if [ -z "$(printenv $var)" ]; then
               echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
               exit 1
@@ -232,6 +233,7 @@ jobs:
           script: |
             set -e
             cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
+            chmod 600 .env
 
             echo "==> Ensuring networks exist..."
             DATA_NET=$(grep -E '^DATA_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')

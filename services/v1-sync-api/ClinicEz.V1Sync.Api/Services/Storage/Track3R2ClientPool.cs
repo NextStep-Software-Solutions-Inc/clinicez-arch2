@@ -24,6 +24,8 @@ public sealed class Track3R2ClientPool : IDisposable
     private readonly bool _patientDisablePayloadSigning;
     private readonly string _clinicBucket;
     private readonly string _patientBucket;
+    private readonly string _clinicEndpointKind;
+    private readonly string _patientEndpointKind;
 
     public Track3R2ClientPool(
         IOptions<Track3StorageOptions> options,
@@ -42,6 +44,8 @@ public sealed class Track3R2ClientPool : IDisposable
         var patientServiceUrl = _hasPatientCredentials ? ResolveServiceUrl(_options.PatientR2) : null;
         _clinicDisablePayloadSigning = IsHttpsEndpoint(clinicServiceUrl);
         _patientDisablePayloadSigning = IsHttpsEndpoint(patientServiceUrl);
+        _clinicEndpointKind = DescribeEndpointKind(clinicServiceUrl);
+        _patientEndpointKind = DescribeEndpointKind(patientServiceUrl);
 
         _clinicClient = new Lazy<IAmazonS3?>(() =>
             _hasClinicCredentials ? BuildClient(_options.ClinicR2, clinicServiceUrl!) : null);
@@ -66,6 +70,8 @@ public sealed class Track3R2ClientPool : IDisposable
         _hasPatientCredentials = patientClient is not null && !string.IsNullOrWhiteSpace(_patientBucket);
         _clinicDisablePayloadSigning = ShouldDisablePayloadSigning(clinicClient);
         _patientDisablePayloadSigning = ShouldDisablePayloadSigning(patientClient);
+        _clinicEndpointKind = _hasClinicCredentials ? "injected-client" : "unconfigured";
+        _patientEndpointKind = _hasPatientCredentials ? "injected-client" : "unconfigured";
         _clinicClient = new Lazy<IAmazonS3?>(() => clinicClient);
         _patientClient = new Lazy<IAmazonS3?>(() => patientClient);
     }
@@ -80,6 +86,8 @@ public sealed class Track3R2ClientPool : IDisposable
     public bool IsPatientPayloadSigningDisabled => _patientDisablePayloadSigning;
     public string ClinicBucketName => _clinicBucket;
     public string PatientBucketName => _patientBucket;
+    public string ClinicEndpointKind => _clinicEndpointKind;
+    public string PatientEndpointKind => _patientEndpointKind;
 
     public async Task<string> PutEncryptedAsync(
         bool isClinic,
@@ -234,6 +242,20 @@ public sealed class Track3R2ClientPool : IDisposable
         !string.IsNullOrWhiteSpace(opts.ServiceUrl)
             ? opts.ServiceUrl.Trim().TrimEnd('/')
             : $"https://{opts.AccountId!.Trim()}.r2.cloudflarestorage.com";
+
+    private static string DescribeEndpointKind(string? serviceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(serviceUrl)) return "unconfigured";
+        if (Uri.TryCreate(serviceUrl, UriKind.Absolute, out var uri))
+        {
+            if (uri.Host.EndsWith(".r2.cloudflarestorage.com", StringComparison.OrdinalIgnoreCase))
+            {
+                return "cloudflare-r2";
+            }
+            return $"{uri.Scheme}://{uri.Host}{(uri.IsDefaultPort ? string.Empty : $":{uri.Port}")}";
+        }
+        return "custom-s3";
+    }
 
     private static bool IsHttpsEndpoint(string? serviceUrl) =>
         Uri.TryCreate(serviceUrl?.Trim(), UriKind.Absolute, out var uri) &&

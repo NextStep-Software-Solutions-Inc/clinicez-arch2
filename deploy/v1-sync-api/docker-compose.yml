@@ -28,8 +28,8 @@ services:
           cpus: '${V1_SYNC_CPUS_LIMIT:-0.95}'
           memory: ${V1_SYNC_MEM_LIMIT:-512M}
     environment:
-      # Always run Production ASPNETCORE_ENVIRONMENT on remote hosts so appsettings.Development.json
-      # local overrides (127.0.0.1 MinIO / AllowUnauthenticatedLocalDev) can never leak remotely.
+      # Development enables Scalar API docs (/scalar/v1) while V1Sync__AllowUnauthenticatedLocalDev=false
+      # and explicit empty *_ServiceUrl + Region=auto guarantee strict Clerk RBAC and Cloudflare R2 (never MinIO).
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
       - ASPNETCORE_URLS=http://+:8080
       - DOTNET_GCHeapHardLimitPercent=75
@@ -53,17 +53,21 @@ services:
       - ConnectionStrings__PatientDb=${PATIENT_DB_CONNECTION_STRING:?PATIENT_DB_CONNECTION_STRING must be set}
       - ConnectionStrings__SyncLedgerDb=${SYNC_LEDGER_DB_CONNECTION_STRING:?SYNC_LEDGER_DB_CONNECTION_STRING must be set}
 
-      # Object Storage credentials — reuses existing Clinic & Patient R2/S3 env vars (with shared R2_* fallback)
+      # Object Storage credentials — Cloudflare R2 by default (empty ServiceUrl + Region=auto overrides local MinIO defaults)
       - Track3Storage__ClinicR2__ServiceUrl=${CLINIC_S3_SERVICE_URL:-${S3_SERVICE_URL:-}}
       - Track3Storage__ClinicR2__AccountId=${CLINIC_R2_ACCOUNT_ID:-${R2_ACCOUNT_ID:-}}
       - Track3Storage__ClinicR2__BucketName=${CLINIC_R2_BUCKET_NAME:-${R2_BUCKET_NAME:-}}
       - Track3Storage__ClinicR2__AccessKeyId=${CLINIC_R2_ACCESS_KEY_ID:-${R2_ACCESS_KEY_ID:-}}
       - Track3Storage__ClinicR2__SecretAccessKey=${CLINIC_R2_SECRET_ACCESS_KEY:-${R2_SECRET_ACCESS_KEY:-}}
+      - Track3Storage__ClinicR2__Region=${CLINIC_R2_REGION:-auto}
+      - Track3Storage__ClinicR2__ForcePathStyle=${CLINIC_R2_FORCE_PATH_STYLE:-true}
       - Track3Storage__PatientR2__ServiceUrl=${PATIENT_S3_SERVICE_URL:-${S3_SERVICE_URL:-}}
       - Track3Storage__PatientR2__AccountId=${PATIENT_R2_ACCOUNT_ID:-${R2_ACCOUNT_ID:-}}
       - Track3Storage__PatientR2__BucketName=${PATIENT_R2_BUCKET_NAME:-${R2_BUCKET_NAME:-}}
       - Track3Storage__PatientR2__AccessKeyId=${PATIENT_R2_ACCESS_KEY_ID:-${R2_ACCESS_KEY_ID:-}}
       - Track3Storage__PatientR2__SecretAccessKey=${PATIENT_R2_SECRET_ACCESS_KEY:-${R2_SECRET_ACCESS_KEY:-}}
+      - Track3Storage__PatientR2__Region=${PATIENT_R2_REGION:-auto}
+      - Track3Storage__PatientR2__ForcePathStyle=${PATIENT_R2_FORCE_PATH_STYLE:-true}
 
       # Envelope Encryption Master Secrets — reuses exact clinic-api & patient-api secrets
       - ClinicEncryption__MasterSecret=${CLINIC_ENCRYPTION_MASTER_SECRET:-}
