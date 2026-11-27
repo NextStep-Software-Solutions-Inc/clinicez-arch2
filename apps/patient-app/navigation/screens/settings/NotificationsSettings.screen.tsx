@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, View, Pressable } from 'react-native';
 import { useAppTheme } from '../../../contexts/ThemeContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import ThemedText from '@ui/ThemedText';
 import { useNotificationContext } from '../../../contexts/NotificationContext';
@@ -12,7 +13,7 @@ import {
   type NotificationPreference,
 } from '../../../services/notifications/notificationPreferencesService';
 import {
-  clearAllNotifications,
+  clearAllNotificationsWithSync,
   scheduleLocalNotification,
   seedMockNotifications,
 } from '../../../services/notifications/notificationService';
@@ -59,6 +60,7 @@ function PermissionWarningBanner({ onPress }: { onPress: () => void }) {
 export default function NotificationsSettingsScreen() {
   const { colors, spacing } = useAppTheme();
   const patientId = usePatientId();
+  const { getToken } = useAuth();
   const { permissionStatus, requestPermissions, refreshNotifications } =
     useNotificationContext();
 
@@ -115,7 +117,7 @@ export default function NotificationsSettingsScreen() {
           text: 'Clear All',
           style: 'destructive',
           onPress: async () => {
-            await clearAllNotifications(patientId);
+            await clearAllNotificationsWithSync(getToken, patientId);
             refreshNotifications();
           },
         },

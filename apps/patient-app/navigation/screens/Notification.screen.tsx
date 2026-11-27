@@ -14,13 +14,14 @@ import ThemedText from '../../components/ui/ThemedText';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
 import { FilterChipBar, type FilterChipItem } from '../../components/ui/FilterChipBar';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationContext } from '../../contexts/NotificationContext';
 import { usePersistedTab } from '../../hooks/usePersistedTab';
 import { usePatientId } from '../../hooks/usePatientId';
 import {
   getNotifications,
-  markAllAsRead,
-  deleteNotification,
+  markAllAsReadWithSync,
+  deleteNotificationWithSync,
   type NotificationFilter,
 } from '../../services/notifications/notificationService';
 import { dialog } from '../../utils/dialog';
@@ -307,6 +308,7 @@ export default function NotificationScreen() {
   const { colors, spacing } = useAppTheme();
   const navigation = useNavigation();
   const patientId = usePatientId();
+  const { getToken } = useAuth();
   const insets = useSafeAreaInsets();
   const { unreadCount, refreshNotifications, permissionStatus, requestPermissions } =
     useNotificationContext();
@@ -321,10 +323,12 @@ export default function NotificationScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleMarkAllRead = useCallback(async () => {
-    await markAllAsRead(patientId);
-    setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setItems((prev) =>
+      activeFilter === 'unread' ? [] : prev.map((n) => ({ ...n, isRead: true })),
+    );
+    await markAllAsReadWithSync(getToken, patientId);
     refreshNotifications();
-  }, [patientId, refreshNotifications]);
+  }, [activeFilter, getToken, patientId, refreshNotifications]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -366,7 +370,9 @@ export default function NotificationScreen() {
     async (item: NotificationRow) => {
       if (!item.isRead) {
         setItems((prev) =>
-          prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
+          activeFilter === 'unread'
+            ? prev.filter((n) => n.id !== item.id)
+            : prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
         );
       }
       navigation.navigate('Main', {
@@ -374,16 +380,16 @@ export default function NotificationScreen() {
         params: { notification: item },
       } as any);
     },
-    [navigation],
+    [activeFilter, navigation],
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
-      await deleteNotification(id);
+      await deleteNotificationWithSync(getToken, patientId, id);
       setItems((prev) => prev.filter((n) => n.id !== id));
       refreshNotifications();
     },
-    [refreshNotifications],
+    [getToken, patientId, refreshNotifications],
   );
 
   const filterItems: ReadonlyArray<FilterChipItem<NotificationFilter>> = useMemo(

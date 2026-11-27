@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth, useUser } from '@clerk/expo';
 import { isToday, isFuture, isPast, parseISO } from 'date-fns';
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, isNull } from 'drizzle-orm';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import { ActiveSearchBanner, SearchModal } from '../../components/ui/SearchModal';
 import { AppIcon } from '../../components/ui/Icon';
@@ -166,7 +166,7 @@ export default function AppointmentsScreen() {
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
 
-  // Load patient metadata and unread notifications
+  // Load patient metadata
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -184,11 +184,32 @@ export default function AppointmentsScreen() {
               avatarUrl: user?.imageUrl || null,
             });
           }
+        }
+      } catch {
+        // Safe fallback
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [patientId, user]);
 
+  // Keep local unread notification count synced when notifications change
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if (patientId) {
           const nRows = await dbRef.current
             .select()
             .from(notificationsTable)
-            .where(and(eq(notificationsTable.patientId, patientId), eq(notificationsTable.isRead, false)));
+            .where(
+              and(
+                eq(notificationsTable.patientId, patientId),
+                eq(notificationsTable.isRead, false),
+                isNull(notificationsTable.deletedAt),
+              ),
+            );
           if (mounted) {
             setUnreadNotificationsCount(nRows.length);
           }
@@ -200,7 +221,7 @@ export default function AppointmentsScreen() {
     return () => {
       mounted = false;
     };
-  }, [patientId, user]);
+  }, [patientId, unreadCount]);
 
   // Load live suggested services catalog from backend/SQLite
   useEffect(() => {

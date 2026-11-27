@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useAppTheme } from '../../../contexts/ThemeContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import ThemedText from '@ui/ThemedText';
 import { useNotificationContext } from '../../../contexts/NotificationContext';
@@ -12,7 +13,7 @@ import {
   type NotificationPreference,
 } from '../../../services/notifications/notificationPreferencesService';
 import {
-  clearAllNotifications,
+  clearAllNotificationsWithSync,
   seedMockNotifications,
 } from '../../../services/notifications/notificationService';
 import type { NotificationCategory } from '@db/schema/notifications';
@@ -21,6 +22,7 @@ import { dialog } from '@utils/dialog';
 export default function NotificationsSettingsScreenWeb() {
   const { colors, spacing, radii, sizes } = useAppTheme();
   const patientId = usePatientId();
+  const { getToken } = useAuth();
   const { refreshNotifications } = useNotificationContext();
 
   const [prefs, setPrefs] = useState<NotificationPreference[]>([]);
@@ -59,7 +61,7 @@ export default function NotificationsSettingsScreenWeb() {
           text: 'Clear All',
           style: 'destructive',
           onPress: async () => {
-            await clearAllNotifications(patientId);
+            await clearAllNotificationsWithSync(getToken, patientId);
             refreshNotifications();
           },
         },
