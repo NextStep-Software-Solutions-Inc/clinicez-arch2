@@ -167,7 +167,7 @@ export function SelectField({
       return;
     }
     updatePortalPosition();
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     const handleReposition = () => updatePortalPosition();
     window.addEventListener('resize', handleReposition);
     window.addEventListener('scroll', handleReposition, { capture: true, passive: true });
@@ -179,7 +179,7 @@ export function SelectField({
 
   // Close when clicking outside or pressing Escape globally
   useEffect(() => {
-    if (!open || typeof document === 'undefined') return;
+    if (!open || typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
 
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
