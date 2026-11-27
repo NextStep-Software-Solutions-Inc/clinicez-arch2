@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,6 +17,7 @@ export interface SlotPickerProps {
   date: string; // YYYY-MM-DD
   selectedSlot?: string; // e.g. "09:00" or "09:00:00"
   onSelectSlot: (slot: AvailableSlotItem) => void;
+  onSlotsLoaded?: (slots: AvailableSlotItem[]) => void;
   interval?: number;
   disabled?: boolean;
 }
@@ -39,6 +40,7 @@ export const SlotPicker: React.FC<SlotPickerProps> = ({
   date,
   selectedSlot,
   onSelectSlot,
+  onSlotsLoaded,
   interval = 30,
   disabled = false,
 }) => {
@@ -49,6 +51,15 @@ export const SlotPicker: React.FC<SlotPickerProps> = ({
       interval,
       enabled: !!doctorId && !!date,
     });
+
+  const onSlotsLoadedRef = useRef(onSlotsLoaded);
+  onSlotsLoadedRef.current = onSlotsLoaded;
+
+  useEffect(() => {
+    if (!loading && !error && doctorId && date && onSlotsLoadedRef.current) {
+      onSlotsLoadedRef.current(slots);
+    }
+  }, [loading, error, doctorId, date, slots]);
 
   const groupedSlots = useMemo(() => {
     const morning: AvailableSlotItem[] = [];

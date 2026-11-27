@@ -64,10 +64,13 @@ public sealed class SubmitPractitionerVerificationCommandHandler : IRequestHandl
             throw new ValidationException("Inactive staff members cannot be submitted for directory verification.");
         }
 
-        if (staff.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification)
+        if (staff.PublicVerificationStatus is PractitionerVerificationLevel.PendingVerification
+                or PractitionerVerificationLevel.AwaitingConfirmation)
         {
             throw new VerificationConflictException(
-                "A practitioner verification submission is already pending for this staff member. Save updates to the pending submission instead.",
+                staff.PublicVerificationStatus == PractitionerVerificationLevel.AwaitingConfirmation
+                    ? "This practitioner is already awaiting affiliation confirmation via email. Save updates to the pending submission instead."
+                    : "A practitioner verification submission is already pending for this staff member. Save updates to the pending submission instead.",
                 currentStatus: staff.PublicVerificationStatus.ToString());
         }
 

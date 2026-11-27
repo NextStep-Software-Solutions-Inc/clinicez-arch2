@@ -16,6 +16,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Portal.Application.Features.DirectoryVerification;
 
@@ -452,6 +453,45 @@ public static class DirectoryVerificationHelper
         }
     }
 
+    public static void StageFacilityPractitionerStatusUpdate(
+        IInteropPublisher? publisher,
+        Facility facility,
+        Guid tenantId,
+        Guid clinicStaffMemberId,
+        Guid? matchedPractitionerId,
+        string professionKind,
+        string normalizedPrcLicenseNo,
+        string displayPrcLicenseNo,
+        DateOnly? prcExpiryDate,
+        PractitionerVerificationLevel verificationLevel,
+        string affiliationStatus,
+        Guid correlationId)
+    {
+        if (publisher is null || facility.IsDeleted || facility.Status is not (FacilityStatus.Provisioning or FacilityStatus.Active))
+            return;
+
+        var payload = new PractitionerIdentityUpdatedPayload
+        {
+            PractitionerId = matchedPractitionerId ?? Guid.Empty,
+            ProfessionKind = professionKind,
+            NormalizedPrcLicenseNo = normalizedPrcLicenseNo,
+            DisplayPrcLicenseNo = string.IsNullOrWhiteSpace(displayPrcLicenseNo) ? normalizedPrcLicenseNo : displayPrcLicenseNo.Trim(),
+            PrcExpiryDate = prcExpiryDate,
+            VerificationLevel = verificationLevel,
+            TenantId = tenantId.ToString(),
+            FacilityId = facility.Id,
+            ClinicStaffMemberId = clinicStaffMemberId,
+            AffiliationStatus = affiliationStatus
+        };
+
+        publisher.Enqueue(
+            InteropTypes.PractitionerIdentityUpdated,
+            Party.Portal,
+            Party.ForFacility(tenantId.ToString(), facility.Id.ToString(), facility.FacilityType),
+            correlationId,
+            payload);
+    }
+
     public static void TryEnqueueAffiliationConfirmationEmail(
         INotificationService? notifications,
         IFrontendUrlProvider? frontendUrlProvider,
@@ -461,14 +501,33 @@ public static class DirectoryVerificationHelper
         string professionKind,
         string rawToken,
         string otpCode,
-        Guid correlationId)
+        Guid correlationId,
+        ILogger? logger = null)
     {
-        if (notifications is null || string.IsNullOrWhiteSpace(contact))
+        if (notifications is null)
+        {
+            logger?.LogWarning(
+                "Skipped affiliation confirmation email for request {CorrelationId} ({PractitionerName} at {FacilityName}): INotificationService is not configured.",
+                correlationId, practitionerName, facilityName);
             return;
+        }
+
+        if (string.IsNullOrWhiteSpace(contact))
+        {
+            logger?.LogWarning(
+                "Skipped affiliation confirmation email for request {CorrelationId} ({PractitionerName} at {FacilityName}): VerificationContact is empty.",
+                correlationId, practitionerName, facilityName);
+            return;
+        }
 
         var trimmedContact = contact.Trim();
         if (!MailAddress.TryCreate(trimmedContact, out var parsed) || !string.Equals(parsed.Address, trimmedContact, StringComparison.OrdinalIgnoreCase))
+        {
+            logger?.LogWarning(
+                "Skipped affiliation confirmation email for request {CorrelationId} ({PractitionerName} at {FacilityName}): VerificationContact '{Contact}' is not a valid email address.",
+                correlationId, practitionerName, facilityName, trimmedContact);
             return;
+        }
 
         var baseUrl = frontendUrlProvider?.GetBaseUrl();
         if (string.IsNullOrWhiteSpace(baseUrl) || !Uri.TryCreate(baseUrl, UriKind.Absolute, out _))
@@ -478,7 +537,7 @@ public static class DirectoryVerificationHelper
 
         var confirmUrl = $"{baseUrl.TrimEnd('/')}/verify/practitioner?token={Uri.EscapeDataString(rawToken)}";
 
-        notifications.EnqueueEmail(new NotificationEmailRequestedPayload
+        var jobId = notifications.EnqueueEmail(new NotificationEmailRequestedPayload
         {
             To = trimmedContact,
             Subject = $"Confirm your clinic affiliation with {facilityName}",
@@ -492,5 +551,9 @@ public static class DirectoryVerificationHelper
                 ["otpCode"] = otpCode
             }
         }, correlationId);
+
+        logger?.LogInformation(
+            "Enqueued affiliation confirmation email job {JobId} for request {CorrelationId} to {To} ({PractitionerName} at {FacilityName}).",
+            jobId, correlationId, trimmedContact, practitionerName, facilityName);
     }
 }

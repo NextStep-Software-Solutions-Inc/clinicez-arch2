@@ -715,7 +715,8 @@ export default function StaffManagementTab({
       isTargetClinician &&
         targetStaff &&
         targetStaff.isDirectoryOptIn &&
-        targetStaff.publicVerificationStatus === 'PendingVerification',
+        (targetStaff.publicVerificationStatus === 'PendingVerification' ||
+          targetStaff.publicVerificationStatus === 'AwaitingConfirmation'),
     );
     const isTargetFacilityPending = Boolean(
       !isTargetStaffPending &&
@@ -1007,7 +1008,8 @@ export default function StaffManagementTab({
     const isPractitionerPending =
       !isEditingPendingInvite &&
       effectiveOptIn &&
-      editingStaff.publicVerificationStatus === 'PendingVerification';
+      (editingStaff.publicVerificationStatus === 'PendingVerification' ||
+        editingStaff.publicVerificationStatus === 'AwaitingConfirmation');
     const isFacilityPendingForStaff =
       !isEditingPendingInvite &&
       effectiveOptIn &&
@@ -1087,7 +1089,11 @@ export default function StaffManagementTab({
       if (isPractitionerPending && syncedStaff && 'id' in syncedStaff) {
         finalUpdated = syncedStaff as StaffMember;
       }
-    } else if ((needsVerificationSubmit || prcCredentialsChangedWhileVerified) && updated.publicVerificationStatus !== 'PendingVerification') {
+    } else if (
+      (needsVerificationSubmit || prcCredentialsChangedWhileVerified) &&
+      updated.publicVerificationStatus !== 'PendingVerification' &&
+      updated.publicVerificationStatus !== 'AwaitingConfirmation'
+    ) {
       const [submitted, submitErr] = await clinicService.submitStaffVerification(updated.id);
       if (submitErr || !submitted) {
         setSavingEdit(false);
@@ -1644,19 +1650,11 @@ export default function StaffManagementTab({
       mode === 'edit' &&
       isDirectoryOptIn &&
       hasVerifiedPrcCredentialEdits;
-    const isPendingPractitionerOrFacility =
+    const isAwaitingConfirmation =
       mode === 'edit' &&
       Boolean(editingStaff) &&
       isDirectoryOptIn &&
-      (editingStaff?.publicVerificationStatus === 'PendingVerification' ||
-        (Boolean(editingStaff?.isDirectoryOptIn) &&
-          !showVerifiedReverificationNotice &&
-          Boolean(editingStaff?.publicVerificationStatus) &&
-          editingStaff?.publicVerificationStatus !== 'Unverified' &&
-          editingStaff?.publicVerificationStatus !== 'Rejected' &&
-          editingStaff?.publicVerificationStatus !== 'Expired' &&
-          editingStaff?.publicVerificationStatus !== 'Suspended' &&
-          platformVerificationStatus === 'PendingReview'));
+      editingStaff?.publicVerificationStatus === 'AwaitingConfirmation';
     const targetStaffId = mode === 'edit' ? editingStaff?.id : undefined;
 
     return (
@@ -1693,6 +1691,17 @@ export default function StaffManagementTab({
             <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
             <ThemedText variant="caption" color={theme.colors.emergencyText} style={styles.flex1}>
               {editingStaff.publicVerificationReason}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {isAwaitingConfirmation ? (
+          <View style={styles.selfRoleNoticeBox} testID="staff-awaiting-confirmation-notice">
+            <Icon name="mail" size={theme.sizes.iconSm} color={theme.colors.primary} />
+            <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
+              {editingStaff?.verificationContact
+                ? `PRC license already verified. A confirmation link and 6-digit code were sent to ${editingStaff.verificationContact}. Updating Verification Contact and saving sends a fresh confirmation email.`
+                : 'PRC license already verified and awaiting practitioner confirmation via email. Set a valid email under Verification Contact and save to send a confirmation link.'}
             </ThemedText>
           </View>
         ) : null}
@@ -1787,10 +1796,6 @@ export default function StaffManagementTab({
                 }
                 testID={`prc-proof-preview-${mode}`}
               />
-            ) : null}
-
-            {isPendingPractitionerOrFacility ? (
-              <PendingVerificationNote testID="staff-prc-pending-helper-note" />
             ) : null}
 
             <Input
@@ -2638,6 +2643,7 @@ export default function StaffManagementTab({
           !editNeedsSubmit &&
           !editNeedsResubmit &&
           (editingStaff.publicVerificationStatus === 'PendingVerification' ||
+            editingStaff.publicVerificationStatus === 'AwaitingConfirmation' ||
             platformVerificationStatus === 'PendingReview');
 
         return (

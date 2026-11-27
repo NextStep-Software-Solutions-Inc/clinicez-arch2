@@ -45,7 +45,8 @@ public sealed class DirectoryVerificationPendingUpdater(
     TimeProvider timeProvider,
     ILogger<DirectoryVerificationPendingUpdater> logger,
     INotificationService? notifications = null,
-    IFrontendUrlProvider? frontendUrlProvider = null) : IDirectoryVerificationPendingUpdater
+    IFrontendUrlProvider? frontendUrlProvider = null,
+    IInteropPublisher? interopPublisher = null) : IDirectoryVerificationPendingUpdater
 {
     private sealed record PendingOtpEmail(
         string Contact,
@@ -396,7 +397,8 @@ public sealed class DirectoryVerificationPendingUpdater(
                 email.ProfessionKind,
                 email.RawToken,
                 email.OtpCode,
-                email.CorrelationId);
+                email.CorrelationId,
+                logger);
         }
 
         logger.LogInformation(
@@ -625,7 +627,8 @@ public sealed class DirectoryVerificationPendingUpdater(
                 otpEmail.ProfessionKind,
                 otpEmail.RawToken,
                 otpEmail.OtpCode,
-                otpEmail.CorrelationId);
+                otpEmail.CorrelationId,
+                logger);
         }
 
         logger.LogInformation(
@@ -897,6 +900,23 @@ public sealed class DirectoryVerificationPendingUpdater(
             UpdatedAt = now
         };
 
+        if (status == "AwaitingOtp")
+        {
+            DirectoryVerificationHelper.StageFacilityPractitionerStatusUpdate(
+                interopPublisher,
+                facility,
+                facReq.TenantId,
+                item.ClinicStaffMemberId,
+                matched?.Id,
+                professionKind,
+                normalizedPrc,
+                item.SubmittedPrcLicenseNo,
+                item.PrcExpiryDate,
+                PractitionerVerificationLevel.AwaitingConfirmation,
+                "AwaitingConfirmation",
+                pracReq.Id);
+        }
+
         return (pracReq, emailToSend);
     }
 
@@ -938,6 +958,7 @@ public sealed class DirectoryVerificationPendingUpdater(
             || !string.Equals(oldSnap.LastName?.Trim(), lastName.Trim(), StringComparison.Ordinal);
         var contactChanged = !string.Equals(oldContact, trimmedContact, StringComparison.OrdinalIgnoreCase);
 
+        var previousStatus = pracReq.Status;
         var status = pracReq.Status;
         string? otpTokenHash = pracReq.OtpTokenHash;
         DateTime? otpExpiresAt = pracReq.OtpExpiresAtUtc;
@@ -1099,6 +1120,42 @@ public sealed class DirectoryVerificationPendingUpdater(
         pracReq.Status = status;
         pracReq.SubmittedSnapshotJson = JsonSerializer.Serialize(updatedSnap, InteropJson.Options);
         pracReq.UpdatedAt = now;
+
+        if (!string.Equals(previousStatus, status, StringComparison.Ordinal))
+        {
+            if (status == "AwaitingOtp")
+            {
+                DirectoryVerificationHelper.StageFacilityPractitionerStatusUpdate(
+                    interopPublisher,
+                    facility,
+                    pracReq.TenantId,
+                    pracReq.ClinicStaffMemberId,
+                    matchedPractitionerId,
+                    professionKind,
+                    normalizedPrc,
+                    submittedPrcLicenseNo.Trim(),
+                    prcExpiryDate,
+                    PractitionerVerificationLevel.AwaitingConfirmation,
+                    "AwaitingConfirmation",
+                    pracReq.Id);
+            }
+            else if (previousStatus == "AwaitingOtp" && status == "PendingReview")
+            {
+                DirectoryVerificationHelper.StageFacilityPractitionerStatusUpdate(
+                    interopPublisher,
+                    facility,
+                    pracReq.TenantId,
+                    pracReq.ClinicStaffMemberId,
+                    null,
+                    professionKind,
+                    normalizedPrc,
+                    submittedPrcLicenseNo.Trim(),
+                    prcExpiryDate,
+                    PractitionerVerificationLevel.PendingVerification,
+                    "PendingReview",
+                    pracReq.Id);
+            }
+        }
 
         return emailToSend;
     }

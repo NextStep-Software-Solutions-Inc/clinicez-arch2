@@ -9,5 +9,5 @@ namespace ClinicEz.Portal.Infrastructure.Notifications;
 public sealed class HangfireNotificationService(IBackgroundJobClient backgroundJobClient) : INotificationService
 {
     public string EnqueueEmail(NotificationEmailRequestedPayload payload, Guid correlationId) =>
-        backgroundJobClient.Enqueue<IEmailDispatchJob>(job => job.SendEmailAsync(payload, correlationId, CancellationToken.None));
+        backgroundJobClient.Enqueue<EmailDispatchJob>(job => job.SendEmailAsync(payload, correlationId, CancellationToken.None));
 }

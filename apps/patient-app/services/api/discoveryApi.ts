@@ -200,12 +200,23 @@ export async function getClinicDetail(
     clinicId: string,
     forPatientId?: string,
 ): Promise<ClinicDetail | null> {
+    const token = await getToken().catch(() => null);
+    const withPatientContext = Boolean(token && forPatientId);
+    const params = withPatientContext && forPatientId ? `?forPatientId=${encodeURIComponent(forPatientId)}` : '';
     try {
-        const params = forPatientId ? `?forPatientId=${forPatientId}` : '';
-        const data = await api.get<unknown>(getToken, `/clinics/${clinicId}${params}`);
+        const data = await api.get<unknown>(() => Promise.resolve(token), `/clinics/${clinicId}${params}`);
         return clinicDetailSchema.parse(data);
     } catch (err) {
         if (err instanceof ApiError && err.status === 404) return null;
+        if (withPatientContext && err instanceof ApiError && err.status === 403) {
+            try {
+                const publicData = await api.get<unknown>(() => Promise.resolve(token), `/clinics/${clinicId}`);
+                return clinicDetailSchema.parse(publicData);
+            } catch (retryErr) {
+                if (retryErr instanceof ApiError && retryErr.status === 404) return null;
+                throw retryErr;
+            }
+        }
         throw err;
     }
 }

@@ -334,7 +334,8 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
   const selectedDoctor = doctors.find((d) => d.id === selectedDoctorId);
   const isDoctorPending = Boolean(
     selectedDoctor?.isDirectoryOptIn &&
-      selectedDoctor.publicVerificationStatus === 'PendingVerification'
+      (selectedDoctor.publicVerificationStatus === 'PendingVerification' ||
+        selectedDoctor.publicVerificationStatus === 'AwaitingConfirmation')
   );
   const isFacilityPendingForDoctor = Boolean(
     !isDoctorPending &&

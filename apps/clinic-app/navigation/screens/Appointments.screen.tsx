@@ -1358,6 +1358,21 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
                 doctorId={formDoctorId}
                 date={formDate}
                 selectedSlot={formTime}
+                onSlotsLoaded={(loadedSlots) => {
+                  const available = loadedSlots.filter((s) => s.isAvailable);
+                  if (available.length === 0) return;
+                  const matchesAvailable = available.some((s) => {
+                    const hhmm = s.startTime.slice(0, 5);
+                    return hhmm === formTime || s.startTime === formTime;
+                  });
+                  if (!matchesAvailable) {
+                    const first = available[0];
+                    const parts = first.startTime.split(':');
+                    const hhmm = parts.length >= 2 ? `${parts[0]}:${parts[1]}` : first.startTime;
+                    setFormTime(hhmm);
+                    if (bookingError) setBookingError(null);
+                  }
+                }}
                 onSelectSlot={(slot) => {
                   const parts = slot.startTime.split(':');
                   const hhmm = parts.length >= 2 ? `${parts[0]}:${parts[1]}` : slot.startTime;

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Common;
 using ClinicEz.Portal.Application.Features.Admin.Services;
+using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Common;
@@ -13,6 +14,7 @@ using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Portal.Application.Features.DirectoryVerification;
 
@@ -69,6 +71,12 @@ public sealed record AffiliationConfirmationResultDto(
     bool AlreadyConfirmed,
     DateTime ConfirmedAtUtc);
 
+public sealed record ResendAffiliationConfirmationResult(
+    Guid RequestId,
+    string SentTo,
+    DateTime ExpiresAtUtc,
+    DateTime ResentAtUtc);
+
 public sealed record ApproveVerificationRequestCommand(
     Guid RequestId,
     string AdminUserId,
@@ -105,6 +113,12 @@ public sealed record GetAffiliationConfirmationQuery(string Token) : IRequest<Af
 public sealed record ConfirmPractitionerAffiliationCommand(
     string Token,
     string? OtpCode = null) : IRequest<AffiliationConfirmationResultDto>;
+
+public sealed record ResendAffiliationConfirmationCommand(
+    Guid RequestId,
+    string AdminUserId,
+    string AdminName,
+    string? AdminEmail = null) : IRequest<ResendAffiliationConfirmationResult>;
 
 public sealed class ApproveVerificationRequestCommandHandler(
     IApplicationDbContext db,
@@ -877,7 +891,7 @@ public sealed class GetAffiliationConfirmationQueryHandler(
             ExpiresAtUtc: pracReq.OtpExpiresAtUtc,
             AlreadyConfirmed: alreadyConfirmed,
             IsExpired: isExpired && !alreadyConfirmed,
-            RequiresOtpCode: false);
+            RequiresOtpCode: !string.IsNullOrWhiteSpace(snap?.OtpCodeHash));
     }
 }
 
@@ -978,6 +992,107 @@ public sealed class ConfirmPractitionerAffiliationCommandHandler(
             pracReq.Facility.Name,
             affiliation.AffiliationStatus,
             AlreadyConfirmed: false,
+            now);
+    }
+}
+
+public sealed class ResendAffiliationConfirmationCommandHandler(
+    IApplicationDbContext db,
+    TimeProvider timeProvider,
+    ILogger<ResendAffiliationConfirmationCommandHandler> logger,
+    INotificationService? notifications = null,
+    IFrontendUrlProvider? frontendUrlProvider = null)
+    : IRequestHandler<ResendAffiliationConfirmationCommand, ResendAffiliationConfirmationResult>
+{
+    public async Task<ResendAffiliationConfirmationResult> Handle(ResendAffiliationConfirmationCommand request, CancellationToken ct)
+    {
+        var pracReq = await db.PractitionerVerificationRequests
+            .Include(r => r.Facility)
+            .Include(r => r.Practitioner)
+            .FirstOrDefaultAsync(r => r.Id == request.RequestId && !r.IsDeleted, ct)
+            ?? throw new KeyNotFoundException($"Practitioner verification request '{request.RequestId}' was not found.");
+
+        if (!string.Equals(pracReq.Status, "AwaitingOtp", StringComparison.Ordinal))
+        {
+            throw new CodedConflictException(
+                "verification_request_not_awaiting_otp",
+                $"Cannot resend affiliation confirmation because this request is currently '{pracReq.Status}'.");
+        }
+
+        var contact = !string.IsNullOrWhiteSpace(pracReq.VerificationContact)
+            ? pracReq.VerificationContact.Trim()
+            : pracReq.Practitioner?.VerificationContact?.Trim();
+
+        if (!DirectoryVerificationHelper.IsPureEmailAddress(contact))
+        {
+            throw new ArgumentException(
+                "No valid verification email address is configured on this request. Ask the clinic to update the practitioner's Verification Contact email.");
+        }
+
+        if (notifications is null)
+        {
+            throw new InvalidOperationException("Email notifications are not configured on this server.");
+        }
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var rawToken = TokenGenerator.GenerateSecureToken(32);
+        var otpCode = DirectoryVerificationHelper.GenerateOtpCode();
+        var otpTokenHash = DirectoryVerificationHelper.HashSecret(rawToken);
+        var otpCodeHash = DirectoryVerificationHelper.HashSecret(otpCode);
+        var otpExpiresAt = now.AddHours(DirectoryVerificationHelper.AffiliationOtpTtlHours);
+
+        var snap = DirectoryVerificationHelper.DeserializePractitionerSnapshot(pracReq.SubmittedSnapshotJson);
+        if (snap is not null)
+        {
+            pracReq.SubmittedSnapshotJson = JsonSerializer.Serialize(snap with { OtpCodeHash = otpCodeHash }, InteropJson.Options);
+        }
+
+        pracReq.OtpTokenHash = otpTokenHash;
+        pracReq.OtpExpiresAtUtc = otpExpiresAt;
+        pracReq.UpdatedAt = now;
+
+        var (reviewerName, reviewerEmail) = await VerificationReviewerLookup.ResolveAsync(
+            db, request.AdminUserId, request.AdminName, request.AdminEmail, ct);
+
+        DirectoryVerificationHelper.StageAuditEntry(
+            db,
+            pracReq.TenantId,
+            request.AdminUserId,
+            reviewerName ?? request.AdminName,
+            "PlatformAdmin",
+            "affiliation-otp-resent",
+            new
+            {
+                requestId = pracReq.Id,
+                facilityId = pracReq.FacilityId,
+                clinicStaffMemberId = pracReq.ClinicStaffMemberId,
+                sentTo = contact,
+                expiresAtUtc = otpExpiresAt,
+                resentByEmail = reviewerEmail
+            });
+
+        await db.SaveChangesAsync(ct);
+
+        var displayName = pracReq.Practitioner is not null
+            ? DirectoryVerificationHelper.FormatDisplayName(pracReq.Practitioner.Title, pracReq.Practitioner.FirstName, pracReq.Practitioner.LastName)
+            : DirectoryVerificationHelper.FormatDisplayName(snap?.Title, snap?.FirstName ?? string.Empty, snap?.LastName ?? string.Empty);
+
+        DirectoryVerificationHelper.TryEnqueueAffiliationConfirmationEmail(
+            notifications,
+            frontendUrlProvider,
+            contact,
+            string.IsNullOrWhiteSpace(displayName) ? "Clinician" : displayName,
+            pracReq.Facility.Name,
+            pracReq.ProfessionKind,
+            rawToken,
+            otpCode,
+            pracReq.Id,
+            logger);
+
+        return new ResendAffiliationConfirmationResult(
+            pracReq.Id,
+            contact!,
+            otpExpiresAt,
             now);
     }
 }

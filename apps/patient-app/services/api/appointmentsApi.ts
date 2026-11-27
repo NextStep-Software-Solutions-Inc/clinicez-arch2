@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { api } from './apiClient';
+import { api, ApiError } from './apiClient';
 import { appointmentStatusSchema } from './wireEnums';
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -71,14 +71,28 @@ export async function fetchAvailableSlotsLive(
     date: string,
     forPatientId?: string,
 ): Promise<LiveAvailableSlotsResponse> {
+    const token = await getToken().catch(() => null);
+    const withPatientContext = Boolean(token && forPatientId);
     const params = new URLSearchParams({ date });
-    if (forPatientId) {
+    if (withPatientContext && forPatientId) {
         params.set('forPatientId', forPatientId);
     }
-    return api.get<LiveAvailableSlotsResponse>(
-        getToken,
-        `/clinics/${clinicId}/providers/${providerId}/slots?${params}`,
-    );
+    try {
+        return await api.get<LiveAvailableSlotsResponse>(
+            () => Promise.resolve(token),
+            `/clinics/${clinicId}/providers/${providerId}/slots?${params}`,
+        );
+    } catch (err) {
+        // Public clinic slot endpoint allows anonymous queries when stale/unlinked patient context is rejected
+        if (withPatientContext && err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+            const publicParams = new URLSearchParams({ date });
+            return api.get<LiveAvailableSlotsResponse>(
+                () => Promise.resolve(null),
+                `/clinics/${clinicId}/providers/${providerId}/slots?${publicParams}`,
+            );
+        }
+        throw err;
+    }
 }
 
 export async function rescheduleAppointmentLive(

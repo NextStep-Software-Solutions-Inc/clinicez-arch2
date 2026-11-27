@@ -131,10 +131,22 @@ export function useClinicDetail(
         ? swrKey(`/clinics/${clinicId}`, forPatientId ? { forPatientId } : undefined)
         : null;
     return useSWR<ClinicDetail | null>(
-        key ? [key, getToken] : null,
-        async ([k, gt]: [string, any]) => {
-            try { return await swrFetcher<ClinicDetail>(k, gt); }
-            catch (err) { if (err instanceof ApiError && err.status === 404) return null; throw err; }
+        key ? [key, getToken, clinicId, forPatientId] : null,
+        async ([k, gt, cid, pid]: [string, any, string, string | undefined]) => {
+            try {
+                return await swrFetcher<ClinicDetail>(k, gt);
+            } catch (err) {
+                if (err instanceof ApiError && err.status === 404) return null;
+                if (pid && err instanceof ApiError && err.status === 403) {
+                    try {
+                        return await swrFetcher<ClinicDetail>(`/clinics/${cid}`, gt);
+                    } catch (retryErr) {
+                        if (retryErr instanceof ApiError && retryErr.status === 404) return null;
+                        throw retryErr;
+                    }
+                }
+                throw err;
+            }
         },
         OFFLINE_OPTS,
     );

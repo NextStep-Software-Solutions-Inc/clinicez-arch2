@@ -363,7 +363,9 @@ public sealed class ClinicDirectorySyncService : IClinicDirectorySyncService
             return;
         }
 
-        if (!staff.IsActive || !staff.IsDirectoryOptIn || staff.PublicVerificationStatus != PractitionerVerificationLevel.PendingVerification)
+        if (!staff.IsActive
+            || !staff.IsDirectoryOptIn
+            || staff.PublicVerificationStatus is not (PractitionerVerificationLevel.PendingVerification or PractitionerVerificationLevel.AwaitingConfirmation))
         {
             if (throwOnConflict)
             {
@@ -499,6 +501,22 @@ public sealed class ClinicDirectorySyncService : IClinicDirectorySyncService
             }
 
             _logger?.LogWarning("Pending practitioner verification sync returned failure for staff {StaffId}: {Message}", staff.Id, message);
+            return;
+        }
+
+        PractitionerVerificationLevel? syncedLevel = reply.CurrentStatus?.Trim() switch
+        {
+            "AwaitingOtp" or "AwaitingConfirmation" => PractitionerVerificationLevel.AwaitingConfirmation,
+            "PendingReview" or "PendingVerification" => PractitionerVerificationLevel.PendingVerification,
+            _ => null
+        };
+
+        if (syncedLevel.HasValue && staff.PublicVerificationStatus != syncedLevel.Value)
+        {
+            staff.PublicVerificationStatus = syncedLevel.Value;
+            staff.PublicVerificationReason = null;
+            staff.UpdatedAt = DateTime.UtcNow;
+            await SaveChangesIfAvailableAsync(ct);
         }
     }
 

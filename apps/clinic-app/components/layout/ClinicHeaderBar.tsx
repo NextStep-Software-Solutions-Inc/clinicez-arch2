@@ -155,6 +155,7 @@ export default function ClinicHeaderBar({
 }: ClinicHeaderBarProps) {
   const insets = useSafeInsets();
   const { isCompact, width } = useBreakpoint();
+  const isNarrowWorkstation = !isCompact && width < 1080;
   const { multiplier, headerHeight } = useUiDensity();
   const [modalVisible, setModalVisible] = useState(false);
   const [isBellHovered, setIsBellHovered] = useState(false);
@@ -247,7 +248,7 @@ export default function ClinicHeaderBar({
           isCompact && styles.rightSectionCompact,
         ]}
       >
-        {!isCompact && onOpenSearch && (
+        {!isCompact && !isNarrowWorkstation && onOpenSearch && (
           <Pressable
             onPress={() => onOpenSearch()}
             style={({ pressed, hovered }: any) => [
@@ -340,7 +341,7 @@ export default function ClinicHeaderBar({
               return (
                 <Button
                   key={act.id}
-                  title={act.label}
+                  title={isNarrowWorkstation && act.shortLabel ? act.shortLabel : act.label}
                   icon={act.icon}
                   variant={act.variant || (act.primary ? 'primary' : 'outline')}
                   size={act.size || 'sm'}
@@ -361,9 +362,9 @@ export default function ClinicHeaderBar({
           </View>
         ) : null}
 
-        {/* Utility cluster: Search (mobile) + Bell + User avatar */}
+        {/* Utility cluster: Search (mobile/narrow workstation) + Bell + User avatar */}
         <View style={styles.utilityCluster}>
-          {isCompact && onOpenSearch ? (
+          {(isCompact || isNarrowWorkstation) && onOpenSearch ? (
             <Button
               variant="secondary"
               size="sm"

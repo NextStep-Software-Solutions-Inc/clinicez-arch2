@@ -175,7 +175,9 @@ public sealed record VerificationRequestDetailDto(
     DateTime? UpdatedAtUtc = null,
     ResubmissionDiffDto? ResubmissionDiff = null,
     Guid? CanonicalPractitionerId = null,
-    PractitionerVerificationLevel? CanonicalPractitionerStatus = null);
+    PractitionerVerificationLevel? CanonicalPractitionerStatus = null,
+    DateTime? OtpExpiresAtUtc = null,
+    string? VerificationContact = null);
 
 public sealed record GetVerificationQueueQuery(
     string? Kind = null,
@@ -833,7 +835,11 @@ public sealed class GetVerificationRequestDetailQueryHandler(IApplicationDbConte
             UpdatedAtUtc: pracReq.UpdatedAt,
             ResubmissionDiff: pracResubmissionDiff,
             CanonicalPractitionerId: canonicalPractitioner?.Id,
-            CanonicalPractitionerStatus: canonicalPractitioner?.VerificationStatus);
+            CanonicalPractitionerStatus: canonicalPractitioner?.VerificationStatus,
+            OtpExpiresAtUtc: pracReq.OtpExpiresAtUtc,
+            VerificationContact: !string.IsNullOrWhiteSpace(pracReq.VerificationContact)
+                ? pracReq.VerificationContact.Trim()
+                : canonicalPractitioner?.VerificationContact);
     }
 
     private async Task<List<Practitioner>> LoadCandidatesAsync(IReadOnlyCollection<string> normalizedPrcs, CancellationToken ct)

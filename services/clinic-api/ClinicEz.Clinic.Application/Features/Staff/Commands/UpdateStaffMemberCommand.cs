@@ -400,7 +400,8 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             if (staff.IsActive
                 && staff.IsDirectoryOptIn
                 && ClinicianDirectoryValidationHelper.IsClinicianRole(staff.Role)
-                && staff.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification)
+                && staff.PublicVerificationStatus is PractitionerVerificationLevel.PendingVerification
+                    or PractitionerVerificationLevel.AwaitingConfirmation)
             {
                 await _directorySyncService.SyncPendingPractitionerVerificationAsync(
                     staff.Id,

@@ -385,9 +385,9 @@ export function VerificationQueueView({
       </div>
 
       {/* Summary KPI Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-border bg-surface p-5 flex items-center justify-between gap-2">
-          <div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="rounded-2xl border border-border bg-surface p-5 flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
             <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
               Pending Action
             </div>
@@ -395,13 +395,13 @@ export function VerificationQueueView({
               {queueData?.pendingCount ?? 0}
             </div>
           </div>
-          <Chip tone="warning" size="md">
+          <Chip tone="warning" size="md" className="shrink-0 whitespace-nowrap">
             Open Queue
           </Chip>
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface p-5 flex items-center justify-between gap-2">
-          <div>
+        <div className="rounded-2xl border border-border bg-surface p-5 flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
             <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
               Pending Facilities
             </div>
@@ -409,13 +409,13 @@ export function VerificationQueueView({
               {queueData?.pendingFacilityCount ?? 0}
             </div>
           </div>
-          <Chip tone="neutral" size="md">
+          <Chip tone="neutral" size="md" className="shrink-0 whitespace-nowrap">
             DOH LTO Review
           </Chip>
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface p-5 flex items-center justify-between gap-2">
-          <div>
+        <div className="rounded-2xl border border-border bg-surface p-5 flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
             <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
               Pending Practitioners
             </div>
@@ -423,7 +423,7 @@ export function VerificationQueueView({
               {queueData?.pendingPractitionerCount ?? 0}
             </div>
           </div>
-          <Chip tone="neutral" size="md">
+          <Chip tone="neutral" size="md" className="shrink-0 whitespace-nowrap">
             PRC &amp; Affiliation
           </Chip>
         </div>
@@ -520,14 +520,14 @@ export function VerificationQueueView({
               <table className="w-full text-left border-collapse text-xs">
                 <thead className="bg-surface-muted border-b border-border text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   <tr>
-                    <th className="px-4 py-3 whitespace-nowrap">Submission #</th>
-                    <th className="px-4 py-3 whitespace-nowrap">Kind</th>
-                    <th className="px-4 py-3 whitespace-nowrap">Facility / Clinician</th>
-                    <th className="px-4 py-3 whitespace-nowrap">PRC / LTO #</th>
-                    <th className="px-4 py-3 whitespace-nowrap">Specialty / Schedule</th>
-                    <th className="px-4 py-3 whitespace-nowrap">Submitted</th>
-                    <th className="px-4 py-3 whitespace-nowrap">Status</th>
-                    <th className="px-4 py-3 whitespace-nowrap text-right">Review</th>
+                    <th className="px-3 xl:px-4 py-3 whitespace-nowrap">Submission #</th>
+                    <th className="px-3 xl:px-4 py-3 whitespace-nowrap">Kind</th>
+                    <th className="px-3 xl:px-4 py-3 whitespace-nowrap">Facility / Clinician</th>
+                    <th className="px-3 xl:px-4 py-3 whitespace-nowrap">PRC / LTO #</th>
+                    <th className="px-3 xl:px-4 py-3 whitespace-nowrap">Specialty / Schedule</th>
+                    <th className="px-3 xl:px-4 py-3 whitespace-nowrap">Submitted</th>
+                    <th className="px-3 xl:px-4 py-3 whitespace-nowrap">Status</th>
+                    <th className="sticky right-0 bg-surface-muted px-3 xl:px-4 py-3 whitespace-nowrap text-right shadow-[-6px_0_10px_-6px_rgba(0,0,0,0.08)]">Review</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -579,7 +579,7 @@ export function VerificationQueueView({
                       <tr
                         key={item.id}
                         onClick={() => handleOpenDetail(item.id)}
-                        className="cursor-pointer transition-colors hover:bg-surface-muted/60"
+                        className="group cursor-pointer transition-colors hover:bg-surface-muted/60"
                       >
                         <td className="px-4 py-3.5 whitespace-nowrap font-mono font-bold text-text">
                           #{item.submissionNumber}
@@ -653,7 +653,7 @@ export function VerificationQueueView({
                           ) : null}
                         </td>
                         <td
-                          className="px-4 py-3.5 whitespace-nowrap text-right"
+                          className="sticky right-0 bg-surface group-hover:bg-surface-muted/60 px-3 xl:px-4 py-3.5 whitespace-nowrap text-right shadow-[-6px_0_10px_-6px_rgba(0,0,0,0.08)]"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <a

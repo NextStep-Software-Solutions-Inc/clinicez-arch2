@@ -1398,4 +1398,125 @@ public sealed class DirectoryVerificationTests : IDisposable
                 Directory.Delete(tempDir, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task AwaitingOtp_EmitsFacilityOnlyStatusSync_ExposesExpiry_AndResendRotatesTokenAndOtp()
+    {
+        var verifiedPrac = new Practitioner
+        {
+            Id = Guid.NewGuid(),
+            ProfessionKind = "Doctor",
+            NormalizedPrcLicenseNo = "9876543",
+            DisplayPrcLicenseNo = "9876543",
+            FirstName = "Justine Mae",
+            LastName = "Tabasan",
+            Title = "Dr.",
+            PrimarySpecialty = "General Medicine",
+            VerificationContact = "justinemae@example.test",
+            VerificationStatus = PractitionerVerificationLevel.Verified,
+            VerifiedAtUtc = _clock.GetUtcNow().UtcDateTime
+        };
+        _context.Practitioners.Add(verifiedPrac);
+        await _context.SaveChangesAsync();
+
+        var notifications = NewNotifications();
+        var interopPublisher = NewInteropPublisher();
+        var handler = new PractitionerVerificationRequestedHandler(
+            _context,
+            _clock,
+            NullLogger<PractitionerVerificationRequestedHandler>.Instance,
+            notifications,
+            new FixedFrontendUrl("https://portal.clinicez.test"),
+            interopPublisher);
+
+        var staffId = Guid.NewGuid();
+        var reqId = Guid.NewGuid();
+        var payload = new PractitionerVerificationRequestedPayload
+        {
+            RequestId = reqId,
+            TenantId = _tenantB.Id.ToString(),
+            FacilityId = _clinicB.Id,
+            FacilityName = _clinicB.Name,
+            ClinicStaffMemberId = staffId,
+            RequestKind = "Initial",
+            ProfessionKind = "Doctor",
+            FirstName = "Justine Mae",
+            LastName = "Tabasan",
+            Title = "Dr.",
+            SubmittedPrcLicenseNo = "9876543",
+            NormalizedPrcLicenseNo = "9876543",
+            PrcExpiryDate = new DateOnly(2028, 12, 31),
+            PrcEvidenceObjectKey = "prc/justine.png",
+            VerificationContact = "justinemae@example.test",
+            Specialty = "General Medicine",
+            SubmittedByClinicUserId = "beta_admin",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime
+        };
+        var partyB = Party.ForFacility(_tenantB.Id.ToString(), _clinicB.Id.ToString(), FacilityType.Clinic);
+        await handler.HandleAsync(
+            payload,
+            new InteropMessageContext(InteropEnvelope.Create(InteropTypes.PractitionerVerificationRequested, partyB, Party.Portal, reqId, payload)),
+            CancellationToken.None);
+
+        // 1. Facility-only PractitionerIdentityUpdated (AwaitingConfirmation) emitted — NOT to Patient plane
+        var awaitingMsgs = TestSupport.Outbox(_context, InteropTypes.PractitionerIdentityUpdated);
+        var facilityMsg = Assert.Single(awaitingMsgs);
+        Assert.Equal(PartyKind.Facility, facilityMsg.To.Kind);
+        Assert.Equal(_clinicB.Id.ToString(), facilityMsg.To.FacilityId);
+        var msgPayload = facilityMsg.GetPayload<PractitionerIdentityUpdatedPayload>();
+        Assert.NotNull(msgPayload);
+        Assert.Equal(PractitionerVerificationLevel.AwaitingConfirmation, msgPayload!.VerificationLevel);
+        Assert.Equal("AwaitingConfirmation", msgPayload.AffiliationStatus);
+
+        var firstMail = Assert.Single(_emailSender.Sent);
+        var firstToken = Regex.Match(firstMail.TextBody, @"token=([a-f0-9]+)").Groups[1].Value;
+        Assert.False(string.IsNullOrWhiteSpace(firstToken));
+
+        // 2. Detail query exposes OtpExpiresAtUtc & VerificationContact, and confirmation query reports RequiresOtpCode = true
+        var detail = await new GetVerificationRequestDetailQueryHandler(_context)
+            .Handle(new GetVerificationRequestDetailQuery(reqId), CancellationToken.None);
+        Assert.NotNull(detail);
+        Assert.NotNull(detail!.OtpExpiresAtUtc);
+        Assert.Equal("justinemae@example.test", detail.VerificationContact);
+
+        var confirmInfo = await new GetAffiliationConfirmationQueryHandler(_context, _clock)
+            .Handle(new GetAffiliationConfirmationQuery(firstToken), CancellationToken.None);
+        Assert.NotNull(confirmInfo);
+        Assert.True(confirmInfo!.RequiresOtpCode);
+
+        // 3. Resend rotates token & OTP, logs audit, invalidates old token, and sends fresh email
+        _clock.Advance(TimeSpan.FromHours(1));
+        var resendHandler = new ResendAffiliationConfirmationCommandHandler(
+            _context,
+            _clock,
+            NullLogger<ResendAffiliationConfirmationCommandHandler>.Instance,
+            notifications,
+            new FixedFrontendUrl("https://portal.clinicez.test"));
+
+        var resendRes = await resendHandler.Handle(
+            new ResendAffiliationConfirmationCommand(reqId, "admin_1", "Wave Ambray", "wave@clinicez.net"),
+            CancellationToken.None);
+
+        Assert.Equal(reqId, resendRes.RequestId);
+        Assert.Equal("justinemae@example.test", resendRes.SentTo);
+        Assert.Equal(2, _emailSender.Sent.Count);
+
+        var secondMail = _emailSender.Sent[1];
+        var secondToken = Regex.Match(secondMail.TextBody, @"token=([a-f0-9]+)").Groups[1].Value;
+        var secondOtp = Regex.Match(secondMail.TextBody, @"Verification code:\s*(\d{6})").Groups[1].Value;
+        Assert.NotEqual(firstToken, secondToken);
+
+        // Old token is now unrecognized
+        var oldInfo = await new GetAffiliationConfirmationQueryHandler(_context, _clock)
+            .Handle(new GetAffiliationConfirmationQuery(firstToken), CancellationToken.None);
+        Assert.Null(oldInfo);
+
+        // New token + new OTP succeeds
+        var confirmResult = await new ConfirmPractitionerAffiliationCommandHandler(_context, interopPublisher, _clock)
+            .Handle(new ConfirmPractitionerAffiliationCommand(secondToken, secondOtp), CancellationToken.None);
+        Assert.Equal("Active", confirmResult.AffiliationStatus);
+
+        Assert.Contains(_context.WorkspaceAuditEntries, a =>
+            a.TenantId == _tenantB.Id && a.Action == "affiliation-otp-resent");
+    }
 }

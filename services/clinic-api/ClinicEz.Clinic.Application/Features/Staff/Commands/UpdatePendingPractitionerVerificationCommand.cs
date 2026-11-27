@@ -56,7 +56,8 @@ public sealed class UpdatePendingPractitionerVerificationCommandHandler
             throw new ValidationException("Inactive staff members cannot update a directory verification submission.");
         }
 
-        if (!staff.IsDirectoryOptIn || staff.PublicVerificationStatus != PractitionerVerificationLevel.PendingVerification)
+        if (!staff.IsDirectoryOptIn
+            || staff.PublicVerificationStatus is not (PractitionerVerificationLevel.PendingVerification or PractitionerVerificationLevel.AwaitingConfirmation))
         {
             throw new VerificationConflictException(
                 $"Practitioner verification is currently '{staff.PublicVerificationStatus}' and can no longer be updated in place.",

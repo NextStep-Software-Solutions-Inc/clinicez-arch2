@@ -329,14 +329,21 @@ function AuthLayout() {
   const BREADCRUMB_LABELS: Record<string, string> = {
     'patient-identities': 'Patient Identities',
     'v1-sync': 'v1 Migration & Sync',
+    verifications: 'Directory Verifications',
   };
+  const UUID_SEGMENT_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const pathSegments = currentPath.split('/').filter(Boolean);
   const breadcrumbItems = [
     { label: 'Workstation', to: '/' },
     ...pathSegments.map((segment, index) => {
       const url = `/${pathSegments.slice(0, index + 1).join('/')}`;
-      const title =
-        BREADCRUMB_LABELS[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1);
+      const prevSegment = index > 0 ? pathSegments[index - 1] : null;
+      const title = UUID_SEGMENT_RE.test(segment)
+        ? prevSegment === 'verifications'
+          ? 'Request Details'
+          : `${segment.slice(0, 8)}…`
+        : BREADCRUMB_LABELS[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1);
       return { label: title, to: url };
     }),
   ];
@@ -741,7 +748,7 @@ function AuthLayout() {
           </header>
 
           {/* Workstation Viewport */}
-          <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
+          <main className="flex-1 min-w-0 p-6 md:p-8 max-w-7xl w-full mx-auto">
             <Outlet />
           </main>
         </div>

@@ -27,7 +27,8 @@ public sealed class PractitionerVerificationRequestedHandler(
     TimeProvider timeProvider,
     ILogger<PractitionerVerificationRequestedHandler> logger,
     INotificationService? notifications = null,
-    IFrontendUrlProvider? frontendUrlProvider = null) : IInteropHandler<PractitionerVerificationRequestedPayload>
+    IFrontendUrlProvider? frontendUrlProvider = null,
+    IInteropPublisher? interopPublisher = null) : IInteropHandler<PractitionerVerificationRequestedPayload>
 {
     public async Task HandleAsync(PractitionerVerificationRequestedPayload payload, InteropMessageContext context, CancellationToken ct)
     {
@@ -262,6 +263,23 @@ public sealed class PractitionerVerificationRequestedHandler(
                 matchedPractitionerId = matched?.Id
             });
 
+        if (status == "AwaitingOtp")
+        {
+            DirectoryVerificationHelper.StageFacilityPractitionerStatusUpdate(
+                interopPublisher,
+                facility,
+                payloadTenantId,
+                payload.ClinicStaffMemberId,
+                matched?.Id,
+                professionKind,
+                normalizedPrc,
+                payload.SubmittedPrcLicenseNo,
+                payload.PrcExpiryDate,
+                PractitionerVerificationLevel.AwaitingConfirmation,
+                "AwaitingConfirmation",
+                pracReq.Id);
+        }
+
         await dbContext.SaveChangesAsync(ct);
 
         if (status == "AwaitingOtp" && rawTokenForEmail is not null && otpCodeForEmail is not null)
@@ -279,7 +297,8 @@ public sealed class PractitionerVerificationRequestedHandler(
                 professionKind,
                 rawTokenForEmail,
                 otpCodeForEmail,
-                pracReq.Id);
+                pracReq.Id,
+                logger);
         }
 
         logger.LogInformation("Recorded PractitionerVerificationRequest {RequestId} (#{Submission}, Status={Status}, Mismatch={Mismatch}) for facility {FacilityId}.",

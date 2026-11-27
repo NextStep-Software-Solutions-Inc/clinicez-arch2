@@ -351,7 +351,13 @@ public sealed class SystemSettingsService(
         var now = DateTime.UtcNow;
         var hasChanges = false;
 
-        // Auto-heal legacy unconfigured placeholder defaults to production defaults
+        // Auto-heal legacy unconfigured placeholder defaults to production defaults.
+        // Only rewrite port 1025 / security None when host is still the legacy "localhost" placeholder
+        // so intentional custom local SMTP relays (e.g., Mailpit containers) are preserved.
+        var isLegacyLocalhost = existingSettings.Any(s =>
+            string.Equals(s.Key, "Mailer:SmtpHost", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(s.Value, "localhost", StringComparison.OrdinalIgnoreCase));
+
         foreach (var setting in existingSettings)
         {
             if (string.Equals(setting.Key, "Mailer:SmtpHost", StringComparison.OrdinalIgnoreCase) &&
@@ -362,7 +368,8 @@ public sealed class SystemSettingsService(
                 setting.UpdatedBy = "System Default";
                 hasChanges = true;
             }
-            else if (string.Equals(setting.Key, "Mailer:SmtpPort", StringComparison.OrdinalIgnoreCase) &&
+            else if (isLegacyLocalhost &&
+                string.Equals(setting.Key, "Mailer:SmtpPort", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(setting.Value, "1025", StringComparison.OrdinalIgnoreCase))
             {
                 setting.Value = "587";
@@ -370,7 +377,8 @@ public sealed class SystemSettingsService(
                 setting.UpdatedBy = "System Default";
                 hasChanges = true;
             }
-            else if (string.Equals(setting.Key, "Mailer:SmtpSecurity", StringComparison.OrdinalIgnoreCase) &&
+            else if (isLegacyLocalhost &&
+                string.Equals(setting.Key, "Mailer:SmtpSecurity", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(setting.Value, "None", StringComparison.OrdinalIgnoreCase))
             {
                 setting.Value = "StartTls";

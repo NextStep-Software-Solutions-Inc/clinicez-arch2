@@ -84,13 +84,21 @@ public sealed class PractitionerIdentityUpdatedHandler : IInteropHandler<Practit
         }
 
         var canonicalId = message.MergedIntoPractitionerId ?? message.PractitionerId;
-        staff.CanonicalProviderId = canonicalId;
+        if (canonicalId != Guid.Empty && message.VerificationLevel == PractitionerVerificationLevel.Verified)
+        {
+            staff.CanonicalProviderId = canonicalId;
+        }
+
         staff.PublicVerificationStatus = message.VerificationLevel;
 
         if (message.VerificationLevel == PractitionerVerificationLevel.Verified)
         {
             staff.PublicVerificationReason = null;
             staff.AffiliatedVerifiedClinicCount = Math.Max(1, staff.AffiliatedVerifiedClinicCount);
+        }
+        else if (message.VerificationLevel is PractitionerVerificationLevel.AwaitingConfirmation or PractitionerVerificationLevel.PendingVerification)
+        {
+            staff.PublicVerificationReason = null;
         }
 
         if (message.PrcExpiryDate.HasValue)
@@ -146,11 +154,15 @@ public sealed class PractitionerIdentityUpdatedHandler : IInteropHandler<Practit
                 context.MessageId
             }));
 
-        await DirectoryInteropSyncHelper.EnqueueDirectorySnapshotIfVerifiedAndPublishedAsync(
-            _dbContext,
-            _publisher ?? new InteropPublisher(_dbContext),
-            settings,
-            ct);
+        if (message.VerificationLevel == PractitionerVerificationLevel.Verified
+            || string.Equals(message.AffiliationStatus, "Withdrawn", StringComparison.OrdinalIgnoreCase))
+        {
+            await DirectoryInteropSyncHelper.EnqueueDirectorySnapshotIfVerifiedAndPublishedAsync(
+                _dbContext,
+                _publisher ?? new InteropPublisher(_dbContext),
+                settings,
+                ct);
+        }
 
         await _dbContext.SaveChangesAsync(ct);
 

@@ -188,7 +188,8 @@ public sealed class UploadStaffPrcProofCommandHandler : IRequestHandler<UploadSt
         {
             if (staff.IsActive
                 && staff.IsDirectoryOptIn
-                && staff.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification)
+                && staff.PublicVerificationStatus is PractitionerVerificationLevel.PendingVerification
+                    or PractitionerVerificationLevel.AwaitingConfirmation)
             {
                 await _directorySyncService.SyncPendingPractitionerVerificationAsync(
                     staff.Id,

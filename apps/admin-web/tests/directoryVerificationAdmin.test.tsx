@@ -2432,5 +2432,72 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
         (URL as any).revokeObjectURL = originalRevokeObjectURL;
       }
     });
+
+    test("renders Awaiting Practitioner Email Confirmation callout and invokes resendAffiliationConfirmation", async () => {
+      const reviewerProfile: ReviewerProfile = {
+        id: "admin-resend-1",
+        email: "reviewer@clinicez.net",
+        fullName: "Wave Ambray",
+        roleName: "Super Admin",
+        permissions: [ADMIN_PERMISSIONS.VIEW_VERIFICATIONS, ADMIN_PERMISSIONS.VERIFY_DIRECTORY],
+        isAdmin: true,
+      };
+      const awaitingDetail = makeDetail({
+        id: "prac-awaiting-1",
+        kind: "Practitioner",
+        status: "AwaitingOtp",
+        otpExpiresAtUtc: "2026-11-30T08:00:00Z",
+        verificationContact: "justinemae.tabasan@nextstep-software.com",
+        snapshot: {
+          firstName: "Justine Mae",
+          lastName: "Tabasan",
+          title: "Dr.",
+          professionKind: "Doctor",
+          submittedPrcLicenseNo: "101208326",
+          verificationContact: "justinemae.tabasan@nextstep-software.com",
+        },
+      });
+
+      const originalResend = verificationService.resendAffiliationConfirmation;
+      const originalGetDetail = verificationService.getVerificationRequestDetail;
+      const resentIds: string[] = [];
+      (verificationService as any).resendAffiliationConfirmation = async (requestId: string) => {
+        resentIds.push(requestId);
+        return {
+          requestId,
+          sentTo: "justinemae.tabasan@nextstep-software.com",
+          expiresAtUtc: "2026-12-01T08:00:00Z",
+          resentAtUtc: "2026-11-28T08:00:00Z",
+        };
+      };
+      (verificationService as any).getVerificationRequestDetail = async () => awaitingDetail;
+
+      try {
+        const mounted = mountReactTree(
+          <VerificationDetailWorkspace
+            requestId="prac-awaiting-1"
+            profile={reviewerProfile}
+            initialDetail={awaitingDetail}
+          />,
+        );
+        expect(mounted.html).toContain("Awaiting Practitioner Email Confirmation");
+        expect(mounted.html).toContain("justinemae.tabasan@nextstep-software.com");
+        expect(mounted.html).toContain("Resend Confirmation Email");
+        expect(mounted.html).not.toContain("Approve Request");
+
+        const resendBtn = findReactNode(
+          mounted.tree,
+          (el) => el?.type === "button" && extractNodeText(el).includes("Resend Confirmation Email"),
+        );
+        expect(resendBtn).not.toBeNull();
+        resendBtn.props.onClick();
+        await new Promise((r) => setTimeout(r, 20));
+        expect(resentIds).toEqual(["prac-awaiting-1"]);
+        mounted.unmount();
+      } finally {
+        (verificationService as any).resendAffiliationConfirmation = originalResend;
+        (verificationService as any).getVerificationRequestDetail = originalGetDetail;
+      }
+    });
   });
 });

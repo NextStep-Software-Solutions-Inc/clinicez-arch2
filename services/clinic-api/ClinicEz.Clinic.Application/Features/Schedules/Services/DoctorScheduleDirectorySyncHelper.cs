@@ -43,7 +43,8 @@ internal static class DoctorScheduleDirectorySyncHelper
         }
 
         var isPendingPractitioner =
-            clinician.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification;
+            clinician.PublicVerificationStatus is PractitionerVerificationLevel.PendingVerification
+                or PractitionerVerificationLevel.AwaitingConfirmation;
 
         if (!skipPendingVerificationSync && isPendingPractitioner)
         {

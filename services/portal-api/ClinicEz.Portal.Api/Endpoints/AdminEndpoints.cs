@@ -488,6 +488,47 @@ public class AdminEndpoints : IEndpoint
         .WithDescription("Rejects a clinic or practitioner directory verification request with a mandatory reason.")
         .WithTags("Admin");
 
+        group.MapPost("/verification-queue/{requestId:guid}/resend-confirmation", async (
+            Guid requestId,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.VerifyDirectory, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var adminUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? admin.Email;
+
+            try
+            {
+                var result = await sender.Send(new ResendAffiliationConfirmationCommand(
+                    requestId,
+                    adminUserId,
+                    admin.FullName,
+                    admin.Email), ct);
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (CodedConflictException ex)
+            {
+                return Results.Conflict(new { Message = ex.Message, Code = ex.Code });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { Message = ex.Message }, statusCode: 503);
+            }
+        })
+        .WithName("ResendAffiliationConfirmation")
+        .WithDescription("Rotates the confirmation token/OTP and resends the practitioner affiliation confirmation email.")
+        .WithTags("Admin");
+
         group.MapPost("/practitioners/{id:guid}/suspend", async (
             Guid id,
             HttpContext httpContext,

@@ -10,6 +10,7 @@ import {
   IconFileText,
   IconHistory,
   IconLoader,
+  IconMailForward,
   IconRefresh,
   IconShieldCheck,
   IconUserCheck,
@@ -612,7 +613,9 @@ function useVerificationDetailController({
       .map((c) => c.id),
   );
 
-  const [submittingAction, setSubmittingAction] = useState<"approve" | "reject" | null>(null);
+  const [submittingAction, setSubmittingAction] = useState<"approve" | "reject" | "resend" | null>(
+    null,
+  );
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [reinstatingId, setReinstatingId] = useState<string | null>(null);
 
@@ -724,6 +727,21 @@ function useVerificationDetailController({
       onActionCompleted?.();
     } catch (err: unknown) {
       toast.error(extractErrorMessage(err, "Failed to reject verification request."));
+    } finally {
+      setSubmittingAction(null);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!detail || !allowVerify) return;
+    setSubmittingAction("resend");
+    try {
+      const res = await verificationService.resendAffiliationConfirmation(detail.id);
+      toast.success(`Confirmation email resent to ${res.sentTo}.`);
+      await loadDetail();
+      onActionCompleted?.();
+    } catch (err: unknown) {
+      toast.error(extractErrorMessage(err, "Failed to resend affiliation confirmation email."));
     } finally {
       setSubmittingAction(null);
     }
@@ -855,6 +873,14 @@ function useVerificationDetailController({
   const canReject = Boolean(
     detail && (detail.status === "PendingReview" || detail.status === "AwaitingOtp") && allowVerify,
   );
+  const isAwaitingConfirmation = Boolean(
+    detail && (detail.status === "AwaitingOtp" || detail.status === "AwaitingConfirmation"),
+  );
+  const resolvedVerificationContact =
+    verificationContact ?? detail?.verificationContact ?? null;
+  const canResendConfirmation = Boolean(
+    isAwaitingConfirmation && allowVerify && isEmailAddressValue(resolvedVerificationContact),
+  );
 
   return {
     detail,
@@ -865,6 +891,10 @@ function useVerificationDetailController({
     allowRevoke,
     canApprove,
     canReject,
+    isAwaitingConfirmation,
+    resolvedVerificationContact,
+    canResendConfirmation,
+    handleResendConfirmation,
     reviewNotes,
     setReviewNotes,
     rejectReason,
@@ -935,6 +965,10 @@ function VerificationDetailMetadataAndActions({
     allowRevoke,
     canApprove,
     canReject,
+    isAwaitingConfirmation,
+    resolvedVerificationContact,
+    canResendConfirmation,
+    handleResendConfirmation,
     reviewNotes,
     setReviewNotes,
     rejectReason,
@@ -1437,8 +1471,16 @@ function VerificationDetailMetadataAndActions({
                 <span>Verification Contact</span>
                 <FieldUpdatedPill change={verificationContactChange} />
               </div>
-              <div className="font-medium text-text">{verificationContact}</div>
+              <div className="font-medium text-text break-all">{verificationContact}</div>
               <FieldPreviousValueCaption change={verificationContactChange} />
+            </div>
+          ) : null}
+          {isAwaitingConfirmation && detail.otpExpiresAtUtc ? (
+            <div>
+              <div className="text-[11px] text-text-muted">Confirmation Link Expires</div>
+              <div className="font-medium text-text">
+                {formatVerificationTimestamp(detail.otpExpiresAtUtc)}
+              </div>
             </div>
           ) : null}
           {availabilities.length > 0 ? (
@@ -1700,6 +1742,73 @@ function VerificationDetailMetadataAndActions({
           <div className="rounded-xl border border-border bg-surface-muted/60 p-3 text-xs text-text-muted">
             Read-only access. Approving or rejecting requests requires{" "}
             <span className="font-mono text-text">verify:directory</span>.
+          </div>
+        ) : null}
+
+        {isAwaitingConfirmation ? (
+          <div
+            role="status"
+            data-testid="awaiting-confirmation-callout"
+            className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3.5 text-xs space-y-2.5"
+          >
+            <div className="flex items-start gap-2.5">
+              <IconMailForward className="h-4 w-4 shrink-0 mt-0.5 text-sky-600 dark:text-sky-400" />
+              <div className="space-y-1 min-w-0">
+                <div className="font-bold text-sky-800 dark:text-sky-300">
+                  Awaiting Practitioner Email Confirmation
+                </div>
+                <p className="text-[11px] text-text-secondary leading-relaxed">
+                  This practitioner&apos;s PRC license is already verified on Clinic EZ, so manual admin approval is skipped. The affiliation will activate automatically once the practitioner confirms via their email link and 6-digit code.
+                </p>
+                {resolvedVerificationContact ? (
+                  <p className="text-[11px] text-text-secondary">
+                    Destination:{" "}
+                    <span className="font-mono font-semibold text-text break-all">
+                      {resolvedVerificationContact}
+                    </span>
+                    {detail.otpExpiresAtUtc ? (
+                      <>
+                        {" · "}
+                        {new Date(detail.otpExpiresAtUtc).getTime() <= Date.now() ? (
+                          <span className="font-semibold text-amber-700 dark:text-amber-300">
+                            Expired {formatVerificationTimestamp(detail.otpExpiresAtUtc)}
+                          </span>
+                        ) : (
+                          <span>
+                            Expires {formatVerificationTimestamp(detail.otpExpiresAtUtc)}
+                          </span>
+                        )}
+                      </>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+                    No valid email address is set on Verification Contact. Ask the clinic to update the practitioner&apos;s email before resending.
+                  </p>
+                )}
+              </div>
+            </div>
+            {allowVerify ? (
+              <div className="pt-0.5">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={submittingAction !== null || !canResendConfirmation}
+                  onClick={handleResendConfirmation}
+                  leadingIcon={
+                    submittingAction === "resend" ? (
+                      <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <IconMailForward className="h-3.5 w-3.5" />
+                    )
+                  }
+                >
+                  {submittingAction === "resend"
+                    ? "Resending Confirmation..."
+                    : "Resend Confirmation Email"}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

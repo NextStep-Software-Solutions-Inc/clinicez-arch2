@@ -206,6 +206,15 @@ export interface VerificationRequestDetailDto {
   resubmissionDiff?: ResubmissionDiffDto | null;
   canonicalPractitionerId?: string | null;
   canonicalPractitionerStatus?: PractitionerVerificationLevel | null;
+  otpExpiresAtUtc?: string | null;
+  verificationContact?: string | null;
+}
+
+export interface ResendAffiliationConfirmationResult {
+  requestId: string;
+  sentTo: string;
+  expiresAtUtc: string;
+  resentAtUtc: string;
 }
 
 export interface ApproveVerificationPayload {
@@ -424,6 +433,16 @@ export const verificationService = {
         reason,
         notes: payload.notes?.trim() || undefined,
       },
+    );
+    return res.data;
+  },
+
+  /** Rotates the confirmation token/OTP and resends the practitioner affiliation confirmation email (`POST /admin/verification-queue/{requestId}/resend-confirmation`). */
+  resendAffiliationConfirmation: async (
+    requestId: string,
+  ): Promise<ResendAffiliationConfirmationResult> => {
+    const res = await apiClient.post<ResendAffiliationConfirmationResult>(
+      `/admin/verification-queue/${encodeURIComponent(requestId)}/resend-confirmation`,
     );
     return res.data;
   },

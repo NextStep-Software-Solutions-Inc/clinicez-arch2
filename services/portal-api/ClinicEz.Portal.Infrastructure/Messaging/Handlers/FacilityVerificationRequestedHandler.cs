@@ -28,7 +28,8 @@ public sealed class FacilityVerificationRequestedHandler(
     TimeProvider timeProvider,
     ILogger<FacilityVerificationRequestedHandler> logger,
     INotificationService? notifications = null,
-    IFrontendUrlProvider? frontendUrlProvider = null) : IInteropHandler<FacilityVerificationRequestedPayload>
+    IFrontendUrlProvider? frontendUrlProvider = null,
+    IInteropPublisher? interopPublisher = null) : IInteropHandler<FacilityVerificationRequestedPayload>
 {
     public async Task HandleAsync(FacilityVerificationRequestedPayload payload, InteropMessageContext context, CancellationToken ct)
     {
@@ -428,6 +429,23 @@ public sealed class FacilityVerificationRequestedHandler(
                 Status = status
             };
             dbContext.PractitionerVerificationRequests.Add(pracReq);
+
+            if (status == "AwaitingOtp")
+            {
+                DirectoryVerificationHelper.StageFacilityPractitionerStatusUpdate(
+                    interopPublisher,
+                    facility,
+                    payloadTenantId,
+                    item.ClinicStaffMemberId,
+                    matchedPractitionerId,
+                    professionKind,
+                    normalizedPrc,
+                    item.SubmittedPrcLicenseNo,
+                    item.PrcExpiryDate,
+                    PractitionerVerificationLevel.AwaitingConfirmation,
+                    "AwaitingConfirmation",
+                    pracReq.Id);
+            }
         }
 
         DirectoryVerificationHelper.StageAuditEntry(
@@ -460,7 +478,8 @@ public sealed class FacilityVerificationRequestedHandler(
                 email.Profession,
                 email.RawToken,
                 email.OtpCode,
-                email.CorrelationId);
+                email.CorrelationId,
+                logger);
         }
 
         logger.LogInformation("Recorded FacilityVerificationRequest {RequestId} (#{Submission}) for facility {FacilityId} with {Count} practitioners.",
