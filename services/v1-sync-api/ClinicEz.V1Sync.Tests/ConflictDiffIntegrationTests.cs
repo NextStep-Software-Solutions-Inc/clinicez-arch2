@@ -317,8 +317,12 @@ public sealed class ConflictDiffIntegrationTests : IClassFixture<Pg17TestFixture
             (await r.ReadAsync()).Should().BeTrue();
             r.GetString(0).Should().Be("dpo.admin@clinicez.test");
             var details = r.GetString(1);
-            details.Should().Contain("Verifying patient email change before cutover");
-            details.Should().Contain("\"mfaVerified\":true");
+            using (var doc = JsonDocument.Parse(details))
+            {
+                doc.RootElement.GetProperty("reason").GetString().Should().Be("Verifying patient email change before cutover");
+                doc.RootElement.GetProperty("mfaVerified").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("clinicalNotesRedactedByPolicy").GetBoolean().Should().BeFalse();
+            }
             details.Should().NotContain("maria.santos@example.test");
             details.Should().NotContain("maria.new@example.test");
             details.Should().NotContain("Maria");
