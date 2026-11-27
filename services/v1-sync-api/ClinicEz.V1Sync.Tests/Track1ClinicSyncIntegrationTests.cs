@@ -1174,6 +1174,40 @@ public sealed class Track1ClinicSyncIntegrationTests
         Assert.Equal(SyncRunStatus.Completed, noTableDryRun.Status);
     }
 
+    [Fact]
+    public async Task FinalSweepAndIncremental_WithoutChangelogSchemaInstalled_CompleteCleanlyAndVerifyFullCohort()
+    {
+        await using var fx = await CreateInitializedTrack1FixtureAsync();
+        var binding = await CreateClinicBindingAsync(fx, "Track1 FinalSweep Without Tracking");
+
+        var uninstallSql = await File.ReadAllTextAsync(Path.Combine(Pg17TestFixture.SqlDirectory, "02_uninstall_v1_sync_changelog.sql"));
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, uninstallSql);
+
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, """
+            INSERT INTO public."User" (id, "firstName", "lastName", dob, gender, mobile, email, "isActive")
+            VALUES (9201, 'NoTrack', 'SweepPatient', '1994-06-15', 'MALE', '09170009201', 'notrack9201@example.test', true);
+            INSERT INTO public."ClinicPatient" (id, "clinicId", "patientId") VALUES (9201, 101, 9201);
+            """);
+
+        var backfill = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.Backfill, null, false, "test", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, backfill.Status);
+
+        // Mutate v1 directly without CDC triggers and run FinalSweep — must still sweep full cohort without 42P01
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, """
+            UPDATE public."User" SET "firstName" = 'SweptClean' WHERE id = 9201;
+            """);
+
+        var sweep = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.FinalSweep, null, false, "test", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, sweep.Status);
+
+        await using var v2 = new NpgsqlConnection(fx.ClinicConnectionString);
+        await v2.OpenAsync();
+        Assert.Equal("SweptClean", await ScalarStringAsync(v2, $"""SELECT "FirstName" FROM public."Patients" WHERE "Id" = '{DeterministicUuid.ClinicPatientId(V2ClinicId, 9201)}'"""));
+
+        var incManual = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.Incremental, null, false, "admin@test", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, incManual.Status);
+    }
+
     private static async Task<Pg17TestFixture> CreateInitializedTrack1FixtureAsync()
     {
         var fx = new Pg17TestFixture();

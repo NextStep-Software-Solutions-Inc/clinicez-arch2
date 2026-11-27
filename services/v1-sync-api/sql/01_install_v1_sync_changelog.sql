@@ -194,4 +194,14 @@ BEGIN
 END;
 $$;
 
+-- Automatically grant read-only access to the dedicated v1_sync_reader role if present
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'v1_sync_reader') THEN
+        GRANT USAGE ON SCHEMA _v1_sync TO v1_sync_reader;
+        GRANT SELECT ON TABLE _v1_sync.changelog TO v1_sync_reader;
+    END IF;
+END;
+$$;
+
 COMMIT;

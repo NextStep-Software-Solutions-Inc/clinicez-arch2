@@ -1091,6 +1091,36 @@ public sealed class Track2AndCdcIntegrationTests
         Assert.Equal(SyncRunStatus.Completed, noTableDryRun.Status);
     }
 
+    [Fact]
+    public async Task T17_FinalSweepAndIncremental_WithoutChangelogSchemaInstalled_CompleteCleanlyAndVerifyFullCohort()
+    {
+        await using var fx = await CreateInitializedTrack2FixtureAsync();
+        var binding = await CreateScopedTrack2BindingAsync(fx, "Track2 FinalSweep Without Tracking T17");
+
+        await SeedComprehensiveV1ClinicAndPatientDataAsync(fx.V1ConnectionString);
+
+        var uninstallSql = await System.IO.File.ReadAllTextAsync(
+            System.IO.Path.Combine(Pg17TestFixture.SqlDirectory, "02_uninstall_v1_sync_changelog.sql"));
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, uninstallSql);
+
+        var backfill = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.Backfill, null, false, "test-t17", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, backfill.Status);
+
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, """
+            UPDATE public."User" SET "firstName" = 'Track2SweptClean' WHERE id = 2001;
+            """);
+
+        var sweep = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.FinalSweep, null, false, "test-t17", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, sweep.Status);
+
+        await using var v2 = new NpgsqlConnection(fx.PatientConnectionString);
+        await v2.OpenAsync();
+        Assert.Equal("Track2SweptClean", await ScalarStringAsync(v2, $"""SELECT first_name FROM public.patients WHERE id = '{DeterministicUuid.PatientAccountId(2001)}'"""));
+
+        var incManual = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.Incremental, null, false, "admin@test", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, incManual.Status);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers: Isolated Test Schema Provisioning (Exact 26-table PatientDb + V1)
     // -------------------------------------------------------------------------

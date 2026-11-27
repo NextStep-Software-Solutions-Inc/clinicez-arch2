@@ -235,7 +235,9 @@ public sealed class Track1ClinicSyncEngine
             List<int> cohortUserIds;
             if (isIncremental)
             {
-                var drain = await DrainIncrementalChangelogAsync(v1, binding, startSeq, ct);
+                var drain = changelogExists
+                    ? await DrainIncrementalChangelogAsync(v1, binding, startSeq, ct)
+                    : new ChangelogDrainResult(new List<int>(), new List<DeletedCdcEvent>(), startSeq, 0);
                 summary.EndChangelogSeq = drain.MaxSeq;
 
                 if (drain.DeletedEvents.Count > 0)
@@ -246,11 +248,15 @@ public sealed class Track1ClinicSyncEngine
                 cohortUserIds = drain.ScopedUserIds;
                 if (cohortUserIds.Count == 0)
                 {
-                    if (!isDryRun)
+                    if (!isDryRun && changelogExists)
                     {
                         await _ledger.UpdateCursorAsync(binding.Id, drain.MaxSeq, ct);
                     }
-                    if (drain.DeletedEvents.Count == 0)
+                    if (!changelogExists)
+                    {
+                        summary.Notes.Add("Live change tracking is not enabled on Classic Clinic EZ (v1); skipped incremental changelog poll. Install Live Tracking SQL or run Full Migration / Final Sweep.");
+                    }
+                    else if (drain.DeletedEvents.Count == 0)
                     {
                         summary.Notes.Add("No scoped Track 1 changes since last changelog cursor.");
                     }
@@ -275,11 +281,21 @@ public sealed class Track1ClinicSyncEngine
             }
             else if (isFinalSweep)
             {
-                // Pre-sweep CDC drain + Deletion Shield
-                var preDrain = await DrainIncrementalChangelogAsync(v1, binding, startSeq, ct);
-                if (preDrain.DeletedEvents.Count > 0)
+                // Pre-sweep CDC drain + Deletion Shield (skipped cleanly when live change tracking is not installed on v1)
+                ChangelogDrainResult preDrain;
+                if (changelogExists)
                 {
-                    await ApplyCdcDeletionShieldAsync(v1, v2, binding, runId, preDrain.DeletedEvents, isDryRun, summary, ct);
+                    preDrain = await DrainIncrementalChangelogAsync(v1, binding, startSeq, ct);
+                    if (preDrain.DeletedEvents.Count > 0)
+                    {
+                        await ApplyCdcDeletionShieldAsync(v1, v2, binding, runId, preDrain.DeletedEvents, isDryRun, summary, ct);
+                    }
+                }
+                else
+                {
+                    preDrain = new ChangelogDrainResult(new List<int>(), new List<DeletedCdcEvent>(), startSeq, 0);
+                    summary.Notes.Add("Live change tracking is not enabled on Classic Clinic EZ (v1); running full-cohort Final Verification Sweep without changelog drain.");
+                    summary.AppendVerboseLog("Live change tracking not installed on v1; skipping pre-sweep changelog drain.");
                 }
 
                 cohortUserIds = await LoadFullScopedCohortAsync(v1, binding, ct);
@@ -298,20 +314,28 @@ public sealed class Track1ClinicSyncEngine
                 }
 
                 // Post-sweep CDC drain to capture writes that landed during the sweep
-                var postDrain = await DrainIncrementalChangelogAsync(v1, binding, preDrain.MaxSeq, ct);
-                if (postDrain.DeletedEvents.Count > 0)
+                ChangelogDrainResult postDrain;
+                if (changelogExists)
                 {
-                    await ApplyCdcDeletionShieldAsync(v1, v2, binding, runId, postDrain.DeletedEvents, isDryRun, summary, ct);
+                    postDrain = await DrainIncrementalChangelogAsync(v1, binding, preDrain.MaxSeq, ct);
+                    if (postDrain.DeletedEvents.Count > 0)
+                    {
+                        await ApplyCdcDeletionShieldAsync(v1, v2, binding, runId, postDrain.DeletedEvents, isDryRun, summary, ct);
+                    }
+                    if (postDrain.ScopedUserIds.Count > 0)
+                    {
+                        await ExecuteTrack1PipelineAsync(
+                            v1, v2, binding, runId, postDrain.ScopedUserIds, systems, fileTypes, clinicians,
+                            isDryRun, forceV1OnConflict, summary, ct);
+                    }
                 }
-                if (postDrain.ScopedUserIds.Count > 0)
+                else
                 {
-                    await ExecuteTrack1PipelineAsync(
-                        v1, v2, binding, runId, postDrain.ScopedUserIds, systems, fileTypes, clinicians,
-                        isDryRun, forceV1OnConflict, summary, ct);
+                    postDrain = preDrain;
                 }
 
                 summary.EndChangelogSeq = postDrain.MaxSeq;
-                if (!isDryRun && summary.EndChangelogSeq >= startSeq)
+                if (!isDryRun && changelogExists && summary.EndChangelogSeq >= startSeq)
                 {
                     await _ledger.UpdateCursorAsync(binding.Id, summary.EndChangelogSeq, ct);
                 }

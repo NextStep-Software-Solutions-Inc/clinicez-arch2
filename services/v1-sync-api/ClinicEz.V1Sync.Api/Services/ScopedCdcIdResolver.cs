@@ -67,42 +67,50 @@ public sealed class ScopedCdcIdResolver
 
         // MVCC commit-gap guard: never advance past an uncommitted in-flight transaction that grabbed a
         // lower BIGSERIAL seq while a sibling transaction committed a higher seq first.
-        await using (var cmd = new NpgsqlCommand("""
-            WITH snap AS (
-                SELECT pg_snapshot_xmin(pg_current_snapshot()) AS s_xmin,
-                       pg_snapshot_xmax(pg_current_snapshot()) AS s_xmax
-            ),
-            unsafe_floor AS (
-                SELECT COALESCE(MIN(c2.seq), 9223372036854775807) AS min_unsafe_seq
-                FROM _v1_sync.changelog c2, snap
-                WHERE c2.seq > @afterSeq
-                  AND age(c2.xmin) <= age((snap.s_xmin::text::bigint & 4294967295)::text::xid)
-            )
-            SELECT c.seq, c.table_name, c.op, c.row_id, c.pk_json::text
-            FROM _v1_sync.changelog c, snap, unsafe_floor uf
-            WHERE c.seq > @afterSeq
-              AND c.seq < uf.min_unsafe_seq
-              AND age(c.xmin) > age((snap.s_xmin::text::bigint & 4294967295)::text::xid)
-              AND (
-                  snap.s_xmin = snap.s_xmax
-                  OR c.changed_at < now() - interval '5 seconds'
-              )
-            ORDER BY c.seq ASC
-            LIMIT @lim
-            """, v1))
+        try
         {
-            cmd.Parameters.AddWithValue("afterSeq", afterSeq);
-            cmd.Parameters.AddWithValue("lim", effectiveLimit);
-            await using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
+            await using (var cmd = new NpgsqlCommand("""
+                WITH snap AS (
+                    SELECT pg_snapshot_xmin(pg_current_snapshot()) AS s_xmin,
+                           pg_snapshot_xmax(pg_current_snapshot()) AS s_xmax
+                ),
+                unsafe_floor AS (
+                    SELECT COALESCE(MIN(c2.seq), 9223372036854775807) AS min_unsafe_seq
+                    FROM _v1_sync.changelog c2, snap
+                    WHERE c2.seq > @afterSeq
+                      AND age(c2.xmin) <= age((snap.s_xmin::text::bigint & 4294967295)::text::xid)
+                )
+                SELECT c.seq, c.table_name, c.op, c.row_id, c.pk_json::text
+                FROM _v1_sync.changelog c, snap, unsafe_floor uf
+                WHERE c.seq > @afterSeq
+                  AND c.seq < uf.min_unsafe_seq
+                  AND age(c.xmin) > age((snap.s_xmin::text::bigint & 4294967295)::text::xid)
+                  AND (
+                      snap.s_xmin = snap.s_xmax
+                      OR c.changed_at < now() - interval '5 seconds'
+                  )
+                ORDER BY c.seq ASC
+                LIMIT @lim
+                """, v1))
             {
-                entries.Add(new CdcChangelogEntry(
-                    Seq: r.GetInt64(0),
-                    TableName: r.GetString(1),
-                    Op: r.GetString(2),
-                    RowId: r.GetString(3),
-                    PkJson: r.GetString(4)));
+                cmd.Parameters.AddWithValue("afterSeq", afterSeq);
+                cmd.Parameters.AddWithValue("lim", effectiveLimit);
+                await using var r = await cmd.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                {
+                    entries.Add(new CdcChangelogEntry(
+                        Seq: r.GetInt64(0),
+                        TableName: r.GetString(1),
+                        Op: r.GetString(2),
+                        RowId: r.GetString(3),
+                        PkJson: r.GetString(4)));
+                }
             }
+        }
+        catch (PostgresException ex) when (ex.SqlState is "42P01" or "3F000" or "42501")
+        {
+            // _v1_sync.changelog is not installed (or not yet readable by this role) — treat as 0 CDC events.
+            return new CdcBatchResolution(new List<int>(), new List<DeletedCdcEvent>(), afterSeq, 0, false);
         }
 
         if (entries.Count == 0)

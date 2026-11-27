@@ -170,9 +170,17 @@ public sealed class SyncConnectionFactory : IAsyncDisposable
                     long maxSeq = 0;
                     if (triggersOk)
                     {
-                        await using var seqCmd = new NpgsqlCommand(
-                            "SELECT COALESCE(MAX(seq), 0) FROM _v1_sync.changelog", conn) { CommandTimeout = 3 };
-                        maxSeq = Convert.ToInt64(await seqCmd.ExecuteScalarAsync(tok));
+                        try
+                        {
+                            await using var seqCmd = new NpgsqlCommand(
+                                "SELECT COALESCE(MAX(seq), 0) FROM _v1_sync.changelog", conn) { CommandTimeout = 3 };
+                            maxSeq = Convert.ToInt64(await seqCmd.ExecuteScalarAsync(tok));
+                        }
+                        catch (PostgresException ex) when (ex.SqlState is "42P01" or "3F000" or "42501")
+                        {
+                            triggersOk = false;
+                            maxSeq = 0;
+                        }
                     }
 
                     return (true, triggersOk, triggerTables, maxSeq);

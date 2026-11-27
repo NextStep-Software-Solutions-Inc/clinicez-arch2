@@ -239,19 +239,23 @@ public sealed class Track2PatientSyncEngine
 
             if (isIncremental)
             {
-                var (affectedUsers, endSeq, rawEvents, deletedEventsCount) = await RunIncrementalCdcLoopAsync(
-                    v1, v2, binding, runId, isGlobal, startSeq, fileTypes, clinicians, resolvedFacilityName,
-                    isDryRun, forceV1OnConflict, summary, shieldedInRun, ct);
+                var (affectedUsers, endSeq, rawEvents, deletedEventsCount) = changelogExists
+                    ? await RunIncrementalCdcLoopAsync(
+                        v1, v2, binding, runId, isGlobal, startSeq, fileTypes, clinicians, resolvedFacilityName,
+                        isDryRun, forceV1OnConflict, summary, shieldedInRun, ct)
+                    : (0, startSeq, 0, 0);
 
                 summary.EndChangelogSeq = endSeq;
                 summary.CohortPatientCount = affectedUsers;
                 if (rawEvents == 0 || (affectedUsers == 0 && deletedEventsCount == 0))
                 {
-                    if (!isDryRun)
+                    if (!isDryRun && changelogExists)
                     {
                         await _ledger.UpdateCursorAsync(binding.Id, Math.Max(startSeq, endSeq), ct);
                     }
-                    summary.Notes.Add("No Track 2 changes since last changelog cursor.");
+                    summary.Notes.Add(changelogExists
+                        ? "No Track 2 changes since last changelog cursor."
+                        : "Live change tracking is not enabled on Classic Clinic EZ (v1); skipped incremental changelog poll. Install Live Tracking SQL or run Full Migration / Final Sweep.");
                     if (deletedEventsCount == 0 &&
                         existingRunId is null &&
                         string.Equals(triggeredBy, "AutoSyncWorker", StringComparison.Ordinal))
@@ -271,8 +275,18 @@ public sealed class Track2PatientSyncEngine
             }
             else if (isFinalSweep)
             {
-                // 1. Pre-drain CDC backlog in bounded batches, advancing cursor per batch
-                var preSeq = await PreDrainChangelogAsync(v1, v2, binding, runId, isGlobal, startSeq, isDryRun, summary, shieldedInRun, ct);
+                // 1. Pre-drain CDC backlog in bounded batches, advancing cursor per batch (skipped cleanly if tracking is not installed)
+                long preSeq;
+                if (changelogExists)
+                {
+                    preSeq = await PreDrainChangelogAsync(v1, v2, binding, runId, isGlobal, startSeq, isDryRun, summary, shieldedInRun, ct);
+                }
+                else
+                {
+                    preSeq = startSeq;
+                    summary.Notes.Add("Live change tracking is not enabled on Classic Clinic EZ (v1); running full-cohort Final Verification Sweep without changelog drain.");
+                    summary.AppendVerboseLog("Live change tracking not installed on v1; skipping pre-sweep changelog drain.");
+                }
 
                 // 2. Full active cohort sweep + Deletion Shield for previously mapped out-of-scope/deleted patients
                 var cohortUserIds = await LoadCohortUsersAsync(v1, binding, isGlobal, ct);
@@ -291,10 +305,17 @@ public sealed class Track2PatientSyncEngine
                 }
 
                 // 3. Post-drain CDC backlog that arrived during the full sweep
-                var (_, postEndSeq, _, _) = await RunIncrementalCdcLoopAsync(
-                    v1, v2, binding, runId, isGlobal, preSeq, fileTypes, clinicians, resolvedFacilityName,
-                    isDryRun, forceV1OnConflict, summary, shieldedInRun, ct);
-                summary.EndChangelogSeq = Math.Max(preSeq, postEndSeq);
+                if (changelogExists)
+                {
+                    var (_, postEndSeq, _, _) = await RunIncrementalCdcLoopAsync(
+                        v1, v2, binding, runId, isGlobal, preSeq, fileTypes, clinicians, resolvedFacilityName,
+                        isDryRun, forceV1OnConflict, summary, shieldedInRun, ct);
+                    summary.EndChangelogSeq = Math.Max(preSeq, postEndSeq);
+                }
+                else
+                {
+                    summary.EndChangelogSeq = preSeq;
+                }
             }
             else
             {
