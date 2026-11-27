@@ -1,7 +1,7 @@
 // token-guard:ignore-file (native Android notification channel light colours)
 import * as ExpoNotifications from 'expo-notifications';
 import { storage } from '@utils/storage';
-import { Platform } from 'react-native';
+import { DeviceEventEmitter, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { db } from '@db/index';
 import { notifications } from '@db/schema/notifications';
@@ -9,6 +9,26 @@ import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 import type { NotificationCategory, NotificationType } from '@db/schema/notifications';
 
 const PUSH_TOKEN_KEY = 'push_token';
+export const NOTIFICATIONS_CHANGED_EVENT = 'notifications-changed';
+
+const pendingNotificationSyncs = new Set<Promise<unknown>>();
+
+function trackNotificationSync<T>(promise: Promise<T>): Promise<T> {
+  pendingNotificationSyncs.add(promise);
+  return promise.finally(() => {
+    pendingNotificationSyncs.delete(promise);
+  });
+}
+
+export async function waitForPendingNotificationSyncs(): Promise<void> {
+  while (pendingNotificationSyncs.size > 0) {
+    await Promise.allSettled([...pendingNotificationSyncs]);
+  }
+}
+
+function emitNotificationsChanged(): void {
+  DeviceEventEmitter.emit(NOTIFICATIONS_CHANGED_EVENT);
+}
 
 // ─── Push Permission & Token ─────────────────────────────────────────────────
 
@@ -136,6 +156,7 @@ export async function saveNotification(
     deletedAt: null,
   };
   await db.insert(notifications).values(row);
+  emitNotificationsChanged();
   return row as unknown as typeof notifications.$inferSelect;
 }
 
@@ -186,6 +207,7 @@ export async function markAsRead(id: string): Promise<void> {
     .update(notifications)
     .set({ isRead: true, readAt: new Date() })
     .where(eq(notifications.id, id));
+  emitNotificationsChanged();
 }
 
 export async function markAllAsRead(patientId: string): Promise<void> {
@@ -199,6 +221,7 @@ export async function markAllAsRead(patientId: string): Promise<void> {
         isNull(notifications.deletedAt),
       ),
     );
+  emitNotificationsChanged();
 }
 
 export async function deleteNotification(id: string): Promise<void> {
@@ -206,6 +229,7 @@ export async function deleteNotification(id: string): Promise<void> {
     .update(notifications)
     .set({ deletedAt: new Date() })
     .where(eq(notifications.id, id));
+  emitNotificationsChanged();
 }
 
 // ─── Backend Sync ──────────────────────────────────────────────────────────────
@@ -266,6 +290,7 @@ export async function syncNotificationsFromBackend(
   patientId: string,
 ): Promise<void> {
   try {
+    await waitForPendingNotificationSyncs();
     const result = await fetchNotificationsFromBackend(getToken, patientId, { take: 100 });
     await upsertRemoteNotifications(patientId, result.items);
   } catch {
@@ -274,26 +299,42 @@ export async function syncNotificationsFromBackend(
 }
 
 /**
- * Marks a single notification as read locally and fires-and-forgets to the backend.
+ * Marks a single notification as read locally and syncs to the backend (offline-tolerant).
  */
 export async function markAsReadWithSync(
   getToken: () => Promise<string | null>,
   patientId: string,
   id: string,
 ): Promise<void> {
-  await markAsRead(id);
-  try { await markNotificationReadOnBackend(getToken, patientId, id); } catch { /* offline */ }
+  return trackNotificationSync(
+    (async () => {
+      await markAsRead(id);
+      try {
+        await markNotificationReadOnBackend(getToken, patientId, id);
+      } catch {
+        /* offline */
+      }
+    })(),
+  );
 }
 
 /**
- * Marks all notifications as read locally and fires-and-forgets to the backend.
+ * Marks all notifications as read locally and syncs to the backend (offline-tolerant).
  */
 export async function markAllAsReadWithSync(
   getToken: () => Promise<string | null>,
   patientId: string,
 ): Promise<void> {
-  await markAllAsRead(patientId);
-  try { await markAllNotificationsReadOnBackend(getToken, patientId); } catch { /* offline */ }
+  return trackNotificationSync(
+    (async () => {
+      await markAllAsRead(patientId);
+      try {
+        await markAllNotificationsReadOnBackend(getToken, patientId);
+      } catch {
+        /* offline */
+      }
+    })(),
+  );
 }
 
 export async function clearAllNotifications(patientId: string): Promise<void> {
@@ -303,6 +344,55 @@ export async function clearAllNotifications(patientId: string): Promise<void> {
     .where(
       and(eq(notifications.patientId, patientId), isNull(notifications.deletedAt)),
     );
+  emitNotificationsChanged();
+}
+
+/**
+ * Soft-deletes a notification locally and, if it was unread, marks it as read on the
+ * backend so remote unread counts stay consistent (offline-tolerant).
+ */
+export async function deleteNotificationWithSync(
+  getToken: () => Promise<string | null>,
+  patientId: string,
+  id: string,
+): Promise<void> {
+  return trackNotificationSync(
+    (async () => {
+      const existing = await db
+        .select({ isRead: notifications.isRead })
+        .from(notifications)
+        .where(eq(notifications.id, id))
+        .limit(1);
+      await deleteNotification(id);
+      if (existing[0] && !existing[0].isRead) {
+        try {
+          await markNotificationReadOnBackend(getToken, patientId, id);
+        } catch {
+          /* offline */
+        }
+      }
+    })(),
+  );
+}
+
+/**
+ * Soft-deletes all notifications locally and marks them read on the backend so remote
+ * unread counts stay consistent (offline-tolerant).
+ */
+export async function clearAllNotificationsWithSync(
+  getToken: () => Promise<string | null>,
+  patientId: string,
+): Promise<void> {
+  return trackNotificationSync(
+    (async () => {
+      await clearAllNotifications(patientId);
+      try {
+        await markAllNotificationsReadOnBackend(getToken, patientId);
+      } catch {
+        /* offline */
+      }
+    })(),
+  );
 }
 
 // ─── Dev / Seed ──────────────────────────────────────────────────────────────

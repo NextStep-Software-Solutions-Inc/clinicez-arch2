@@ -12,6 +12,7 @@ import { useAuth } from 'contexts/AuthContext';
 import {
   registerForPushNotifications,
   getUnreadCount,
+  NOTIFICATIONS_CHANGED_EVENT,
   saveNotification,
   type NotificationPayload,
 } from 'services/notifications/notificationService';
@@ -221,11 +222,15 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     const documentsSub = DeviceEventEmitter.addListener(DOCUMENTS_SYNCED_EVENT, () => {
       refresh();
     });
+    const notificationsSub = DeviceEventEmitter.addListener(NOTIFICATIONS_CHANGED_EVENT, () => {
+      refresh();
+    });
 
     listenerCleanupRef.current = () => {
       receivedSub.remove();
       responseSub.remove();
       documentsSub.remove();
+      notificationsSub.remove();
     };
 
     return () => {

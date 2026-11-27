@@ -9,15 +9,16 @@ import EmptyState from '../../components/ui/EmptyState';
 import { FilterChipBar, type FilterChipItem } from '../../components/ui/FilterChipBar';
 import Screen from '../../components/layout/Screen';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationContext } from '../../contexts/NotificationContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePersistedTab } from '../../hooks/usePersistedTab';
 import { usePatientId } from '../../hooks/usePatientId';
 import {
   getNotifications,
-  markAllAsRead,
-  markAsRead,
-  deleteNotification,
+  markAllAsReadWithSync,
+  markAsReadWithSync,
+  deleteNotificationWithSync,
   type NotificationFilter,
 } from '../../services/notifications/notificationService';
 import { dialog } from '../../utils/dialog';
@@ -68,6 +69,7 @@ export default function NotificationScreenWeb() {
   const { isCompact } = useBreakpoint();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
+  const { getToken } = useAuth();
   const { unreadCount, refreshNotifications } = useNotificationContext();
 
   const [activeFilter, setActiveFilter] = usePersistedTab<NotificationFilter>({
@@ -78,6 +80,7 @@ export default function NotificationScreenWeb() {
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isMarkingAll, setIsMarkingAll] = useState(false);
 
   const loadData = useCallback(
     async (showRefresh = false) => {
@@ -101,36 +104,51 @@ export default function NotificationScreenWeb() {
   );
 
   const handleMarkAllRead = useCallback(async () => {
-    await markAllAsRead(patientId);
-    setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    refreshNotifications();
-  }, [patientId, refreshNotifications]);
+    if (isMarkingAll) return;
+    setIsMarkingAll(true);
+    setItems((prev) =>
+      activeFilter === 'unread' ? [] : prev.map((n) => ({ ...n, isRead: true }))
+    );
+    try {
+      await markAllAsReadWithSync(getToken, patientId);
+      refreshNotifications();
+    } finally {
+      setIsMarkingAll(false);
+    }
+  }, [activeFilter, getToken, isMarkingAll, patientId, refreshNotifications]);
 
   const handleItemPress = useCallback(
     async (item: NotificationRow) => {
       if (!item.isRead) {
         setItems((prev) =>
-          prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
+          activeFilter === 'unread'
+            ? prev.filter((n) => n.id !== item.id)
+            : prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
         );
-        await markAsRead(item.id);
-        refreshNotifications();
+        void markAsReadWithSync(getToken, patientId, item.id).then(() =>
+          refreshNotifications()
+        );
       }
       navigation.navigate('Main', {
         screen: 'NotificationDetailScreen',
-        params: { notification: item },
+        params: { notification: item.isRead ? item : { ...item, isRead: true } },
       });
     },
-    [navigation, refreshNotifications]
+    [activeFilter, getToken, navigation, patientId, refreshNotifications]
   );
 
   const handleMarkReadSingle = useCallback(
     async (id: string, e?: any) => {
       e?.stopPropagation?.();
-      setItems((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
-      await markAsRead(id);
+      setItems((prev) =>
+        activeFilter === 'unread'
+          ? prev.filter((n) => n.id !== id)
+          : prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+      );
+      await markAsReadWithSync(getToken, patientId, id);
       refreshNotifications();
     },
-    [refreshNotifications]
+    [activeFilter, getToken, patientId, refreshNotifications]
   );
 
   const handleDelete = useCallback(
@@ -142,14 +160,14 @@ export default function NotificationScreenWeb() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteNotification(id);
+            await deleteNotificationWithSync(getToken, patientId, id);
             setItems((prev) => prev.filter((n) => n.id !== id));
             refreshNotifications();
           },
         },
       ]);
     },
-    [refreshNotifications]
+    [getToken, patientId, refreshNotifications]
   );
 
   const filterItems: ReadonlyArray<FilterChipItem<NotificationFilter>> = useMemo(
@@ -203,6 +221,7 @@ export default function NotificationScreenWeb() {
             variant="ghost"
             size="sm"
             icon="check"
+            disabled={isMarkingAll}
             onPress={handleMarkAllRead}
           />
         </View>

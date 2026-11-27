@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { format } from 'date-fns';
@@ -12,7 +12,8 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
 import Screen from '../../components/layout/Screen';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { markAsRead } from '../../services/notifications/notificationService';
+import { useAuth } from '../../contexts/AuthContext';
+import { markAsRead, markAsReadWithSync } from '../../services/notifications/notificationService';
 import { useNotificationContext } from '../../contexts/NotificationContext';
 import type { getNotifications } from '../../services/notifications/notificationService';
 import { notifications, type NotificationType } from '../../db/schema/notifications';
@@ -158,7 +159,9 @@ export default function NotificationDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute();
   const { colors, spacing, radii, sizes } = useAppTheme();
+  const { getToken, internalPatientId: patientId } = useAuth();
   const { refreshNotifications } = useNotificationContext();
+  const markedReadIdsRef = useRef<Set<string>>(new Set());
 
   const rawParams = (route.params ?? {}) as any;
   const initialNotification = rawParams?.notification as NotificationRow | undefined;
@@ -196,10 +199,16 @@ export default function NotificationDetailScreen() {
 
   // Mark as read on open
   useEffect(() => {
-    if (notification && !notification.isRead) {
-      markAsRead(notification.id).then(() => refreshNotifications());
+    if (!notification || notification.isRead || markedReadIdsRef.current.has(notification.id)) {
+      return;
     }
-  }, [notification, refreshNotifications]);
+    markedReadIdsRef.current.add(notification.id);
+    setNotification((prev) => (prev && prev.id === notification.id ? { ...prev, isRead: true } : prev));
+    const task = patientId
+      ? markAsReadWithSync(getToken, patientId, notification.id)
+      : markAsRead(notification.id);
+    void task.then(() => refreshNotifications());
+  }, [getToken, notification, patientId, refreshNotifications]);
 
   // "Done" in header right
   useEffect(() => {

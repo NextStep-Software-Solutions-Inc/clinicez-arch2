@@ -12,6 +12,7 @@ import { DeviceEventEmitter } from 'react-native';
 import { useAuth } from 'contexts/AuthContext';
 import {
   getUnreadCount,
+  NOTIFICATIONS_CHANGED_EVENT,
   syncNotificationsFromBackend,
 } from 'services/notifications/notificationService';
 import { registerDeviceSessionOnBackend } from 'services/api/sessionsApi';
@@ -76,7 +77,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       return;
     }
     try {
-      await syncNotificationsFromBackend(getToken, patientId);
+      await syncNotificationsFromBackend(getTokenRef.current, patientId);
     } catch {
       // Offline/transient failures are non-fatal: fall back to the local count.
     }
@@ -85,7 +86,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     } catch {
       // ignore
     }
-  }, [patientId, getToken]);
+  }, [patientId]);
 
   useEffect(() => {
     if (!patientId || !clerkSessionId) {
@@ -124,14 +125,20 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', onFocus);
     }
-    const documentsSub = DeviceEventEmitter.addListener(DOCUMENTS_SYNCED_EVENT, () => {
+    const updateLocalCount = () => {
       getUnreadCount(patientId)
         .then(setUnreadCount)
         .catch(() => undefined);
-    });
+    };
+    const documentsSub = DeviceEventEmitter.addListener(DOCUMENTS_SYNCED_EVENT, updateLocalCount);
+    const notificationsSub = DeviceEventEmitter.addListener(
+      NOTIFICATIONS_CHANGED_EVENT,
+      updateLocalCount,
+    );
     return () => {
       clearInterval(interval);
       documentsSub.remove();
+      notificationsSub.remove();
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', onFocus);
       }
