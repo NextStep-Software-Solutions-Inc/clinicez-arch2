@@ -41,6 +41,42 @@ public static class SyncTransforms
         Clean(value, maxLength) ?? fallback;
 
     /// <summary>
+    /// Normalizes V1 `public."User"."picture"` values before writing to V2 Clinic and Patient DBs.
+    /// Drops blank strings, non-HTTPS URLs, permanently decommissioned Azure Blob #2 (`clinicez.blob.core.windows.net`),
+    /// and generic un-hashed Gravatar mystery-person placeholders (`gravatar.com/avatar?d=mp`) so V2 renders clean initials.
+    /// </summary>
+    public static string? NormalizeAvatarUrl(string? rawUrl, int maxLength = 500)
+    {
+        var cleaned = Clean(rawUrl, maxLength);
+        if (cleaned is null) return null;
+
+        if (!Uri.TryCreate(cleaned, UriKind.Absolute, out var uri) ||
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            !uri.IsDefaultPort)
+        {
+            return null;
+        }
+
+        var host = uri.Host.Trim().ToLowerInvariant();
+        if (host == "clinicez.blob.core.windows.net")
+        {
+            return null;
+        }
+
+        if (host is "www.gravatar.com" or "gravatar.com")
+        {
+            var path = uri.AbsolutePath.TrimEnd('/');
+            if (string.Equals(path, "/avatar", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+        }
+
+        return cleaned;
+    }
+
+    /// <summary>
     /// Strict Clerk ID extraction: keeps only live Clerk `user_*` IDs.
     /// Drops legacy `auth0|*` identifiers so zero Auth0 strings enter v2.
     /// </summary>

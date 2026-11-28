@@ -9,10 +9,19 @@ import type {
 export type SyncTrack = 'TRACK1_CLINIC' | 'TRACK2_PATIENT' | 'TRACK3_STORAGE';
 export type SyncCohortMode = 'SCOPED' | 'GLOBAL';
 export type ConflictResolution = 'KEEP_V2' | 'FORCE_V1' | 'IGNORE';
-export type StorageProviderFilter = 'ALL' | 'AZURE_BLOB_1';
+export type StorageProviderFilter = 'ALL' | 'AZURE_BLOB_1' | 'VERCEL_BLOB';
 export type StorageTargetPlaneFilter = 'BOTH' | 'CLINIC_ONLY' | 'PATIENT_ONLY';
-export type StorageTargetPlane = 'CLINIC_ATTACHMENT' | 'PATIENT_FILE';
-export type StorageSourceProvider = 'AZURE_BLOB_1' | 'AZURE_BLOB_2' | 'GOOGLE_DRIVE' | 'OTHER';
+export type StorageTargetPlane =
+  | 'CLINIC_ATTACHMENT'
+  | 'PATIENT_FILE'
+  | 'CLINIC_PATIENT_AVATAR'
+  | 'PATIENT_AVATAR';
+export type StorageSourceProvider =
+  | 'AZURE_BLOB_1'
+  | 'AZURE_BLOB_2'
+  | 'VERCEL_BLOB'
+  | 'GOOGLE_DRIVE'
+  | 'OTHER';
 export type StorageObjectStatus =
   | 'PENDING'
   | 'MIGRATED'

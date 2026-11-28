@@ -503,7 +503,7 @@ public sealed class ClaimIntakeCommandHandler : IRequestHandler<ClaimIntakeComma
         patient.AltPhone,
         patient.Email,
         patient.MessengerHandle,
-        patient.AvatarUrl,
+        ClinicEz.Patient.Application.Common.Helpers.PatientAvatarUrlResolver.Resolve(patient),
         patient.ConsentToShareInfo,
         patient.ClinicEzId);
 

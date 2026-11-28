@@ -60,7 +60,8 @@ public sealed record ClinicPatientDto(
     List<PatientAddressDto>? Addresses = null,
     List<PatientGuardianDto>? Guardians = null,
     List<PatientActiveQueueTicketDto>? ActiveQueueTickets = null,
-    List<PatientAllergyDto>? StructuredAllergies = null
+    List<PatientAllergyDto>? StructuredAllergies = null,
+    string? AvatarUrl = null
 );
 
 public sealed record PatientActiveQueueTicketDto(

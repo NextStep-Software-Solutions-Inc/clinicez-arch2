@@ -1724,6 +1724,8 @@ public sealed class Track1ClinicSyncEngine
         var hasAddrZip = await ColumnExistsAsync(v1, "UserAddress", "zipCode", ct);
         var hasEcAddr = await ColumnExistsAsync(v1, "UserEmergencyContact", "address", ct);
         var hasPhDepCols = await ColumnExistsAsync(v1, "PhilHealthDependent", "firstName", ct);
+        var hasAvatarCol = await ColumnExistsAsync(v2, "Patients", "AvatarUrl", ct);
+        var hasAvatarCryptoCol = hasAvatarCol && await ColumnExistsAsync(v2, "Patients", "AvatarEncryptionAlgorithm", ct);
 
         var secZipExpr = hasAddrZip ? """a."zipCode" """ : "NULL::text";
         var ecAddrExpr = hasEcAddr ? "c.address" : "NULL::text";
@@ -1734,7 +1736,7 @@ public sealed class Track1ClinicSyncEngine
             var v2Ids = chunkIds.Select(uid => DeterministicUuid.ClinicPatientId(v2ClinicId, uid)).ToArray();
 
             // Read existing v2 rows for v2-wins drift check
-            var existingV2 = await LoadExistingClinicPatientStatesAsync(v2, v2Ids, ct);
+            var existingV2 = await LoadExistingClinicPatientStatesAsync(v2, v2Ids, hasAvatarCol, hasAvatarCryptoCol, ct);
 
             // Pre-query natural unique PatientCode owners (IX_Patients_TenantId_ClinicId_PatientCode)
             var candidateCodes = chunkIds.Select(uid => $"V1-{uid:D6}").ToArray();
@@ -1815,7 +1817,8 @@ public sealed class Track1ClinicSyncEngine
                                AND EXISTS (SELECT 1 FROM public."OrganizationMember" om WHERE om."userId" = u.id AND om."organizationId" = @oid)
                                AND NOT EXISTS (SELECT 1 FROM public."ClinicPatient" cp_del WHERE cp_del."patientId" = u.id AND cp_del."clinicId" = @cid AND cp_del."deletedAt" IS NOT NULL)
                            )
-                       ) AS in_active_scope
+                       ) AS in_active_scope,
+                       u.picture
                 FROM public."User" u
                 LEFT JOIN LATERAL (
                     SELECT s."studentId", s.lrn, s.level, s."collegeId", s."programId", s."yearLevel"
@@ -1916,6 +1919,7 @@ public sealed class Track1ClinicSyncEngine
                     var createdAt = GetUtc(r, 20) ?? DateTimeOffset.UtcNow;
                     var updatedAt = GetUtc(r, 21) ?? createdAt;
                     var inActiveScope = !r.IsDBNull(52) && r.GetBoolean(52);
+                    var avatarUrl = hasAvatarCol ? SyncTransforms.NormalizeAvatarUrl(GetStr(r, 53)) : null;
                     var isV1Deleted = !r.IsDBNull(22) || (!r.IsDBNull(23) && !r.GetBoolean(23)) || !inActiveScope;
 
                     var studentId = SyncTransforms.Clean(GetStr(r, 24));
@@ -2015,7 +2019,8 @@ public sealed class Track1ClinicSyncEngine
                     var canonicalFields = BuildClinicPatientCanonicalMap(
                         firstName, lastName, middleName, suffix, dob, sex, civilStatus, bloodType,
                         contactNumber, landline, email, empPos, nationality, religion, nickname, philHealthPin,
-                        ecName, ecPhone, ecRel, verificationStatus, customFieldsJson);
+                        ecName, ecPhone, ecRel, verificationStatus, customFieldsJson,
+                        avatarUrl, includeAvatar: hasAvatarCol);
                     var v1Hash = DeterministicUuid.ComputeCanonicalHash(canonicalFields);
 
                     var existsInV2 = existingV2.TryGetValue(v2PatientId, out var currentV2State);
@@ -2030,7 +2035,25 @@ public sealed class Track1ClinicSyncEngine
                         // v2-wins guard: check if staff edited the patient directly in v2 since our last sync
                         var liveV2Hash = DeterministicUuid.ComputeCanonicalHash(currentV2State!.Fields);
                         var changedFields = DeterministicUuid.ComputeChangedFieldNames(currentV2State.Fields, canonicalFields);
-                        if (!forceV1OnConflict && !string.Equals(liveV2Hash, prevHash.V2ExpectedHash, StringComparison.Ordinal))
+                        var matchesExpected = string.Equals(liveV2Hash, prevHash.V2ExpectedHash, StringComparison.Ordinal);
+
+                        // Schema-evolution guard: upgrade legacy pre-avatar hashes cleanly without raising false V2_MODIFIED conflicts
+                        if (!matchesExpected && hasAvatarCol && currentV2State.Fields.GetValueOrDefault("avatarUrl") is null)
+                        {
+                            var legacyLiveV2Hash = ComputeCanonicalHashWithoutKey(currentV2State.Fields, "avatarUrl");
+                            if (string.Equals(legacyLiveV2Hash, prevHash.V2ExpectedHash, StringComparison.Ordinal))
+                            {
+                                matchesExpected = true;
+                                if (!forceV1OnConflict && changedFields.Count == 0)
+                                {
+                                    counter.Unchanged++;
+                                    if (!isDryRun) ledgerUpdates.Add((v1IdStr, v2PatientId, v1Hash, v1Hash));
+                                    continue;
+                                }
+                            }
+                        }
+
+                        if (!forceV1OnConflict && !matchesExpected)
                         {
                             counter.SkippedV2Wins++;
                             diffBatch.Add(("Patient", v1IdStr, v2PatientId, SyncDiffAction.SkipV2Wins, changedFields));
@@ -2080,51 +2103,170 @@ public sealed class Track1ClinicSyncEngine
 
                     if (!isDryRun)
                     {
-                        var upsert = new NpgsqlBatchCommand("""
-                            INSERT INTO public."Patients" (
-                                "Id", "PatientCode", "FirstName", "LastName", "MiddleName", "Suffix",
-                                "DateOfBirth", "Sex", "CivilStatus", "BloodType",
-                                "ContactNumber", "LandlineNumber", "Email", "Occupation",
-                                "EmergencyContactName", "EmergencyContactNumber", "EmergencyContactRelationship",
-                                "PhilHealthNumber", "PreferredName", "Nationality", "Religion",
-                                "IsDeceased", "CustomFields", "HasActiveSafetyAlert", "VerificationStatus", "ShareGrantScopes",
-                                "CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy", "IsDeleted",
-                                "TenantId", "ClinicId"
-                            ) VALUES (
-                                @id, @code, @fn, @ln, @mn, @suf,
-                                @dob, @sex, @civil, @blood,
-                                @contact, @landline, @email, @occ,
-                                @ecName, @ecPhone, @ecRel,
-                                @phPin, @prefName, @nat, @rel,
-                                false, @cf::jsonb, false, @vs, '',
-                                @cat, @actor, @uat, @actor, false,
-                                @tid, @cid
-                            )
-                            ON CONFLICT ("Id") DO UPDATE SET
-                                "FirstName" = EXCLUDED."FirstName",
-                                "LastName" = EXCLUDED."LastName",
-                                "MiddleName" = EXCLUDED."MiddleName",
-                                "Suffix" = EXCLUDED."Suffix",
-                                "DateOfBirth" = EXCLUDED."DateOfBirth",
-                                "Sex" = EXCLUDED."Sex",
-                                "CivilStatus" = EXCLUDED."CivilStatus",
-                                "BloodType" = EXCLUDED."BloodType",
-                                "ContactNumber" = EXCLUDED."ContactNumber",
-                                "LandlineNumber" = EXCLUDED."LandlineNumber",
-                                "Email" = EXCLUDED."Email",
-                                "Occupation" = EXCLUDED."Occupation",
-                                "EmergencyContactName" = EXCLUDED."EmergencyContactName",
-                                "EmergencyContactNumber" = EXCLUDED."EmergencyContactNumber",
-                                "EmergencyContactRelationship" = EXCLUDED."EmergencyContactRelationship",
-                                "PhilHealthNumber" = EXCLUDED."PhilHealthNumber",
-                                "PreferredName" = EXCLUDED."PreferredName",
-                                "Nationality" = EXCLUDED."Nationality",
-                                "Religion" = EXCLUDED."Religion",
-                                "VerificationStatus" = EXCLUDED."VerificationStatus",
-                                "CustomFields" = EXCLUDED."CustomFields",
-                                "UpdatedAt" = now(),
-                                "UpdatedBy" = @actor
-                            """);
+                        var preserveEncryptedAvatar = hasAvatarCryptoCol
+                            && existsInV2
+                            && currentV2State!.IsAvatarEncrypted
+                            && string.Equals(currentV2State.MigratedAvatarSourceUrl, avatarUrl, StringComparison.Ordinal);
+
+                        string upsertSql;
+                        if (hasAvatarCol && hasAvatarCryptoCol)
+                        {
+                            upsertSql = """
+                                INSERT INTO public."Patients" (
+                                    "Id", "PatientCode", "FirstName", "LastName", "MiddleName", "Suffix",
+                                    "DateOfBirth", "Sex", "CivilStatus", "BloodType",
+                                    "ContactNumber", "LandlineNumber", "Email", "Occupation",
+                                    "EmergencyContactName", "EmergencyContactNumber", "EmergencyContactRelationship",
+                                    "PhilHealthNumber", "PreferredName", "Nationality", "Religion",
+                                    "AvatarUrl", "AvatarEncryptionAlgorithm",
+                                    "IsDeceased", "CustomFields", "HasActiveSafetyAlert", "VerificationStatus", "ShareGrantScopes",
+                                    "CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy", "IsDeleted",
+                                    "TenantId", "ClinicId"
+                                ) VALUES (
+                                    @id, @code, @fn, @ln, @mn, @suf,
+                                    @dob, @sex, @civil, @blood,
+                                    @contact, @landline, @email, @occ,
+                                    @ecName, @ecPhone, @ecRel,
+                                    @phPin, @prefName, @nat, @rel,
+                                    @avatar, @avatarAlg,
+                                    false, @cf::jsonb, false, @vs, '',
+                                    @cat, @actor, @uat, @actor, false,
+                                    @tid, @cid
+                                )
+                                ON CONFLICT ("Id") DO UPDATE SET
+                                    "FirstName" = EXCLUDED."FirstName",
+                                    "LastName" = EXCLUDED."LastName",
+                                    "MiddleName" = EXCLUDED."MiddleName",
+                                    "Suffix" = EXCLUDED."Suffix",
+                                    "DateOfBirth" = EXCLUDED."DateOfBirth",
+                                    "Sex" = EXCLUDED."Sex",
+                                    "CivilStatus" = EXCLUDED."CivilStatus",
+                                    "BloodType" = EXCLUDED."BloodType",
+                                    "ContactNumber" = EXCLUDED."ContactNumber",
+                                    "LandlineNumber" = EXCLUDED."LandlineNumber",
+                                    "Email" = EXCLUDED."Email",
+                                    "Occupation" = EXCLUDED."Occupation",
+                                    "EmergencyContactName" = EXCLUDED."EmergencyContactName",
+                                    "EmergencyContactNumber" = EXCLUDED."EmergencyContactNumber",
+                                    "EmergencyContactRelationship" = EXCLUDED."EmergencyContactRelationship",
+                                    "PhilHealthNumber" = EXCLUDED."PhilHealthNumber",
+                                    "PreferredName" = EXCLUDED."PreferredName",
+                                    "Nationality" = EXCLUDED."Nationality",
+                                    "Religion" = EXCLUDED."Religion",
+                                    "AvatarUrl" = CASE WHEN @preserveAvatar THEN public."Patients"."AvatarUrl" ELSE EXCLUDED."AvatarUrl" END,
+                                    "AvatarContentType" = CASE WHEN @preserveAvatar THEN public."Patients"."AvatarContentType" ELSE NULL END,
+                                    "AvatarEncryptionAlgorithm" = CASE WHEN @preserveAvatar THEN public."Patients"."AvatarEncryptionAlgorithm" ELSE EXCLUDED."AvatarEncryptionAlgorithm" END,
+                                    "AvatarEncryptionKeyId" = CASE WHEN @preserveAvatar THEN public."Patients"."AvatarEncryptionKeyId" ELSE NULL END,
+                                    "AvatarEncryptionIvBase64" = CASE WHEN @preserveAvatar THEN public."Patients"."AvatarEncryptionIvBase64" ELSE NULL END,
+                                    "AvatarEncryptionTagBase64" = CASE WHEN @preserveAvatar THEN public."Patients"."AvatarEncryptionTagBase64" ELSE NULL END,
+                                    "AvatarEncryptedSizeBytes" = CASE WHEN @preserveAvatar THEN public."Patients"."AvatarEncryptedSizeBytes" ELSE NULL END,
+                                    "AvatarEncryptedHash" = CASE WHEN @preserveAvatar THEN public."Patients"."AvatarEncryptedHash" ELSE NULL END,
+                                    "AvatarWrappedKeyJson" = CASE WHEN @preserveAvatar THEN public."Patients"."AvatarWrappedKeyJson" ELSE NULL END,
+                                    "VerificationStatus" = EXCLUDED."VerificationStatus",
+                                    "CustomFields" = EXCLUDED."CustomFields",
+                                    "UpdatedAt" = now(),
+                                    "UpdatedBy" = @actor
+                                """;
+                        }
+                        else if (hasAvatarCol)
+                        {
+                            upsertSql = """
+                                INSERT INTO public."Patients" (
+                                    "Id", "PatientCode", "FirstName", "LastName", "MiddleName", "Suffix",
+                                    "DateOfBirth", "Sex", "CivilStatus", "BloodType",
+                                    "ContactNumber", "LandlineNumber", "Email", "Occupation",
+                                    "EmergencyContactName", "EmergencyContactNumber", "EmergencyContactRelationship",
+                                    "PhilHealthNumber", "PreferredName", "Nationality", "Religion", "AvatarUrl",
+                                    "IsDeceased", "CustomFields", "HasActiveSafetyAlert", "VerificationStatus", "ShareGrantScopes",
+                                    "CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy", "IsDeleted",
+                                    "TenantId", "ClinicId"
+                                ) VALUES (
+                                    @id, @code, @fn, @ln, @mn, @suf,
+                                    @dob, @sex, @civil, @blood,
+                                    @contact, @landline, @email, @occ,
+                                    @ecName, @ecPhone, @ecRel,
+                                    @phPin, @prefName, @nat, @rel, @avatar,
+                                    false, @cf::jsonb, false, @vs, '',
+                                    @cat, @actor, @uat, @actor, false,
+                                    @tid, @cid
+                                )
+                                ON CONFLICT ("Id") DO UPDATE SET
+                                    "FirstName" = EXCLUDED."FirstName",
+                                    "LastName" = EXCLUDED."LastName",
+                                    "MiddleName" = EXCLUDED."MiddleName",
+                                    "Suffix" = EXCLUDED."Suffix",
+                                    "DateOfBirth" = EXCLUDED."DateOfBirth",
+                                    "Sex" = EXCLUDED."Sex",
+                                    "CivilStatus" = EXCLUDED."CivilStatus",
+                                    "BloodType" = EXCLUDED."BloodType",
+                                    "ContactNumber" = EXCLUDED."ContactNumber",
+                                    "LandlineNumber" = EXCLUDED."LandlineNumber",
+                                    "Email" = EXCLUDED."Email",
+                                    "Occupation" = EXCLUDED."Occupation",
+                                    "EmergencyContactName" = EXCLUDED."EmergencyContactName",
+                                    "EmergencyContactNumber" = EXCLUDED."EmergencyContactNumber",
+                                    "EmergencyContactRelationship" = EXCLUDED."EmergencyContactRelationship",
+                                    "PhilHealthNumber" = EXCLUDED."PhilHealthNumber",
+                                    "PreferredName" = EXCLUDED."PreferredName",
+                                    "Nationality" = EXCLUDED."Nationality",
+                                    "Religion" = EXCLUDED."Religion",
+                                    "AvatarUrl" = EXCLUDED."AvatarUrl",
+                                    "VerificationStatus" = EXCLUDED."VerificationStatus",
+                                    "CustomFields" = EXCLUDED."CustomFields",
+                                    "UpdatedAt" = now(),
+                                    "UpdatedBy" = @actor
+                                """;
+                        }
+                        else
+                        {
+                            upsertSql = """
+                                INSERT INTO public."Patients" (
+                                    "Id", "PatientCode", "FirstName", "LastName", "MiddleName", "Suffix",
+                                    "DateOfBirth", "Sex", "CivilStatus", "BloodType",
+                                    "ContactNumber", "LandlineNumber", "Email", "Occupation",
+                                    "EmergencyContactName", "EmergencyContactNumber", "EmergencyContactRelationship",
+                                    "PhilHealthNumber", "PreferredName", "Nationality", "Religion",
+                                    "IsDeceased", "CustomFields", "HasActiveSafetyAlert", "VerificationStatus", "ShareGrantScopes",
+                                    "CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy", "IsDeleted",
+                                    "TenantId", "ClinicId"
+                                ) VALUES (
+                                    @id, @code, @fn, @ln, @mn, @suf,
+                                    @dob, @sex, @civil, @blood,
+                                    @contact, @landline, @email, @occ,
+                                    @ecName, @ecPhone, @ecRel,
+                                    @phPin, @prefName, @nat, @rel,
+                                    false, @cf::jsonb, false, @vs, '',
+                                    @cat, @actor, @uat, @actor, false,
+                                    @tid, @cid
+                                )
+                                ON CONFLICT ("Id") DO UPDATE SET
+                                    "FirstName" = EXCLUDED."FirstName",
+                                    "LastName" = EXCLUDED."LastName",
+                                    "MiddleName" = EXCLUDED."MiddleName",
+                                    "Suffix" = EXCLUDED."Suffix",
+                                    "DateOfBirth" = EXCLUDED."DateOfBirth",
+                                    "Sex" = EXCLUDED."Sex",
+                                    "CivilStatus" = EXCLUDED."CivilStatus",
+                                    "BloodType" = EXCLUDED."BloodType",
+                                    "ContactNumber" = EXCLUDED."ContactNumber",
+                                    "LandlineNumber" = EXCLUDED."LandlineNumber",
+                                    "Email" = EXCLUDED."Email",
+                                    "Occupation" = EXCLUDED."Occupation",
+                                    "EmergencyContactName" = EXCLUDED."EmergencyContactName",
+                                    "EmergencyContactNumber" = EXCLUDED."EmergencyContactNumber",
+                                    "EmergencyContactRelationship" = EXCLUDED."EmergencyContactRelationship",
+                                    "PhilHealthNumber" = EXCLUDED."PhilHealthNumber",
+                                    "PreferredName" = EXCLUDED."PreferredName",
+                                    "Nationality" = EXCLUDED."Nationality",
+                                    "Religion" = EXCLUDED."Religion",
+                                    "VerificationStatus" = EXCLUDED."VerificationStatus",
+                                    "CustomFields" = EXCLUDED."CustomFields",
+                                    "UpdatedAt" = now(),
+                                    "UpdatedBy" = @actor
+                                """;
+                        }
+
+                        var upsert = new NpgsqlBatchCommand(upsertSql);
                         upsert.Parameters.AddWithValue("id", v2PatientId);
                         upsert.Parameters.AddWithValue("code", patientCode);
                         upsert.Parameters.AddWithValue("fn", firstName);
@@ -2146,6 +2288,15 @@ public sealed class Track1ClinicSyncEngine
                         upsert.Parameters.AddWithValue("prefName", (object?)nickname ?? DBNull.Value);
                         upsert.Parameters.AddWithValue("nat", (object?)nationality ?? DBNull.Value);
                         upsert.Parameters.AddWithValue("rel", (object?)religion ?? DBNull.Value);
+                        if (hasAvatarCol)
+                        {
+                            upsert.Parameters.AddWithValue("avatar", (object?)avatarUrl ?? DBNull.Value);
+                        }
+                        if (hasAvatarCryptoCol)
+                        {
+                            upsert.Parameters.AddWithValue("avatarAlg", avatarUrl is null ? DBNull.Value : (object)SyncTransforms.LegacyUnencryptedAlgorithm);
+                            upsert.Parameters.AddWithValue("preserveAvatar", preserveEncryptedAvatar);
+                        }
                         upsert.Parameters.AddWithValue("cf", customFieldsJson);
                         upsert.Parameters.AddWithValue("vs", verificationStatus);
                         upsert.Parameters.AddWithValue("cat", createdAt);
@@ -5987,7 +6138,10 @@ public sealed class Track1ClinicSyncEngine
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
-    private sealed record ExistingPatientState(Dictionary<string, string?> Fields);
+    private sealed record ExistingPatientState(
+        Dictionary<string, string?> Fields,
+        bool IsAvatarEncrypted = false,
+        string? MigratedAvatarSourceUrl = null);
     private sealed record ClinicianSnapshot(string Name, string? PrcLicense, string? PtrNumber);
     private sealed record ChildSyncCandidate(
         string V1Id,
@@ -6464,8 +6618,10 @@ public sealed class Track1ClinicSyncEngine
     public static Dictionary<string, string?> BuildClinicPatientCanonicalMap(
         string fn, string ln, string? mn, string? suf, DateOnly? dob, string sex, string? civil, string? blood,
         string contact, string? landline, string? email, string? occupation, string? nat, string? rel, string? prefName, string? phPin,
-        string? ecName, string? ecPhone, string? ecRel, string verificationStatus, string customFieldsJson) =>
-        new(StringComparer.Ordinal)
+        string? ecName, string? ecPhone, string? ecRel, string verificationStatus, string customFieldsJson,
+        string? avatarUrl = null, bool includeAvatar = false)
+    {
+        var map = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["firstName"] = fn,
             ["lastName"] = ln,
@@ -6489,6 +6645,12 @@ public sealed class Track1ClinicSyncEngine
             ["verificationStatus"] = verificationStatus,
             ["customFields"] = customFieldsJson
         };
+        if (includeAvatar)
+        {
+            map["avatarUrl"] = avatarUrl;
+        }
+        return map;
+    }
 
     public static Dictionary<string, string?> BuildClinicSocialHistoryCanonicalMap(
         bool isSmoker, string? smokingStatus, bool isAlcoholDrinker, string? alcoholStatus,
@@ -6537,33 +6699,81 @@ public sealed class Track1ClinicSyncEngine
         return map;
     }
 
-    private static async Task<Dictionary<Guid, ExistingPatientState>> LoadExistingClinicPatientStatesAsync(
-        NpgsqlConnection v2, Guid[] ids, CancellationToken ct)
+    private static string ComputeCanonicalHashWithoutKey(Dictionary<string, string?> fields, string keyToOmit)
+    {
+        var copy = new Dictionary<string, string?>(fields.Count, StringComparer.Ordinal);
+        foreach (var kv in fields)
+        {
+            if (!string.Equals(kv.Key, keyToOmit, StringComparison.Ordinal))
+            {
+                copy[kv.Key] = kv.Value;
+            }
+        }
+        return DeterministicUuid.ComputeCanonicalHash(copy);
+    }
+
+    private async Task<Dictionary<Guid, ExistingPatientState>> LoadExistingClinicPatientStatesAsync(
+        NpgsqlConnection v2, Guid[] ids, bool hasAvatarCol, bool hasAvatarCryptoCol, CancellationToken ct)
     {
         var map = new Dictionary<Guid, ExistingPatientState>();
-        const string sql = """
+        var encryptedAvatarIds = new List<Guid>();
+        var avatarCols = hasAvatarCol
+            ? (hasAvatarCryptoCol ? ""","AvatarUrl","AvatarEncryptionAlgorithm" """ : ""","AvatarUrl",NULL::text """)
+            : ",NULL::text,NULL::text";
+
+        var sql = $"""
             SELECT "Id","FirstName","LastName","MiddleName","Suffix","DateOfBirth","Sex","CivilStatus","BloodType",
                    "ContactNumber","LandlineNumber","Email","Occupation","Nationality","Religion","PreferredName","PhilHealthNumber",
                    "EmergencyContactName","EmergencyContactNumber","EmergencyContactRelationship","VerificationStatus","CustomFields"::text
+                   {avatarCols}
             FROM public."Patients"
             WHERE "Id" = ANY(@ids)
             """;
-        await using var cmd = new NpgsqlCommand(sql, v2);
-        cmd.Parameters.AddWithValue("ids", ids);
-        await using var r = await cmd.ExecuteReaderAsync(ct);
-        while (await r.ReadAsync(ct))
+        await using (var cmd = new NpgsqlCommand(sql, v2))
         {
-            var id = r.GetGuid(0);
-            var dob = r.IsDBNull(5) ? (DateOnly?)null : r.GetFieldValue<DateOnly>(5);
-            var cfRaw = r.IsDBNull(21) ? "{}" : r.GetString(21);
-            var cfDict = JsonSerializer.Deserialize<Dictionary<string, object?>>(cfRaw) ?? new();
-            var cfSorted = SyncTransforms.SerializeSortedJson(cfDict);
-            map[id] = new ExistingPatientState(BuildClinicPatientCanonicalMap(
-                r.GetString(1), r.GetString(2), GetStr(r, 3), GetStr(r, 4), dob, r.GetString(6),
-                GetStr(r, 7), GetStr(r, 8), r.GetString(9), GetStr(r, 10), GetStr(r, 11),
-                GetStr(r, 12), GetStr(r, 13), GetStr(r, 14), GetStr(r, 15), GetStr(r, 16),
-                GetStr(r, 17), GetStr(r, 18), GetStr(r, 19), GetStr(r, 20) ?? "Verified", cfSorted));
+            cmd.Parameters.AddWithValue("ids", ids);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                var id = r.GetGuid(0);
+                var dob = r.IsDBNull(5) ? (DateOnly?)null : r.GetFieldValue<DateOnly>(5);
+                var cfRaw = r.IsDBNull(21) ? "{}" : r.GetString(21);
+                var cfDict = JsonSerializer.Deserialize<Dictionary<string, object?>>(cfRaw) ?? new();
+                var cfSorted = SyncTransforms.SerializeSortedJson(cfDict);
+                var liveAvatar = hasAvatarCol ? SyncTransforms.Clean(GetStr(r, 22), 500) : null;
+                var avatarEncAlg = hasAvatarCryptoCol ? GetStr(r, 23) : null;
+                var isEncrypted = !string.IsNullOrWhiteSpace(liveAvatar)
+                    && !string.Equals(avatarEncAlg ?? SyncTransforms.LegacyUnencryptedAlgorithm, SyncTransforms.LegacyUnencryptedAlgorithm, StringComparison.OrdinalIgnoreCase);
+                if (isEncrypted)
+                {
+                    encryptedAvatarIds.Add(id);
+                }
+
+                map[id] = new ExistingPatientState(
+                    BuildClinicPatientCanonicalMap(
+                        r.GetString(1), r.GetString(2), GetStr(r, 3), GetStr(r, 4), dob, r.GetString(6),
+                        GetStr(r, 7), GetStr(r, 8), r.GetString(9), GetStr(r, 10), GetStr(r, 11),
+                        GetStr(r, 12), GetStr(r, 13), GetStr(r, 14), GetStr(r, 15), GetStr(r, 16),
+                        GetStr(r, 17), GetStr(r, 18), GetStr(r, 19), GetStr(r, 20) ?? "Verified", cfSorted,
+                        liveAvatar, includeAvatar: hasAvatarCol),
+                    IsAvatarEncrypted: isEncrypted,
+                    MigratedAvatarSourceUrl: null);
+            }
         }
+
+        if (encryptedAvatarIds.Count > 0)
+        {
+            var sources = await _ledger.LoadMigratedSourceInfoByPlaneAsync(
+                SyncStoragePlane.ClinicPatientAvatar, encryptedAvatarIds, ct);
+            foreach (var (id, src) in sources)
+            {
+                if (!map.TryGetValue(id, out var st)) continue;
+                var normalizedSrc = SyncTransforms.Clean(src.SourceUrl, 500);
+                st.Fields["avatarUrl"] = normalizedSrc;
+                map[id] = st with { MigratedAvatarSourceUrl = normalizedSrc };
+            }
+        }
+
         return map;
     }
 

@@ -5,6 +5,7 @@ import { useUser } from '@clerk/expo';
 import { desc, eq } from 'drizzle-orm';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { useResolvedAvatarUri } from '../../hooks/useResolvedAvatarUri';
 import { useNotificationContext } from '../../contexts/NotificationContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePatientId } from '../../hooks/usePatientId';
@@ -368,6 +369,10 @@ export default function HomeScreenWeb() {
     unreadCount,
     dashboard?.healthPass.unreadNotificationsCount ?? 0,
   );
+  const resolvedAvatarUrl = useResolvedAvatarUri(
+    dashboard?.healthPass.avatarUrl ?? user?.imageUrl ?? null,
+    getToken,
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: colors.canvas }]}>
@@ -376,7 +381,7 @@ export default function HomeScreenWeb() {
         title={headerTitle}
         subtitle={headerSubtitle}
         fullName={dashboard?.healthPass.fullName ?? user?.fullName ?? 'Patient'}
-        avatarUrl={dashboard?.healthPass.avatarUrl ?? user?.imageUrl ?? null}
+        avatarUrl={resolvedAvatarUrl}
         unreadCount={effectiveUnreadCount}
         showBrand={!isWorkstation}
         alwaysShowTitle={isWorkstation}

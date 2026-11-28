@@ -29,7 +29,7 @@ public sealed class GetPatientFullRecordQueryHandler
             p.Nationality, p.Ethnicity, p.Religion, p.PrimaryLanguage,
             p.EducationLevel?.ToString(),
             p.Mobile, p.AltPhone, p.Email, p.MessengerHandle,
-            p.AvatarUrl,
+            ClinicEz.Patient.Application.Common.Helpers.PatientAvatarUrlResolver.Resolve(p),
             p.ConsentToShareInfo,
             p.ClinicEzId);
 

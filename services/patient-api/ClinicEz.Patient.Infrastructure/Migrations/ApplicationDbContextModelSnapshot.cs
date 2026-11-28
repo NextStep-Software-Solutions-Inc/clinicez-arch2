@@ -2561,10 +2561,48 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("alt_phone");
 
+                    b.Property<string>("AvatarContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("avatar_content_type");
+
+                    b.Property<string>("AvatarEncryptedHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("avatar_encrypted_hash");
+
+                    b.Property<long?>("AvatarEncryptedSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("avatar_encrypted_size_bytes");
+
+                    b.Property<string>("AvatarEncryptionAlgorithm")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("avatar_encryption_algorithm");
+
+                    b.Property<string>("AvatarEncryptionIvBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("avatar_encryption_iv_base64");
+
+                    b.Property<string>("AvatarEncryptionKeyId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("avatar_encryption_key_id");
+
+                    b.Property<string>("AvatarEncryptionTagBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("avatar_encryption_tag_base64");
+
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("avatar_url");
+
+                    b.Property<string>("AvatarWrappedKeyJson")
+                        .HasColumnType("text")
+                        .HasColumnName("avatar_wrapped_key_json");
 
                     b.Property<string>("BloodType")
                         .HasMaxLength(15)

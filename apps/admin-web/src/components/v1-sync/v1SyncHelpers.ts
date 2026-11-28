@@ -323,12 +323,15 @@ export const STORAGE_ATTENTION_STATUS_OPTIONS: readonly SelectFieldOption[] = [
 export const STORAGE_PLANE_FILTER_OPTIONS: readonly SelectFieldOption[] = [
   { value: '', label: 'All Copies' },
   { value: 'CLINIC_ATTACHMENT', label: 'Clinic Files' },
+  { value: 'CLINIC_PATIENT_AVATAR', label: 'Clinic Avatars' },
   { value: 'PATIENT_FILE', label: 'Patient Files' },
+  { value: 'PATIENT_AVATAR', label: 'Patient Avatars' },
 ];
 
 export const STORAGE_LOG_SOURCE_FILTER_OPTIONS: readonly SelectFieldOption[] = [
   { value: '', label: 'All Sources' },
   { value: 'AZURE_BLOB_1', label: 'Primary Storage' },
+  { value: 'VERCEL_BLOB', label: 'Vercel Blob' },
   { value: 'GOOGLE_DRIVE', label: 'Google Drive' },
   { value: 'AZURE_BLOB_2', label: 'Legacy Storage' },
   { value: 'OTHER', label: 'Other Source' },
@@ -779,8 +782,12 @@ export function formatStoragePlane(plane: StorageTargetPlane | string): string {
   switch (plane) {
     case 'CLINIC_ATTACHMENT':
       return 'Clinic Files';
+    case 'CLINIC_PATIENT_AVATAR':
+      return 'Clinic Avatars';
     case 'PATIENT_FILE':
       return 'Patient Files';
+    case 'PATIENT_AVATAR':
+      return 'Patient Avatars';
     default:
       return 'File Copy';
   }
@@ -790,6 +797,8 @@ export function formatStorageProvider(provider: StorageSourceProvider | string):
   switch (provider) {
     case 'AZURE_BLOB_1':
       return 'Primary Storage';
+    case 'VERCEL_BLOB':
+      return 'Vercel Blob';
     case 'AZURE_BLOB_2':
       return 'Legacy Storage';
     case 'GOOGLE_DRIVE':
@@ -812,7 +821,10 @@ export function formatStorageLocationPreview(item: {
   const before = `${providerLabel} / …/${idToken}`;
 
   if (item.status === 'MIGRATED' || item.status === 'VERIFIED') {
-    if (item.targetPlane === 'CLINIC_ATTACHMENT') {
+    if (
+      item.targetPlane === 'CLINIC_ATTACHMENT' ||
+      item.targetPlane === 'CLINIC_PATIENT_AVATAR'
+    ) {
       const tenantPart = item.tenantId ? `${item.tenantId} / ` : '';
       return {
         before,

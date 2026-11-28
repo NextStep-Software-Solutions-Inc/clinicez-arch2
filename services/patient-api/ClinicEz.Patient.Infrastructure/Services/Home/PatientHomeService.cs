@@ -82,7 +82,7 @@ public sealed class PatientHomeService(
             patient.LastName,
             patient.BloodType?.ToString(),
             FormatBloodGroup(patient.BloodType),
-            patient.AvatarUrl,
+            ClinicEz.Patient.Application.Common.Helpers.PatientAvatarUrlResolver.Resolve(patient),
             unreadNotifications,
             string.Equals(patient.UpdatedBy, "System:ClerkEmailReclaim", StringComparison.Ordinal));
 

@@ -55,7 +55,7 @@ public sealed class GetPatientByClerkIdQueryHandler : IRequestHandler<GetPatient
             patient.Nationality, patient.Ethnicity, patient.Religion, patient.PrimaryLanguage,
             patient.EducationLevel?.ToString(),
             patient.Mobile, patient.AltPhone, patient.Email, patient.MessengerHandle,
-            patient.AvatarUrl,
+            PatientAvatarUrlResolver.Resolve(patient),
             patient.ConsentToShareInfo,
             patient.ClinicEzId,
             reclaimedNow || string.Equals(patient.UpdatedBy, "System:ClerkEmailReclaim", StringComparison.Ordinal));

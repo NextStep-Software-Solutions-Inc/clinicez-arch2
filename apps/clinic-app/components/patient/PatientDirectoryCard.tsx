@@ -6,6 +6,7 @@ import { formatBloodTypeLabel } from '../../constants/bloodTypes';
 import { formatLongAge } from '../../utils/age';
 import type { ClinicPatient, StaffMember, VisitType } from '../../services/clinicService';
 import { computePatientLocation } from './patientLocation';
+import { PatientAvatar } from './PatientAvatar';
 
 export { computePatientLocation };
 
@@ -400,11 +401,14 @@ function PatientDirectoryCard({
         {/* Column 1: Identity & Code */}
         <View style={styles.tableColIdentity}>
           <View style={styles.identityRow}>
-            <View style={styles.avatarCircleSm}>
-              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                {initials}
-              </ThemedText>
-            </View>
+            <PatientAvatar
+              avatarUrl={patient.avatarUrl}
+              initials={initials}
+              size={theme.sizes.controlSm}
+              containerStyle={styles.avatarCircleSm}
+              textVariant="captionBold"
+              textColor={theme.colors.primaryDark}
+            />
             <View style={styles.identityTextCol}>
               <Pressable
                 onPress={() => onOpenChart?.(patient)}
@@ -583,11 +587,14 @@ function PatientDirectoryCard({
       <View style={styles.cardBody}>
         {/* Header Row: Avatar + Name/Code + Overflow ActionMenu (⋮) */}
         <View style={styles.cardHeaderRow}>
-          <View style={styles.avatarCircle}>
-            <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
-              {initials}
-            </ThemedText>
-          </View>
+          <PatientAvatar
+            avatarUrl={patient.avatarUrl}
+            initials={initials}
+            size={theme.sizes.controlMd}
+            containerStyle={styles.avatarCircle}
+            textVariant="smallBold"
+            textColor={theme.colors.primaryDark}
+          />
 
           <View style={styles.cardHeaderMain}>
             <View style={styles.cardTitleRow}>

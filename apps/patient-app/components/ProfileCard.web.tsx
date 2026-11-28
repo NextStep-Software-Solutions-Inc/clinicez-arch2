@@ -8,6 +8,7 @@ import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfileSync } from '../hooks/useProfileSync';
+import { useResolvedAvatarUri } from '../hooks/useResolvedAvatarUri';
 import { extractInitials } from '../services/home/homeDashboardService';
 import { db } from '@db/index';
 import { patients } from '@db/schema/patients';
@@ -16,7 +17,7 @@ import { eq } from 'drizzle-orm';
 export default function ProfileCardWeb() {
   const { colors, radii, shadows } = useAppTheme();
   const { user } = useUser();
-  const { internalPatientId } = useAuth();
+  const { internalPatientId, getToken } = useAuth();
   const [patientRecord, setPatientRecord] = useState<{
     firstName?: string | null;
     lastName?: string | null;
@@ -64,7 +65,8 @@ export default function ProfileCardWeb() {
     }
   }, []);
 
-  const avatarSource = previewUri ?? localUri ?? user?.imageUrl ?? patientRecord?.avatarUrl ?? null;
+  const rawAvatarSource = previewUri ?? localUri ?? user?.imageUrl ?? patientRecord?.avatarUrl ?? null;
+  const avatarSource = useResolvedAvatarUri(rawAvatarSource, getToken);
 
   const localDbName = [patientRecord?.firstName, patientRecord?.lastName]
     .filter(Boolean)

@@ -66,11 +66,14 @@ public sealed class Track3StorageSyncEngine
 
         var skippedClinicIds = Array.Empty<Guid>();
         var skippedPatientIds = Array.Empty<Guid>();
+        var skippedClinicAvatarIds = Array.Empty<Guid>();
+        var skippedPatientAvatarIds = Array.Empty<Guid>();
         if (_connections.HasSyncLedgerDb)
         {
             try
             {
-                (skippedClinicIds, skippedPatientIds) = await _ledger.LoadGloballySkippedStorageEntityIdsAsync(ct);
+                (skippedClinicIds, skippedPatientIds, skippedClinicAvatarIds, skippedPatientAvatarIds) =
+                    await _ledger.LoadGloballySkippedStorageEntityIdsAsync(ct);
             }
             catch (Exception ex)
             {
@@ -114,6 +117,43 @@ public sealed class Track3StorageSyncEngine
             {
                 _logger.LogWarning(ex, "Failed to probe Clinic RecordAttachments storage counts.");
             }
+
+            try
+            {
+                await using var conn = await _connections.OpenClinicDbAsync(ct);
+                const string avatarSql = """
+                    SELECT COUNT(*),
+                           COUNT(*) FILTER (
+                               WHERE COALESCE("AvatarEncryptionAlgorithm", 'NONE') = 'NONE'
+                                 AND NOT ("Id" = ANY(@skippedIds))
+                           ),
+                           COUNT(*) FILTER (
+                               WHERE COALESCE("AvatarEncryptionAlgorithm", 'NONE') = 'NONE'
+                                 AND "Id" = ANY(@skippedIds)
+                           )
+                    FROM public."Patients"
+                    WHERE "IsDeleted" = false
+                      AND "AvatarUrl" IS NOT NULL
+                      AND btrim("AvatarUrl") <> ''
+                    """;
+                await using var cmd = new NpgsqlCommand(avatarSql, conn);
+                cmd.Parameters.Add(new NpgsqlParameter("skippedIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = skippedClinicAvatarIds });
+                await using var r = await cmd.ExecuteReaderAsync(ct);
+                if (await r.ReadAsync(ct))
+                {
+                    clinicTotal += r.GetInt64(0);
+                    clinicPending += r.GetInt64(1);
+                    clinicSkipped += r.GetInt64(2);
+                }
+            }
+            catch (PostgresException ex) when (ex.SqlState is "42P01" or "42703")
+            {
+                // Patients table or AvatarUrl/AvatarEncryptionAlgorithm columns not yet migrated
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to probe Clinic Patient avatar storage counts.");
+            }
         }
 
         if (_connections.HasPatientDb)
@@ -151,6 +191,43 @@ public sealed class Track3StorageSyncEngine
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to probe Patient file_records storage counts.");
+            }
+
+            try
+            {
+                await using var conn = await _connections.OpenPatientDbAsync(ct);
+                const string avatarSql = """
+                    SELECT COUNT(*),
+                           COUNT(*) FILTER (
+                               WHERE COALESCE(avatar_encryption_algorithm, 'NONE') = 'NONE'
+                                 AND NOT (id = ANY(@skippedIds))
+                           ),
+                           COUNT(*) FILTER (
+                               WHERE COALESCE(avatar_encryption_algorithm, 'NONE') = 'NONE'
+                                 AND id = ANY(@skippedIds)
+                           )
+                    FROM public.patients
+                    WHERE is_deleted = false
+                      AND avatar_url IS NOT NULL
+                      AND btrim(avatar_url) <> ''
+                    """;
+                await using var cmd = new NpgsqlCommand(avatarSql, conn);
+                cmd.Parameters.Add(new NpgsqlParameter("skippedIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = skippedPatientAvatarIds });
+                await using var r = await cmd.ExecuteReaderAsync(ct);
+                if (await r.ReadAsync(ct))
+                {
+                    patientTotal += r.GetInt64(0);
+                    patientPending += r.GetInt64(1);
+                    patientSkipped += r.GetInt64(2);
+                }
+            }
+            catch (PostgresException ex) when (ex.SqlState is "42P01" or "42703")
+            {
+                // patients table or avatar_encryption_algorithm column not yet migrated
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to probe Patient avatar storage counts.");
             }
         }
 
@@ -278,10 +355,12 @@ public sealed class Track3StorageSyncEngine
             if (planeFilter is "BOTH" or "CLINIC_ONLY")
             {
                 rawItems.AddRange(await LoadPendingClinicAttachmentsAsync(binding, ct));
+                rawItems.AddRange(await LoadPendingClinicPatientAvatarsAsync(binding, ct));
             }
             if (planeFilter is "BOTH" or "PATIENT_ONLY")
             {
                 rawItems.AddRange(await LoadPendingPatientFilesAsync(binding, ct));
+                rawItems.AddRange(await LoadPendingPatientAvatarsAsync(binding, ct));
             }
 
             var planned = new List<PlannedStorageItem>(rawItems.Count);
@@ -311,6 +390,10 @@ public sealed class Track3StorageSyncEngine
 
                 var cls = LegacyBlobSourceDownloader.ClassifyUrl(item.SourceUrl);
                 if (providerFilter == "AZURE_BLOB_1" && cls.Provider != SyncStorageProvider.AzureBlob1)
+                {
+                    continue;
+                }
+                if (providerFilter == "VERCEL_BLOB" && cls.Provider != SyncStorageProvider.VercelBlob)
                 {
                     continue;
                 }
@@ -352,8 +435,8 @@ public sealed class Track3StorageSyncEngine
                 .ToList();
 
             var overlapSaved = urlGroups.Sum(g => Math.Max(0, g.Count - 1));
-            var clinicPlannedCount = migratable.Count(p => p.Item.TargetPlane == SyncStoragePlane.ClinicAttachment);
-            var patientPlannedCount = migratable.Count(p => p.Item.TargetPlane == SyncStoragePlane.PatientFile);
+            var clinicPlannedCount = migratable.Count(p => SyncStoragePlane.IsClinicPlane(p.Item.TargetPlane));
+            var patientPlannedCount = migratable.Count(p => SyncStoragePlane.IsPatientPlane(p.Item.TargetPlane));
 
             lock (summaryLock)
             {
@@ -595,14 +678,17 @@ public sealed class Track3StorageSyncEngine
                                 await entityLock.WaitAsync(token);
                                 try
                                 {
-                                    if (item.TargetPlane == SyncStoragePlane.ClinicAttachment)
+                                    if (SyncStoragePlane.IsClinicPlane(item.TargetPlane))
                                     {
+                                        var isClinicAvatar = item.TargetPlane == SyncStoragePlane.ClinicPatientAvatar;
                                         if (string.IsNullOrWhiteSpace(item.TenantId) || item.OwnerId == Guid.Empty)
                                         {
-                                            throw new InvalidOperationException("Clinic attachment is missing TenantId or ClinicId.");
+                                            throw new InvalidOperationException("Clinic storage object is missing TenantId or ClinicId.");
                                         }
 
-                                        var preState = await GetClinicAttachmentStateAsync(item.TargetEntityId, token);
+                                        var preState = isClinicAvatar
+                                            ? await GetClinicPatientAvatarStateAsync(item.TargetEntityId, token)
+                                            : await GetClinicAttachmentStateAsync(item.TargetEntityId, token);
                                         if (!preState.Exists || preState.IsDeleted)
                                         {
                                             LogVerbose($"Skipped {item.TargetPlane} entity {item.TargetEntityId}: concurrently deleted or unavailable in target DB.");
@@ -628,11 +714,11 @@ public sealed class Track3StorageSyncEngine
                                                 LogVerbose($"Skipped {item.TargetPlane} entity {item.TargetEntityId}: already encrypted concurrently in target DB.");
                                                 groupUpserts.Add(new SyncStorageObjectUpsert(
                                                     BindingId: binding.Id,
-                                                    TargetPlane: SyncStoragePlane.ClinicAttachment,
+                                                    TargetPlane: item.TargetPlane,
                                                     TargetEntityId: item.TargetEntityId,
                                                     OwnerId: item.OwnerId,
                                                     TenantId: item.TenantId,
-                                                    SourceProvider: SyncStorageProvider.AzureBlob1,
+                                                    SourceProvider: dl.Provider,
                                                     SourceUrl: item.SourceUrl,
                                                     SourceSizeBytes: item.OriginalSizeBytes,
                                                     SourceContentType: item.OriginalContentType,
@@ -656,11 +742,11 @@ public sealed class Track3StorageSyncEngine
                                                 LogVerbose($"Flagged {item.TargetPlane} entity {item.TargetEntityId}: already encrypted in target DB but R2 object check failed ({errCode}).");
                                                 groupUpserts.Add(new SyncStorageObjectUpsert(
                                                     BindingId: binding.Id,
-                                                    TargetPlane: SyncStoragePlane.ClinicAttachment,
+                                                    TargetPlane: item.TargetPlane,
                                                     TargetEntityId: item.TargetEntityId,
                                                     OwnerId: item.OwnerId,
                                                     TenantId: item.TenantId,
-                                                    SourceProvider: SyncStorageProvider.AzureBlob1,
+                                                    SourceProvider: dl.Provider,
                                                     SourceUrl: item.SourceUrl,
                                                     SourceSizeBytes: item.OriginalSizeBytes,
                                                     SourceContentType: item.OriginalContentType,
@@ -692,7 +778,9 @@ public sealed class Track3StorageSyncEngine
                                         }
 
                                         var encrypted = _encryptor.EncryptForClinic(dl.Bytes, item.TenantId, item.OwnerId);
-                                        var key = $"tenants/{item.TenantId}/clinics/{item.OwnerId}/records/{item.TargetEntityId}.cez";
+                                        var key = isClinicAvatar
+                                            ? $"tenants/{item.TenantId}/clinics/{item.OwnerId}/patients/{item.TargetEntityId}/avatar.cez"
+                                            : $"tenants/{item.TenantId}/clinics/{item.OwnerId}/records/{item.TargetEntityId}.cez";
                                         var normalizedKey = await _r2Pool.PutEncryptedAsync(isClinic: true, key, encrypted.Ciphertext, "cmk-v1", token);
 
                                         var headLen = await _r2Pool.HeadObjectLengthAsync(isClinic: true, normalizedKey, token);
@@ -701,17 +789,27 @@ public sealed class Track3StorageSyncEngine
                                             throw new InvalidOperationException("Clinic R2 HEAD size mismatch after upload.");
                                         }
 
-                                        var updated = await UpdateClinicAttachmentCryptoAsync(
-                                            item.TargetEntityId,
-                                            normalizedKey,
-                                            dl.SourceSizeBytes,
-                                            dl.ContentType ?? "application/octet-stream",
-                                            encrypted,
-                                            token);
+                                        var resolvedContentType = dl.ContentType ?? (isClinicAvatar ? "image/jpeg" : "application/octet-stream");
+                                        var updated = isClinicAvatar
+                                            ? await UpdateClinicPatientAvatarCryptoAsync(
+                                                item.TargetEntityId,
+                                                normalizedKey,
+                                                resolvedContentType,
+                                                encrypted,
+                                                token)
+                                            : await UpdateClinicAttachmentCryptoAsync(
+                                                item.TargetEntityId,
+                                                normalizedKey,
+                                                dl.SourceSizeBytes,
+                                                resolvedContentType,
+                                                encrypted,
+                                                token);
 
                                         if (!updated)
                                         {
-                                            var current = await GetClinicAttachmentStateAsync(item.TargetEntityId, token);
+                                            var current = isClinicAvatar
+                                                ? await GetClinicPatientAvatarStateAsync(item.TargetEntityId, token)
+                                                : await GetClinicAttachmentStateAsync(item.TargetEntityId, token);
                                             if (current.Exists &&
                                                 !current.IsDeleted &&
                                                 !string.Equals(current.EncryptionAlgorithm ?? "NONE", "NONE", StringComparison.OrdinalIgnoreCase))
@@ -719,11 +817,11 @@ public sealed class Track3StorageSyncEngine
                                                 LogVerbose($"Skipped {item.TargetPlane} entity {item.TargetEntityId}: already encrypted concurrently in target DB.");
                                                 groupUpserts.Add(new SyncStorageObjectUpsert(
                                                     BindingId: binding.Id,
-                                                    TargetPlane: SyncStoragePlane.ClinicAttachment,
+                                                    TargetPlane: item.TargetPlane,
                                                     TargetEntityId: item.TargetEntityId,
                                                     OwnerId: item.OwnerId,
                                                     TenantId: item.TenantId,
-                                                    SourceProvider: SyncStorageProvider.AzureBlob1,
+                                                    SourceProvider: dl.Provider,
                                                     SourceUrl: item.SourceUrl,
                                                     SourceSizeBytes: item.OriginalSizeBytes,
                                                     SourceContentType: item.OriginalContentType,
@@ -755,13 +853,13 @@ public sealed class Track3StorageSyncEngine
                                         {
                                             groupUpserts.Add(new SyncStorageObjectUpsert(
                                                 BindingId: binding.Id,
-                                                TargetPlane: SyncStoragePlane.ClinicAttachment,
+                                                TargetPlane: item.TargetPlane,
                                                 TargetEntityId: item.TargetEntityId,
                                                 OwnerId: item.OwnerId,
                                                 TenantId: item.TenantId,
-                                                SourceProvider: SyncStorageProvider.AzureBlob1,
+                                                SourceProvider: dl.Provider,
                                                 SourceUrl: item.SourceUrl,
-                                                SourceSizeBytes: item.OriginalSizeBytes,
+                                                SourceSizeBytes: isClinicAvatar ? dl.SourceSizeBytes : item.OriginalSizeBytes,
                                                 SourceContentType: item.OriginalContentType,
                                                 SourceContentTypeCaptured: true,
                                                 SourceSha256: dl.SourceSha256,
@@ -777,7 +875,7 @@ public sealed class Track3StorageSyncEngine
                                                 MigratedAt: now,
                                                 VerifiedAt: null));
 
-                                            runMigratedItems.Add((SyncStoragePlane.ClinicAttachment, item.TargetEntityId));
+                                            runMigratedItems.Add((item.TargetPlane, item.TargetEntityId));
                                             lock (summaryLock)
                                             {
                                                 summary.BytesUploaded = (summary.BytesUploaded ?? 0) + encrypted.EncryptedSizeBytes;
@@ -788,7 +886,10 @@ public sealed class Track3StorageSyncEngine
                                     }
                                     else
                                     {
-                                        var preState = await GetPatientFileStateAsync(item.TargetEntityId, token);
+                                        var isPatientAvatar = item.TargetPlane == SyncStoragePlane.PatientAvatar;
+                                        var preState = isPatientAvatar
+                                            ? await GetPatientAvatarStateAsync(item.TargetEntityId, token)
+                                            : await GetPatientFileStateAsync(item.TargetEntityId, token);
                                         if (!preState.Exists || preState.IsDeleted)
                                         {
                                             LogVerbose($"Skipped {item.TargetPlane} entity {item.TargetEntityId}: concurrently deleted or unavailable in target DB.");
@@ -814,11 +915,11 @@ public sealed class Track3StorageSyncEngine
                                                 LogVerbose($"Skipped {item.TargetPlane} entity {item.TargetEntityId}: already encrypted concurrently in target DB.");
                                                 groupUpserts.Add(new SyncStorageObjectUpsert(
                                                     BindingId: binding.Id,
-                                                    TargetPlane: SyncStoragePlane.PatientFile,
+                                                    TargetPlane: item.TargetPlane,
                                                     TargetEntityId: item.TargetEntityId,
                                                     OwnerId: item.OwnerId,
                                                     TenantId: null,
-                                                    SourceProvider: SyncStorageProvider.AzureBlob1,
+                                                    SourceProvider: dl.Provider,
                                                     SourceUrl: item.SourceUrl,
                                                     SourceSizeBytes: item.OriginalSizeBytes,
                                                     SourceContentType: item.OriginalContentType,
@@ -842,11 +943,11 @@ public sealed class Track3StorageSyncEngine
                                                 LogVerbose($"Flagged {item.TargetPlane} entity {item.TargetEntityId}: already encrypted in target DB but R2 object check failed ({errCode}).");
                                                 groupUpserts.Add(new SyncStorageObjectUpsert(
                                                     BindingId: binding.Id,
-                                                    TargetPlane: SyncStoragePlane.PatientFile,
+                                                    TargetPlane: item.TargetPlane,
                                                     TargetEntityId: item.TargetEntityId,
                                                     OwnerId: item.OwnerId,
                                                     TenantId: null,
-                                                    SourceProvider: SyncStorageProvider.AzureBlob1,
+                                                    SourceProvider: dl.Provider,
                                                     SourceUrl: item.SourceUrl,
                                                     SourceSizeBytes: item.OriginalSizeBytes,
                                                     SourceContentType: item.OriginalContentType,
@@ -878,7 +979,9 @@ public sealed class Track3StorageSyncEngine
                                         }
 
                                         var encrypted = _encryptor.EncryptForPatient(dl.Bytes, item.OwnerId);
-                                        var key = $"patients/{item.OwnerId}/records/{item.TargetEntityId}.cez";
+                                        var key = isPatientAvatar
+                                            ? $"patients/{item.OwnerId}/avatar/{item.TargetEntityId}.cez"
+                                            : $"patients/{item.OwnerId}/records/{item.TargetEntityId}.cez";
                                         var normalizedKey = await _r2Pool.PutEncryptedAsync(isClinic: false, key, encrypted.Ciphertext, "pmk-v1", token);
 
                                         var headLen = await _r2Pool.HeadObjectLengthAsync(isClinic: false, normalizedKey, token);
@@ -887,17 +990,27 @@ public sealed class Track3StorageSyncEngine
                                             throw new InvalidOperationException("Patient R2 HEAD size mismatch after upload.");
                                         }
 
-                                        var updated = await UpdatePatientFileCryptoAsync(
-                                            item.TargetEntityId,
-                                            normalizedKey,
-                                            dl.SourceSizeBytes,
-                                            dl.ContentType ?? "application/octet-stream",
-                                            encrypted,
-                                            token);
+                                        var resolvedContentType = dl.ContentType ?? (isPatientAvatar ? "image/jpeg" : "application/octet-stream");
+                                        var updated = isPatientAvatar
+                                            ? await UpdatePatientAvatarCryptoAsync(
+                                                item.TargetEntityId,
+                                                normalizedKey,
+                                                resolvedContentType,
+                                                encrypted,
+                                                token)
+                                            : await UpdatePatientFileCryptoAsync(
+                                                item.TargetEntityId,
+                                                normalizedKey,
+                                                dl.SourceSizeBytes,
+                                                resolvedContentType,
+                                                encrypted,
+                                                token);
 
                                         if (!updated)
                                         {
-                                            var current = await GetPatientFileStateAsync(item.TargetEntityId, token);
+                                            var current = isPatientAvatar
+                                                ? await GetPatientAvatarStateAsync(item.TargetEntityId, token)
+                                                : await GetPatientFileStateAsync(item.TargetEntityId, token);
                                             if (current.Exists &&
                                                 !current.IsDeleted &&
                                                 !string.Equals(current.EncryptionAlgorithm ?? "NONE", "NONE", StringComparison.OrdinalIgnoreCase))
@@ -905,11 +1018,11 @@ public sealed class Track3StorageSyncEngine
                                                 LogVerbose($"Skipped {item.TargetPlane} entity {item.TargetEntityId}: already encrypted concurrently in target DB.");
                                                 groupUpserts.Add(new SyncStorageObjectUpsert(
                                                     BindingId: binding.Id,
-                                                    TargetPlane: SyncStoragePlane.PatientFile,
+                                                    TargetPlane: item.TargetPlane,
                                                     TargetEntityId: item.TargetEntityId,
                                                     OwnerId: item.OwnerId,
                                                     TenantId: null,
-                                                    SourceProvider: SyncStorageProvider.AzureBlob1,
+                                                    SourceProvider: dl.Provider,
                                                     SourceUrl: item.SourceUrl,
                                                     SourceSizeBytes: item.OriginalSizeBytes,
                                                     SourceContentType: item.OriginalContentType,
@@ -941,13 +1054,13 @@ public sealed class Track3StorageSyncEngine
                                         {
                                             groupUpserts.Add(new SyncStorageObjectUpsert(
                                                 BindingId: binding.Id,
-                                                TargetPlane: SyncStoragePlane.PatientFile,
+                                                TargetPlane: item.TargetPlane,
                                                 TargetEntityId: item.TargetEntityId,
                                                 OwnerId: item.OwnerId,
                                                 TenantId: null,
-                                                SourceProvider: SyncStorageProvider.AzureBlob1,
+                                                SourceProvider: dl.Provider,
                                                 SourceUrl: item.SourceUrl,
-                                                SourceSizeBytes: item.OriginalSizeBytes,
+                                                SourceSizeBytes: isPatientAvatar ? dl.SourceSizeBytes : item.OriginalSizeBytes,
                                                 SourceContentType: item.OriginalContentType,
                                                 SourceContentTypeCaptured: true,
                                                 SourceSha256: dl.SourceSha256,
@@ -963,7 +1076,7 @@ public sealed class Track3StorageSyncEngine
                                                 MigratedAt: now,
                                                 VerifiedAt: null));
 
-                                            runMigratedItems.Add((SyncStoragePlane.PatientFile, item.TargetEntityId));
+                                            runMigratedItems.Add((item.TargetPlane, item.TargetEntityId));
                                             lock (summaryLock)
                                             {
                                                 summary.BytesUploaded = (summary.BytesUploaded ?? 0) + encrypted.EncryptedSizeBytes;
@@ -992,7 +1105,7 @@ public sealed class Track3StorageSyncEngine
                                     TargetEntityId: item.TargetEntityId,
                                     OwnerId: item.OwnerId,
                                     TenantId: item.TenantId,
-                                    SourceProvider: SyncStorageProvider.AzureBlob1,
+                                    SourceProvider: entry.Classification.Provider,
                                     SourceUrl: item.SourceUrl,
                                     SourceSizeBytes: item.OriginalSizeBytes,
                                     SourceContentType: item.OriginalContentType,
@@ -1091,8 +1204,10 @@ public sealed class Track3StorageSyncEngine
 
     public async Task<ParityReportResponse> BuildParityReportAsync(SyncBinding binding, CancellationToken ct = default)
     {
-        var (clinicTotal, clinicEncrypted, clinicPendingDb) = await CountClinicScopeAsync(binding, ct);
-        var (patientTotal, patientEncrypted, patientPendingDb) = await CountPatientScopeAsync(binding, ct);
+        var (clinicAttTotal, clinicAttEncrypted, clinicAttPendingDb) = await CountClinicAttachmentsScopeAsync(binding, ct);
+        var (clinicAvatarTotal, clinicAvatarEncrypted, clinicAvatarPendingDb) = await CountClinicPatientAvatarsScopeAsync(binding, ct);
+        var (patientFileTotal, patientFileEncrypted, patientFilePendingDb) = await CountPatientFilesScopeAsync(binding, ct);
+        var (patientAvatarTotal, patientAvatarEncrypted, patientAvatarPendingDb) = await CountPatientAvatarsScopeAsync(binding, ct);
         var ledgerCounts = await _ledger.GetStorageObjectCountsByStatusAndProviderAsync(binding.Id, ct);
         var openConflicts = await _ledger.CountOpenConflictsAsync(binding.Id, ct);
 
@@ -1109,30 +1224,57 @@ public sealed class Track3StorageSyncEngine
         var failedTotal = failedRetryable + failedPermanent;
         var pendingWithR2KeyCount = await _ledger.CountPendingWithTargetR2KeyAsync(binding.Id, ct);
 
-        var clinicPendingAzure1 = await CountPendingAzureBlob1ClinicAsync(binding, ct);
-        var patientPendingAzure1 = await CountPendingAzureBlob1PatientAsync(binding, ct);
+        var states = await _ledger.LoadStorageObjectStatesAsync(binding.Id, ct);
+        var clinicAttPendingMigratable = (await LoadPendingClinicAttachmentsAsync(binding, ct))
+            .Count(i => IsPendingMigratableItem(i, states));
+        var clinicAvatarPendingMigratable = (await LoadPendingClinicPatientAvatarsAsync(binding, ct))
+            .Count(i => IsPendingMigratableItem(i, states));
+        var patientFilePendingMigratable = (await LoadPendingPatientFilesAsync(binding, ct))
+            .Count(i => IsPendingMigratableItem(i, states));
+        var patientAvatarPendingMigratable = (await LoadPendingPatientAvatarsAsync(binding, ct))
+            .Count(i => IsPendingMigratableItem(i, states));
 
         var checks = new List<ParityEntityCheck>
         {
             new(
                 EntityType: "Clinic RecordAttachments (AES-256-GCM)",
-                V1ExpectedCount: Math.Max(clinicEncrypted, clinicTotal - Math.Max(0, clinicPendingDb - clinicPendingAzure1)),
-                V2ActualCount: clinicEncrypted,
-                MappedLedgerCount: clinicEncrypted,
-                IsMatched: clinicPendingAzure1 == 0,
-                Notes: clinicPendingAzure1 == 0
-                    ? $"All {clinicEncrypted:N0} reachable Clinic attachments encrypted."
-                    : $"{clinicPendingAzure1:N0} reachable Azure Blob #1 Clinic attachments still pending."
+                V1ExpectedCount: Math.Max(clinicAttEncrypted, clinicAttTotal - Math.Max(0, clinicAttPendingDb - clinicAttPendingMigratable)),
+                V2ActualCount: clinicAttEncrypted,
+                MappedLedgerCount: clinicAttEncrypted,
+                IsMatched: clinicAttPendingMigratable == 0,
+                Notes: clinicAttPendingMigratable == 0
+                    ? $"All {clinicAttEncrypted:N0} reachable Clinic attachments encrypted."
+                    : $"{clinicAttPendingMigratable:N0} reachable Clinic attachments still pending."
+            ),
+            new(
+                EntityType: "Clinic Patient Avatars (AES-256-GCM)",
+                V1ExpectedCount: Math.Max(clinicAvatarEncrypted, clinicAvatarTotal - Math.Max(0, clinicAvatarPendingDb - clinicAvatarPendingMigratable)),
+                V2ActualCount: clinicAvatarEncrypted,
+                MappedLedgerCount: clinicAvatarEncrypted,
+                IsMatched: clinicAvatarPendingMigratable == 0,
+                Notes: clinicAvatarPendingMigratable == 0
+                    ? $"All {clinicAvatarEncrypted:N0} reachable Clinic patient avatars encrypted."
+                    : $"{clinicAvatarPendingMigratable:N0} reachable Clinic patient avatars still pending."
             ),
             new(
                 EntityType: "Patient FileRecords (AES-256-GCM)",
-                V1ExpectedCount: Math.Max(patientEncrypted, patientTotal - Math.Max(0, patientPendingDb - patientPendingAzure1)),
-                V2ActualCount: patientEncrypted,
-                MappedLedgerCount: patientEncrypted,
-                IsMatched: patientPendingAzure1 == 0,
-                Notes: patientPendingAzure1 == 0
-                    ? $"All {patientEncrypted:N0} reachable Patient files encrypted."
-                    : $"{patientPendingAzure1:N0} reachable Azure Blob #1 Patient files still pending."
+                V1ExpectedCount: Math.Max(patientFileEncrypted, patientFileTotal - Math.Max(0, patientFilePendingDb - patientFilePendingMigratable)),
+                V2ActualCount: patientFileEncrypted,
+                MappedLedgerCount: patientFileEncrypted,
+                IsMatched: patientFilePendingMigratable == 0,
+                Notes: patientFilePendingMigratable == 0
+                    ? $"All {patientFileEncrypted:N0} reachable Patient files encrypted."
+                    : $"{patientFilePendingMigratable:N0} reachable Patient files still pending."
+            ),
+            new(
+                EntityType: "Patient Avatars (AES-256-GCM)",
+                V1ExpectedCount: Math.Max(patientAvatarEncrypted, patientAvatarTotal - Math.Max(0, patientAvatarPendingDb - patientAvatarPendingMigratable)),
+                V2ActualCount: patientAvatarEncrypted,
+                MappedLedgerCount: patientAvatarEncrypted,
+                IsMatched: patientAvatarPendingMigratable == 0,
+                Notes: patientAvatarPendingMigratable == 0
+                    ? $"All {patientAvatarEncrypted:N0} reachable Patient avatars encrypted."
+                    : $"{patientAvatarPendingMigratable:N0} reachable Patient avatars still pending."
             ),
             new(
                 EntityType: "Skipped Legacy / Dead / Auth-Gated (Kept As-Is)",
@@ -1204,10 +1346,14 @@ public sealed class Track3StorageSyncEngine
         }
 
         var clinicIds = toVerify.Where(v => v.TargetPlane == SyncStoragePlane.ClinicAttachment).Select(v => v.TargetEntityId).ToArray();
+        var clinicAvatarIds = toVerify.Where(v => v.TargetPlane == SyncStoragePlane.ClinicPatientAvatar).Select(v => v.TargetEntityId).ToArray();
         var patientIds = toVerify.Where(v => v.TargetPlane == SyncStoragePlane.PatientFile).Select(v => v.TargetEntityId).ToArray();
+        var patientAvatarIds = toVerify.Where(v => v.TargetPlane == SyncStoragePlane.PatientAvatar).Select(v => v.TargetEntityId).ToArray();
 
         var clinicMeta = await LoadClinicCryptoMetadataAsync(clinicIds, ct);
+        var clinicAvatarMeta = await LoadClinicPatientAvatarCryptoMetadataAsync(clinicAvatarIds, ct);
         var patientMeta = await LoadPatientCryptoMetadataAsync(patientIds, ct);
+        var patientAvatarMeta = await LoadPatientAvatarCryptoMetadataAsync(patientAvatarIds, ct);
 
         var verifiedCount = 0;
         var failedCount = 0;
@@ -1223,9 +1369,10 @@ public sealed class Track3StorageSyncEngine
 
                 try
                 {
-                    if (state.TargetPlane == SyncStoragePlane.ClinicAttachment)
+                    if (SyncStoragePlane.IsClinicPlane(state.TargetPlane))
                     {
-                        if (!clinicMeta.TryGetValue(state.TargetEntityId, out var meta))
+                        var lookup = state.TargetPlane == SyncStoragePlane.ClinicPatientAvatar ? clinicAvatarMeta : clinicMeta;
+                        if (!lookup.TryGetValue(state.TargetEntityId, out var meta))
                         {
                             return;
                         }
@@ -1277,7 +1424,8 @@ public sealed class Track3StorageSyncEngine
                     }
                     else
                     {
-                        if (!patientMeta.TryGetValue(state.TargetEntityId, out var meta))
+                        var lookup = state.TargetPlane == SyncStoragePlane.PatientAvatar ? patientAvatarMeta : patientMeta;
+                        if (!lookup.TryGetValue(state.TargetEntityId, out var meta))
                         {
                             return;
                         }
@@ -1474,7 +1622,113 @@ public sealed class Track3StorageSyncEngine
         return items;
     }
 
+    private async Task<List<PendingStorageItem>> LoadPendingClinicPatientAvatarsAsync(SyncBinding binding, CancellationToken ct)
+    {
+        var items = new List<PendingStorageItem>();
+        if (!_connections.HasClinicDb) return items;
+
+        var (whereSql, parameters) = BuildClinicScopePredicate(binding);
+        if (whereSql is null) return items;
+
+        try
+        {
+            await using var conn = await _connections.OpenClinicDbAsync(ct);
+            var sql = $"""
+                SELECT "Id", "ClinicId", "TenantId", "AvatarContentType", "AvatarUrl"
+                FROM public."Patients"
+                WHERE {whereSql}
+                  AND COALESCE("AvatarEncryptionAlgorithm", 'NONE') = 'NONE'
+                  AND "AvatarUrl" IS NOT NULL AND btrim("AvatarUrl") <> ''
+                ORDER BY "Id" ASC
+                """;
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            foreach (var p in parameters) cmd.Parameters.Add(p);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                items.Add(new PendingStorageItem(
+                    TargetPlane: SyncStoragePlane.ClinicPatientAvatar,
+                    TargetEntityId: r.GetGuid(0),
+                    OwnerId: r.GetGuid(1),
+                    TenantId: r.IsDBNull(2) ? null : r.GetString(2),
+                    OriginalContentType: r.IsDBNull(3) ? "image/jpeg" : r.GetString(3),
+                    OriginalSizeBytes: 0L,
+                    SourceUrl: r.GetString(4).Trim()));
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState is "42P01" or "42703")
+        {
+            return items;
+        }
+
+        return items;
+    }
+
+    private async Task<List<PendingStorageItem>> LoadPendingPatientAvatarsAsync(SyncBinding binding, CancellationToken ct)
+    {
+        var items = new List<PendingStorageItem>();
+        if (!_connections.HasPatientDb) return items;
+
+        var scopedPatientIds = await ResolveScopedPatientIdsAsync(binding, ct);
+        if (scopedPatientIds is { Count: 0 }) return items;
+
+        try
+        {
+            await using var conn = await _connections.OpenPatientDbAsync(ct);
+            var sql = scopedPatientIds is null
+                ? """
+                  SELECT id, avatar_content_type, avatar_url
+                  FROM public.patients
+                  WHERE is_deleted = false
+                    AND COALESCE(avatar_encryption_algorithm, 'NONE') = 'NONE'
+                    AND avatar_url IS NOT NULL AND btrim(avatar_url) <> ''
+                  ORDER BY id ASC
+                  """
+                : """
+                  SELECT id, avatar_content_type, avatar_url
+                  FROM public.patients
+                  WHERE is_deleted = false
+                    AND id = ANY(@pids)
+                    AND COALESCE(avatar_encryption_algorithm, 'NONE') = 'NONE'
+                    AND avatar_url IS NOT NULL AND btrim(avatar_url) <> ''
+                  ORDER BY id ASC
+                  """;
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            if (scopedPatientIds is not null)
+            {
+                cmd.Parameters.AddWithValue("pids", scopedPatientIds.ToArray());
+            }
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                var patientId = r.GetGuid(0);
+                items.Add(new PendingStorageItem(
+                    TargetPlane: SyncStoragePlane.PatientAvatar,
+                    TargetEntityId: patientId,
+                    OwnerId: patientId,
+                    TenantId: null,
+                    OriginalContentType: r.IsDBNull(1) ? "image/jpeg" : r.GetString(1),
+                    OriginalSizeBytes: 0L,
+                    SourceUrl: r.GetString(2).Trim()));
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState is "42P01" or "42703")
+        {
+            return items;
+        }
+
+        return items;
+    }
+
     private async Task<(long Total, long Encrypted, long Pending)> CountClinicScopeAsync(SyncBinding binding, CancellationToken ct)
+    {
+        var att = await CountClinicAttachmentsScopeAsync(binding, ct);
+        var av = await CountClinicPatientAvatarsScopeAsync(binding, ct);
+        return (att.Total + av.Total, att.Encrypted + av.Encrypted, att.Pending + av.Pending);
+    }
+
+    private async Task<(long Total, long Encrypted, long Pending)> CountClinicAttachmentsScopeAsync(SyncBinding binding, CancellationToken ct)
     {
         if (!_connections.HasClinicDb) return (0, 0, 0);
         var (whereSql, parameters) = BuildClinicScopePredicate(binding);
@@ -1505,7 +1759,46 @@ public sealed class Track3StorageSyncEngine
         return (0, 0, 0);
     }
 
+    private async Task<(long Total, long Encrypted, long Pending)> CountClinicPatientAvatarsScopeAsync(SyncBinding binding, CancellationToken ct)
+    {
+        if (!_connections.HasClinicDb) return (0, 0, 0);
+        var (whereSql, parameters) = BuildClinicScopePredicate(binding);
+        if (whereSql is null) return (0, 0, 0);
+
+        try
+        {
+            await using var conn = await _connections.OpenClinicDbAsync(ct);
+            var sql = $"""
+                SELECT COUNT(*),
+                       COUNT(*) FILTER (WHERE "AvatarEncryptionAlgorithm" = 'AES-256-GCM'),
+                       COUNT(*) FILTER (WHERE COALESCE("AvatarEncryptionAlgorithm", 'NONE') = 'NONE')
+                FROM public."Patients"
+                WHERE {whereSql}
+                  AND "AvatarUrl" IS NOT NULL AND btrim("AvatarUrl") <> ''
+                """;
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            foreach (var p in parameters) cmd.Parameters.Add(p);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            if (await r.ReadAsync(ct))
+            {
+                return (r.GetInt64(0), r.GetInt64(1), r.GetInt64(2));
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState is "42P01" or "42703")
+        {
+            return (0, 0, 0);
+        }
+        return (0, 0, 0);
+    }
+
     private async Task<(long Total, long Encrypted, long Pending)> CountPatientScopeAsync(SyncBinding binding, CancellationToken ct)
+    {
+        var files = await CountPatientFilesScopeAsync(binding, ct);
+        var av = await CountPatientAvatarsScopeAsync(binding, ct);
+        return (files.Total + av.Total, files.Encrypted + av.Encrypted, files.Pending + av.Pending);
+    }
+
+    private async Task<(long Total, long Encrypted, long Pending)> CountPatientFilesScopeAsync(SyncBinding binding, CancellationToken ct)
     {
         if (!_connections.HasPatientDb) return (0, 0, 0);
         var scopedPatientIds = await ResolveScopedPatientIdsAsync(binding, ct);
@@ -1548,6 +1841,52 @@ public sealed class Track3StorageSyncEngine
         return (0, 0, 0);
     }
 
+    private async Task<(long Total, long Encrypted, long Pending)> CountPatientAvatarsScopeAsync(SyncBinding binding, CancellationToken ct)
+    {
+        if (!_connections.HasPatientDb) return (0, 0, 0);
+        var scopedPatientIds = await ResolveScopedPatientIdsAsync(binding, ct);
+        if (scopedPatientIds is { Count: 0 }) return (0, 0, 0);
+
+        try
+        {
+            await using var conn = await _connections.OpenPatientDbAsync(ct);
+            var sql = scopedPatientIds is null
+                ? """
+                  SELECT COUNT(*),
+                         COUNT(*) FILTER (WHERE avatar_encryption_algorithm = 'AES-256-GCM'),
+                         COUNT(*) FILTER (WHERE COALESCE(avatar_encryption_algorithm, 'NONE') = 'NONE')
+                  FROM public.patients
+                  WHERE is_deleted = false
+                    AND avatar_url IS NOT NULL AND btrim(avatar_url) <> ''
+                  """
+                : """
+                  SELECT COUNT(*),
+                         COUNT(*) FILTER (WHERE avatar_encryption_algorithm = 'AES-256-GCM'),
+                         COUNT(*) FILTER (WHERE COALESCE(avatar_encryption_algorithm, 'NONE') = 'NONE')
+                  FROM public.patients
+                  WHERE is_deleted = false
+                    AND id = ANY(@pids)
+                    AND avatar_url IS NOT NULL AND btrim(avatar_url) <> ''
+                  """;
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            if (scopedPatientIds is not null)
+            {
+                cmd.Parameters.AddWithValue("pids", scopedPatientIds.ToArray());
+            }
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            if (await r.ReadAsync(ct))
+            {
+                return (r.GetInt64(0), r.GetInt64(1), r.GetInt64(2));
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState is "42P01" or "42703")
+        {
+            return (0, 0, 0);
+        }
+        return (0, 0, 0);
+    }
+
     private static List<PlannedStorageItem> BalanceByPlane(
         List<PlannedStorageItem> items,
         int limit,
@@ -1565,8 +1904,8 @@ public sealed class Track3StorageSyncEngine
 
         if (planeFilter == "BOTH")
         {
-            var clinicItems = items.Where(p => p.Item.TargetPlane == SyncStoragePlane.ClinicAttachment).ToList();
-            var patientItems = items.Where(p => p.Item.TargetPlane == SyncStoragePlane.PatientFile).ToList();
+            var clinicItems = items.Where(p => SyncStoragePlane.IsClinicPlane(p.Item.TargetPlane)).ToList();
+            var patientItems = items.Where(p => SyncStoragePlane.IsPatientPlane(p.Item.TargetPlane)).ToList();
             if (clinicItems.Count > 0 && patientItems.Count > 0)
             {
                 var clinicQuota = (limit + 1) / 2;
@@ -1602,21 +1941,7 @@ public sealed class Track3StorageSyncEngine
         return items.Take(limit).ToList();
     }
 
-    private async Task<long> CountPendingAzureBlob1ClinicAsync(SyncBinding binding, CancellationToken ct)
-    {
-        var items = await LoadPendingClinicAttachmentsAsync(binding, ct);
-        var states = await _ledger.LoadStorageObjectStatesAsync(binding.Id, ct);
-        return items.Count(i => IsPendingAzureBlob1Item(i, states));
-    }
-
-    private async Task<long> CountPendingAzureBlob1PatientAsync(SyncBinding binding, CancellationToken ct)
-    {
-        var items = await LoadPendingPatientFilesAsync(binding, ct);
-        var states = await _ledger.LoadStorageObjectStatesAsync(binding.Id, ct);
-        return items.Count(i => IsPendingAzureBlob1Item(i, states));
-    }
-
-    private static bool IsPendingAzureBlob1Item(
+    private static bool IsPendingMigratableItem(
         PendingStorageItem item,
         IReadOnlyDictionary<(string TargetPlane, Guid TargetEntityId), SyncStorageObjectState> states)
     {
@@ -1901,6 +2226,210 @@ public sealed class Track3StorageSyncEngine
         return map;
     }
 
+    private async Task<bool> UpdateClinicPatientAvatarCryptoAsync(
+        Guid patientId,
+        string storageKey,
+        string contentType,
+        Track3EncryptedPayload encrypted,
+        CancellationToken ct)
+    {
+        await using var conn = await _connections.OpenClinicDbAsync(ct);
+        const string sql = """
+            UPDATE public."Patients"
+            SET "AvatarUrl" = @key,
+                "AvatarContentType" = @ctype,
+                "AvatarEncryptionAlgorithm" = 'AES-256-GCM',
+                "AvatarEncryptionKeyId" = 'cmk-v1',
+                "AvatarEncryptionIvBase64" = @iv,
+                "AvatarEncryptionTagBase64" = @tag,
+                "AvatarEncryptedSizeBytes" = @encSize,
+                "AvatarEncryptedHash" = @encHash,
+                "AvatarWrappedKeyJson" = @wrappedKey,
+                "UpdatedAt" = now(),
+                "UpdatedBy" = @actor
+            WHERE "Id" = @id
+              AND "IsDeleted" = false
+              AND "AvatarUrl" IS NOT NULL AND btrim("AvatarUrl") <> ''
+              AND COALESCE("AvatarEncryptionAlgorithm", 'NONE') = 'NONE'
+            """;
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("id", patientId);
+        cmd.Parameters.AddWithValue("key", storageKey);
+        cmd.Parameters.AddWithValue("ctype", contentType.Length > 100 ? contentType[..100] : contentType);
+        cmd.Parameters.AddWithValue("iv", encrypted.IvBase64);
+        cmd.Parameters.AddWithValue("tag", encrypted.TagBase64);
+        cmd.Parameters.AddWithValue("encSize", encrypted.EncryptedSizeBytes);
+        cmd.Parameters.AddWithValue("encHash", encrypted.EncryptedHash);
+        cmd.Parameters.AddWithValue("wrappedKey", encrypted.WrappedKeyJson);
+        cmd.Parameters.AddWithValue("actor", SyncTransforms.SyncActor);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
+    }
+
+    private async Task<bool> UpdatePatientAvatarCryptoAsync(
+        Guid patientId,
+        string storageKey,
+        string contentType,
+        Track3EncryptedPayload encrypted,
+        CancellationToken ct)
+    {
+        await using var conn = await _connections.OpenPatientDbAsync(ct);
+        const string sql = """
+            UPDATE public.patients
+            SET avatar_url = @key,
+                avatar_content_type = @ctype,
+                avatar_encryption_algorithm = 'AES-256-GCM',
+                avatar_encryption_key_id = 'pmk-v1',
+                avatar_encryption_iv_base64 = @iv,
+                avatar_encryption_tag_base64 = @tag,
+                avatar_encrypted_size_bytes = @encSize,
+                avatar_encrypted_hash = @encHash,
+                avatar_wrapped_key_json = @wrappedKey,
+                updated_at = now(),
+                updated_by = @actor
+            WHERE id = @id
+              AND is_deleted = false
+              AND avatar_url IS NOT NULL AND btrim(avatar_url) <> ''
+              AND COALESCE(avatar_encryption_algorithm, 'NONE') = 'NONE'
+            """;
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("id", patientId);
+        cmd.Parameters.AddWithValue("key", storageKey);
+        cmd.Parameters.AddWithValue("ctype", contentType.Length > 100 ? contentType[..100] : contentType);
+        cmd.Parameters.AddWithValue("iv", encrypted.IvBase64);
+        cmd.Parameters.AddWithValue("tag", encrypted.TagBase64);
+        cmd.Parameters.AddWithValue("encSize", encrypted.EncryptedSizeBytes);
+        cmd.Parameters.AddWithValue("encHash", encrypted.EncryptedHash);
+        cmd.Parameters.AddWithValue("wrappedKey", encrypted.WrappedKeyJson);
+        cmd.Parameters.AddWithValue("actor", SyncTransforms.SyncActor);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
+    }
+
+    private async Task<(bool Exists, bool IsDeleted, string? EncryptionAlgorithm, string? StorageUri, long? EncryptedSizeBytes)> GetClinicPatientAvatarStateAsync(
+        Guid patientId,
+        CancellationToken ct)
+    {
+        await using var conn = await _connections.OpenClinicDbAsync(ct);
+        const string sql = """
+            SELECT "IsDeleted", "AvatarEncryptionAlgorithm", "AvatarUrl", "AvatarEncryptedSizeBytes"
+            FROM public."Patients"
+            WHERE "Id" = @id
+            """;
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("id", patientId);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct))
+        {
+            return (false, false, null, null, null);
+        }
+        var url = r.IsDBNull(2) ? null : r.GetString(2);
+        return (
+            !string.IsNullOrWhiteSpace(url),
+            r.GetBoolean(0),
+            r.IsDBNull(1) ? null : r.GetString(1),
+            url,
+            r.IsDBNull(3) ? null : r.GetInt64(3));
+    }
+
+    private async Task<(bool Exists, bool IsDeleted, string? EncryptionAlgorithm, string? StorageKey, long? EncryptedSizeBytes)> GetPatientAvatarStateAsync(
+        Guid patientId,
+        CancellationToken ct)
+    {
+        await using var conn = await _connections.OpenPatientDbAsync(ct);
+        const string sql = """
+            SELECT is_deleted, avatar_encryption_algorithm, avatar_url, avatar_encrypted_size_bytes
+            FROM public.patients
+            WHERE id = @id
+            """;
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("id", patientId);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct))
+        {
+            return (false, false, null, null, null);
+        }
+        var url = r.IsDBNull(2) ? null : r.GetString(2);
+        return (
+            !string.IsNullOrWhiteSpace(url),
+            r.GetBoolean(0),
+            r.IsDBNull(1) ? null : r.GetString(1),
+            url,
+            r.IsDBNull(3) ? null : r.GetInt64(3));
+    }
+
+    private async Task<Dictionary<Guid, ClinicCryptoMeta>> LoadClinicPatientAvatarCryptoMetadataAsync(Guid[] ids, CancellationToken ct)
+    {
+        var map = new Dictionary<Guid, ClinicCryptoMeta>();
+        if (ids.Length == 0 || !_connections.HasClinicDb) return map;
+
+        try
+        {
+            await using var conn = await _connections.OpenClinicDbAsync(ct);
+            const string sql = """
+                SELECT "Id", "TenantId", "ClinicId", "AvatarUrl",
+                       "AvatarEncryptionIvBase64", "AvatarEncryptionTagBase64", "AvatarWrappedKeyJson"
+                FROM public."Patients"
+                WHERE "Id" = ANY(@ids)
+                  AND "IsDeleted" = false
+                  AND "AvatarEncryptionAlgorithm" = 'AES-256-GCM'
+                """;
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("ids", ids);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                map[r.GetGuid(0)] = new ClinicCryptoMeta(
+                    TenantId: r.GetString(1),
+                    ClinicId: r.GetGuid(2),
+                    StorageUri: r.IsDBNull(3) ? null : r.GetString(3),
+                    IvBase64: r.IsDBNull(4) ? null : r.GetString(4),
+                    TagBase64: r.IsDBNull(5) ? null : r.GetString(5),
+                    WrappedKeyJson: r.IsDBNull(6) ? null : r.GetString(6));
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState is "42P01" or "42703")
+        {
+            // Columns absent
+        }
+        return map;
+    }
+
+    private async Task<Dictionary<Guid, PatientCryptoMeta>> LoadPatientAvatarCryptoMetadataAsync(Guid[] ids, CancellationToken ct)
+    {
+        var map = new Dictionary<Guid, PatientCryptoMeta>();
+        if (ids.Length == 0 || !_connections.HasPatientDb) return map;
+
+        try
+        {
+            await using var conn = await _connections.OpenPatientDbAsync(ct);
+            const string sql = """
+                SELECT id, avatar_url,
+                       avatar_encryption_iv_base64, avatar_encryption_tag_base64, avatar_wrapped_key_json
+                FROM public.patients
+                WHERE id = ANY(@ids)
+                  AND is_deleted = false
+                  AND avatar_encryption_algorithm = 'AES-256-GCM'
+                """;
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("ids", ids);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                var pid = r.GetGuid(0);
+                map[pid] = new PatientCryptoMeta(
+                    PatientId: pid,
+                    StorageKey: r.IsDBNull(1) ? null : r.GetString(1),
+                    IvBase64: r.IsDBNull(2) ? null : r.GetString(2),
+                    TagBase64: r.IsDBNull(3) ? null : r.GetString(3),
+                    WrappedKeyJson: r.IsDBNull(4) ? null : r.GetString(4));
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState is "42P01" or "42703")
+        {
+            // Columns absent
+        }
+        return map;
+    }
+
     private static SyncRunSummary SnapshotSummary(SyncRunSummary s) => new()
     {
         Track = s.Track,
@@ -1938,6 +2467,7 @@ public sealed class Track3StorageSyncEngine
         return norm switch
         {
             "AZURE_BLOB_1" or "AZURE_BLOB" => "AZURE_BLOB_1",
+            "VERCEL_BLOB" => "VERCEL_BLOB",
             _ => "ALL"
         };
     }
@@ -1947,17 +2477,18 @@ public sealed class Track3StorageSyncEngine
         var norm = raw?.Trim().ToUpperInvariant();
         return norm switch
         {
-            "CLINIC_ONLY" or "CLINIC" or SyncStoragePlane.ClinicAttachment => "CLINIC_ONLY",
-            "PATIENT_ONLY" or "PATIENT" or SyncStoragePlane.PatientFile => "PATIENT_ONLY",
+            "CLINIC_ONLY" or "CLINIC" or SyncStoragePlane.ClinicAttachment or SyncStoragePlane.ClinicPatientAvatar => "CLINIC_ONLY",
+            "PATIENT_ONLY" or "PATIENT" or SyncStoragePlane.PatientFile or SyncStoragePlane.PatientAvatar => "PATIENT_ONLY",
             _ => "BOTH"
         };
     }
 
     private static bool MatchesVerificationFilters(SyncStorageObjectState state, string planeFilter, string providerFilter)
     {
-        if (planeFilter == "CLINIC_ONLY" && state.TargetPlane != SyncStoragePlane.ClinicAttachment) return false;
-        if (planeFilter == "PATIENT_ONLY" && state.TargetPlane != SyncStoragePlane.PatientFile) return false;
+        if (planeFilter == "CLINIC_ONLY" && !SyncStoragePlane.IsClinicPlane(state.TargetPlane)) return false;
+        if (planeFilter == "PATIENT_ONLY" && !SyncStoragePlane.IsPatientPlane(state.TargetPlane)) return false;
         if (providerFilter == "AZURE_BLOB_1" && state.SourceProvider != SyncStorageProvider.AzureBlob1) return false;
+        if (providerFilter == "VERCEL_BLOB" && state.SourceProvider != SyncStorageProvider.VercelBlob) return false;
         return true;
     }
 

@@ -2922,6 +2922,254 @@ public sealed class Track3StorageMigrationTests
         parityAfterUpdate.Checks.Should().Contain(c => c.EntityType.Contains("Patient") && !c.IsMatched);
     }
 
+    [Fact]
+    public async Task PatientAvatars_DownloadOnceEncryptTwice_ForAzureBlob1AndVercelBlob_AndReEncryptsOnV1AvatarChange()
+    {
+        await using var fx = new Pg17TestFixture();
+        await fx.InitializeAsync();
+
+        var tenantId = "tnt-avatar-r2";
+        var clinicId = Guid.NewGuid();
+        var clinicPatientId1 = DeterministicUuid.ClinicPatientId(clinicId, 9501);
+        var clinicPatientId2 = DeterministicUuid.ClinicPatientId(clinicId, 9502);
+        var clinicPatientId3 = DeterministicUuid.ClinicPatientId(clinicId, 9503);
+        var patientAccountId1 = DeterministicUuid.PatientAccountId(9501);
+        var patientAccountId2 = DeterministicUuid.PatientAccountId(9502);
+        var patientAccountId3 = DeterministicUuid.PatientAccountId(9503);
+
+        await Track1ClinicSyncIntegrationTests.InstallExtendedTrack1SchemasAsync(fx);
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, """
+            ALTER TABLE public."UserAddress" ADD COLUMN IF NOT EXISTS country TEXT;
+            ALTER TABLE public."Folder" ADD COLUMN IF NOT EXISTS name TEXT;
+            ALTER TABLE public."ClinicPatient" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(), ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now();
+            ALTER TABLE public."MedicalHistory" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now();
+            ALTER TABLE public."Disability" ADD COLUMN IF NOT EXISTS severity TEXT;
+            ALTER TABLE public."UserDisability" ADD COLUMN IF NOT EXISTS severity TEXT, ADD COLUMN IF NOT EXISTS reason TEXT, ADD COLUMN IF NOT EXISTS notes TEXT;
+            ALTER TABLE public."Vaccine" ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'OTHER';
+            ALTER TABLE public."UserVaccination" ADD COLUMN IF NOT EXISTS "hpId" INT;
+            ALTER TABLE public."ConsultationDiagnosis" ADD COLUMN IF NOT EXISTS "icd10Code" TEXT, ADD COLUMN IF NOT EXISTS description TEXT, ADD COLUMN IF NOT EXISTS type TEXT;
+            """);
+        await Pg17TestFixture.ExecuteSqlAsync(fx.ClinicConnectionString, ClinicFullSchemaExtraSql);
+        await Track2AndCdcIntegrationTests.ExtendPatientDbSchemaForTrack2Async(fx.PatientConnectionString);
+        await Pg17TestFixture.ExecuteSqlAsync(fx.ClinicConnectionString, $"""
+            INSERT INTO public."Settings" ("Id", "TenantId", "ClinicId", "ClinicName", "IsDeleted")
+            VALUES ('{Guid.NewGuid()}', '{tenantId}', '{clinicId}', 'Avatar Test Clinic', false);
+            """);
+
+        const string azureAvatarUrl = "https://clinicezstorage.blob.core.windows.net/prod/patient-avatar-9501.jpg";
+        const string vercelAvatarUrl = "https://wkkzdib5fdabtkpz.public.blob.vercel-storage.com/patient-avatar-9502.png";
+        const string clerkAvatarUrl = "https://images.clerk.dev/oauth_google/img_9503";
+        const string updatedAzureAvatarUrl = "https://clinicezstorage.blob.core.windows.net/prod/patient-avatar-9501-v2.jpg";
+
+        var avatarBytes1 = Encoding.UTF8.GetBytes("synthetic-jpeg-avatar-bytes-9501");
+        var avatarBytes2 = Encoding.UTF8.GetBytes("synthetic-png-avatar-bytes-9502");
+        var avatarBytes1Updated = Encoding.UTF8.GetBytes("synthetic-jpeg-avatar-bytes-9501-updated");
+
+        var downloadCounts = new ConcurrentDictionary<string, int>(StringComparer.Ordinal);
+        var handler = new StubHttpMessageHandler(req =>
+        {
+            var url = req.RequestUri!.ToString();
+            if (req.Method == HttpMethod.Get)
+            {
+                downloadCounts.AddOrUpdate(url, 1, (_, c) => c + 1);
+            }
+            if (url == azureAvatarUrl)
+            {
+                var r = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(avatarBytes1) };
+                r.Content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+                return r;
+            }
+            if (url == vercelAvatarUrl)
+            {
+                var r = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(avatarBytes2) };
+                r.Content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+                return r;
+            }
+            if (url == updatedAzureAvatarUrl)
+            {
+                var r = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(avatarBytes1Updated) };
+                r.Content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+                return r;
+            }
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, $"""
+            INSERT INTO public."User" (id, "userId", email, picture, "firstName", "lastName", dob, gender, mobile, "isActive")
+            VALUES
+                (9501, 'auth0|av9501', 'av9501@example.test', '{azureAvatarUrl}', 'Avatar', 'AzureOne', '1991-05-01', 'FEMALE', '09170009501', true),
+                (9502, 'auth0|av9502', 'av9502@example.test', '{vercelAvatarUrl}', 'Avatar', 'VercelTwo', '1992-06-02', 'MALE', '09170009502', true),
+                (9503, 'auth0|av9503', 'av9503@example.test', '{clerkAvatarUrl}', 'Avatar', 'ClerkThree', '1993-07-03', 'FEMALE', '09170009503', true);
+            INSERT INTO public."ClinicPatient" (id, "clinicId", "patientId") VALUES
+                (9501, 101, 9501), (9502, 101, 9502), (9503, 101, 9503);
+            """);
+
+        var clinicS3 = new InMemoryAmazonS3();
+        var patientS3 = new InMemoryAmazonS3();
+        var (engine, coordinator, encCfg) = BuildTrack3Runtime(fx, handler, clinicS3.Client, patientS3.Client);
+        var encryptor = new Track3EnvelopeEncryptor(encCfg);
+
+        var t1Binding = await fx.Ledger.CreateBindingAsync(new CreateBindingRequest(
+            Track: SyncTrack.Track1Clinic,
+            Name: "Track1 Avatar Binding",
+            V1ClinicId: 101,
+            V1OrgId: null,
+            V2TenantId: tenantId,
+            V2ClinicId: clinicId), "test");
+        var t2Binding = await fx.Ledger.CreateBindingAsync(new CreateBindingRequest(
+            Track: SyncTrack.Track2Patient,
+            Name: "Track2 Avatar Binding",
+            V1ClinicId: null,
+            V1OrgId: null,
+            V2TenantId: null,
+            V2ClinicId: null,
+            PatientCohortMode: SyncCohortMode.Global), "test");
+        var t3Binding = await fx.Ledger.CreateBindingAsync(new CreateBindingRequest(
+            Track: SyncTrack.Track3Storage,
+            Name: "Track3 Avatar Binding",
+            V1ClinicId: 101,
+            V1OrgId: null,
+            V2TenantId: tenantId,
+            V2ClinicId: clinicId,
+            PatientCohortMode: SyncCohortMode.Global), "test");
+
+        (await coordinator.ExecuteAsync(t1Binding.Id, SyncRunMode.Backfill, null, false, "test", CancellationToken.None))
+            .Status.Should().Be(SyncRunStatus.Completed);
+        (await coordinator.ExecuteAsync(t2Binding.Id, SyncRunMode.Backfill, null, false, "test", CancellationToken.None))
+            .Status.Should().Be(SyncRunStatus.Completed);
+
+        var t3Run = await coordinator.ExecuteAsync(t3Binding.Id, SyncRunMode.FinalSweep, null, false, "test", CancellationToken.None);
+        t3Run.Status.Should().Be(SyncRunStatus.Completed);
+
+        // Download-Once, Encrypt-Twice: both Azure Blob #1 and Vercel Blob downloaded strictly ONCE despite Clinic + Patient copies
+        downloadCounts[azureAvatarUrl].Should().Be(1);
+        downloadCounts[vercelAvatarUrl].Should().Be(1);
+
+        // Verify Clinic DB + CMK R2 decryption for both Azure Blob #1 and Vercel Blob avatars
+        await using (var clinicConn = new NpgsqlConnection(fx.ClinicConnectionString))
+        {
+            await clinicConn.OpenAsync();
+            foreach (var (pid, expectedBytes, expectedMime) in new[]
+            {
+                (clinicPatientId1, avatarBytes1, "image/jpeg"),
+                (clinicPatientId2, avatarBytes2, "image/png")
+            })
+            {
+                await using var cmd = new NpgsqlCommand(
+                    """
+                    SELECT "AvatarUrl", "AvatarContentType", "AvatarEncryptionAlgorithm", "AvatarEncryptionKeyId",
+                           "AvatarEncryptionIvBase64", "AvatarEncryptionTagBase64", "AvatarWrappedKeyJson"
+                    FROM public."Patients" WHERE "Id" = @id
+                    """, clinicConn);
+                cmd.Parameters.AddWithValue("id", pid);
+                await using var r = await cmd.ExecuteReaderAsync();
+                (await r.ReadAsync()).Should().BeTrue();
+                var key = r.GetString(0);
+                key.Should().Be($"tenants/{tenantId}/clinics/{clinicId}/patients/{pid}/avatar.cez");
+                r.GetString(1).Should().Be(expectedMime);
+                r.GetString(2).Should().Be("AES-256-GCM");
+                r.GetString(3).Should().Be("cmk-v1");
+                var cipher = clinicS3.GetRaw("clinicez-clinic-test", key).Bytes;
+                var decrypted = encryptor.DecryptForClinic(cipher, r.GetString(4), r.GetString(5), r.GetString(6), tenantId, clinicId);
+                decrypted.Should().Equal(expectedBytes);
+            }
+
+            // Clerk CDN avatar remains untouched as live HTTPS URL
+            await using var clerkCmd = new NpgsqlCommand(
+                """SELECT "AvatarUrl", "AvatarEncryptionAlgorithm" FROM public."Patients" WHERE "Id" = @id""", clinicConn);
+            clerkCmd.Parameters.AddWithValue("id", clinicPatientId3);
+            await using var cr = await clerkCmd.ExecuteReaderAsync();
+            (await cr.ReadAsync()).Should().BeTrue();
+            cr.GetString(0).Should().Be(clerkAvatarUrl);
+            cr.GetString(1).Should().Be("NONE");
+        }
+
+        // Verify Patient DB + PMK R2 decryption
+        await using (var patConn = new NpgsqlConnection(fx.PatientConnectionString))
+        {
+            await patConn.OpenAsync();
+            foreach (var (pid, expectedBytes, expectedMime) in new[]
+            {
+                (patientAccountId1, avatarBytes1, "image/jpeg"),
+                (patientAccountId2, avatarBytes2, "image/png")
+            })
+            {
+                await using var cmd = new NpgsqlCommand(
+                    """
+                    SELECT avatar_url, avatar_content_type, avatar_encryption_algorithm, avatar_encryption_key_id,
+                           avatar_encryption_iv_base64, avatar_encryption_tag_base64, avatar_wrapped_key_json
+                    FROM public.patients WHERE id = @id
+                    """, patConn);
+                cmd.Parameters.AddWithValue("id", pid);
+                await using var r = await cmd.ExecuteReaderAsync();
+                (await r.ReadAsync()).Should().BeTrue();
+                var key = r.GetString(0);
+                key.Should().Be($"patients/{pid}/avatar/{pid}.cez");
+                r.GetString(1).Should().Be(expectedMime);
+                r.GetString(2).Should().Be("AES-256-GCM");
+                r.GetString(3).Should().Be("pmk-v1");
+                var cipher = patientS3.GetRaw("clinicez-patient-test", key).Bytes;
+                var decrypted = encryptor.DecryptForPatient(cipher, r.GetString(4), r.GetString(5), r.GetString(6), pid);
+                decrypted.Should().Equal(expectedBytes);
+            }
+        }
+
+        var parity = await engine.BuildParityReportAsync(t3Binding);
+        parity.ReadyToFreeze.Should().BeTrue();
+        parity.Checks.Should().Contain(c => c.EntityType == "Clinic Patient Avatars (AES-256-GCM)" && c.V2ActualCount == 2 && c.IsMatched);
+        parity.Checks.Should().Contain(c => c.EntityType == "Patient Avatars (AES-256-GCM)" && c.V2ActualCount == 2 && c.IsMatched);
+
+        // Live CDC non-clobber: changing patient name in V1 preserves encrypted R2 avatar key in both Clinic and Patient!
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, """
+            UPDATE public."User" SET "firstName" = 'AvatarRenamed' WHERE id = 9501;
+            """);
+        (await coordinator.ExecuteAsync(t1Binding.Id, SyncRunMode.Incremental, null, false, "test", CancellationToken.None))
+            .Status.Should().Be(SyncRunStatus.Completed);
+        (await coordinator.ExecuteAsync(t2Binding.Id, SyncRunMode.Incremental, null, false, "test", CancellationToken.None))
+            .Status.Should().Be(SyncRunStatus.Completed);
+
+        await using (var clinicConn = new NpgsqlConnection(fx.ClinicConnectionString))
+        {
+            await clinicConn.OpenAsync();
+            await using var cmd = new NpgsqlCommand(
+                """SELECT "FirstName", "AvatarUrl", "AvatarEncryptionAlgorithm" FROM public."Patients" WHERE "Id" = @id""", clinicConn);
+            cmd.Parameters.AddWithValue("id", clinicPatientId1);
+            await using var r = await cmd.ExecuteReaderAsync();
+            (await r.ReadAsync()).Should().BeTrue();
+            r.GetString(0).Should().Be("AvatarRenamed");
+            r.GetString(1).Should().EndWith("/avatar.cez");
+            r.GetString(2).Should().Be("AES-256-GCM");
+        }
+
+        // Real V1 avatar change: updating User.picture in V1 resets encryption to NONE so Track 3 re-encrypts the new photo!
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, $"""
+            UPDATE public."User" SET picture = '{updatedAzureAvatarUrl}' WHERE id = 9501;
+            """);
+        (await coordinator.ExecuteAsync(t1Binding.Id, SyncRunMode.Incremental, null, false, "test", CancellationToken.None))
+            .Status.Should().Be(SyncRunStatus.Completed);
+        (await coordinator.ExecuteAsync(t2Binding.Id, SyncRunMode.Incremental, null, false, "test", CancellationToken.None))
+            .Status.Should().Be(SyncRunStatus.Completed);
+        (await coordinator.ExecuteAsync(t3Binding.Id, SyncRunMode.FinalSweep, null, false, "test", CancellationToken.None))
+            .Status.Should().Be(SyncRunStatus.Completed);
+
+        downloadCounts[updatedAzureAvatarUrl].Should().Be(1);
+        await using (var patConn = new NpgsqlConnection(fx.PatientConnectionString))
+        {
+            await patConn.OpenAsync();
+            await using var cmd = new NpgsqlCommand(
+                """
+                SELECT avatar_url, avatar_encryption_iv_base64, avatar_encryption_tag_base64, avatar_wrapped_key_json
+                FROM public.patients WHERE id = @id
+                """, patConn);
+            cmd.Parameters.AddWithValue("id", patientAccountId1);
+            await using var r = await cmd.ExecuteReaderAsync();
+            (await r.ReadAsync()).Should().BeTrue();
+            var cipher = patientS3.GetRaw("clinicez-patient-test", r.GetString(0)).Bytes;
+            encryptor.DecryptForPatient(cipher, r.GetString(1), r.GetString(2), r.GetString(3), patientAccountId1)
+                .Should().Equal(avatarBytes1Updated);
+        }
+    }
+
     private sealed class CapturingCategoryLoggerProvider : ILoggerProvider
     {
         private readonly ConcurrentBag<(string Category, LogLevel Level, string Message)> _entries;

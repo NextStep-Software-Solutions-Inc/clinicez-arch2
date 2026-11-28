@@ -16,12 +16,23 @@ public static class SyncStoragePlane
 {
     public const string ClinicAttachment = "CLINIC_ATTACHMENT";
     public const string PatientFile = "PATIENT_FILE";
+    public const string ClinicPatientAvatar = "CLINIC_PATIENT_AVATAR";
+    public const string PatientAvatar = "PATIENT_AVATAR";
+
+    public static bool IsClinicPlane(string? plane) =>
+        string.Equals(plane, ClinicAttachment, StringComparison.Ordinal) ||
+        string.Equals(plane, ClinicPatientAvatar, StringComparison.Ordinal);
+
+    public static bool IsPatientPlane(string? plane) =>
+        string.Equals(plane, PatientFile, StringComparison.Ordinal) ||
+        string.Equals(plane, PatientAvatar, StringComparison.Ordinal);
 }
 
 public static class SyncStorageProvider
 {
     public const string AzureBlob1 = "AZURE_BLOB_1";
     public const string AzureBlob2 = "AZURE_BLOB_2";
+    public const string VercelBlob = "VERCEL_BLOB";
     public const string GoogleDrive = "GOOGLE_DRIVE";
     public const string Other = "OTHER";
 }

@@ -125,6 +125,16 @@ public sealed class LegacyBlobSourceDownloader
                 ErrorMessage: null);
         }
 
+        if (IsAllowedVercelPublicBlobHost(host))
+        {
+            return new UrlClassification(
+                SyncStorageProvider.VercelBlob,
+                IsMigratable: true,
+                SkipStatus: null,
+                ErrorCode: null,
+                ErrorMessage: null);
+        }
+
         if (host == AzureBlob2Host)
         {
             return new UrlClassification(
@@ -173,7 +183,7 @@ public sealed class LegacyBlobSourceDownloader
                 ErrorMessage: cls.ErrorMessage);
         }
 
-        if (!IsAzureBlob1Enabled)
+        if (cls.Provider == SyncStorageProvider.AzureBlob1 && !IsAzureBlob1Enabled)
         {
             return new BlobDownloadResult(
                 Success: false,
@@ -187,7 +197,7 @@ public sealed class LegacyBlobSourceDownloader
                 ErrorMessage: "Azure Blob #1 migration is disabled.");
         }
 
-        var requestUri = BuildOutboundRequestUri(sourceUrl);
+        var requestUri = BuildOutboundRequestUri(sourceUrl, cls.Provider);
         var client = GetHttpClient();
         var maxBytes = Math.Max(1024L, EffectiveMaxFileSizeBytes);
         var retryDelays = new[] { TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(1000) };
@@ -358,12 +368,12 @@ public sealed class LegacyBlobSourceDownloader
             return new BlobProbeResult(false, cls.Provider, 0, cls.SkipStatus, cls.ErrorCode, cls.ErrorMessage);
         }
 
-        if (!IsAzureBlob1Enabled)
+        if (cls.Provider == SyncStorageProvider.AzureBlob1 && !IsAzureBlob1Enabled)
         {
             return new BlobProbeResult(false, cls.Provider, 0, SyncStorageStatus.SkippedLegacyUnsupported, "AZURE_BLOB_1_DISABLED", "Azure Blob #1 migration is disabled.");
         }
 
-        var requestUri = BuildOutboundRequestUri(sourceUrl);
+        var requestUri = BuildOutboundRequestUri(sourceUrl, cls.Provider);
         var client = GetHttpClient();
 
         try
@@ -493,6 +503,11 @@ public sealed class LegacyBlobSourceDownloader
                 string.Equals(nextUri.Host, AzureBlob1Host, StringComparison.OrdinalIgnoreCase) &&
                 string.IsNullOrEmpty(nextUri.UserInfo) &&
                 nextUri.IsDefaultPort;
+            var isAllowedVercelBlob =
+                string.Equals(nextUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+                IsAllowedVercelPublicBlobHost(nextUri.Host.Trim().ToLowerInvariant()) &&
+                string.IsNullOrEmpty(nextUri.UserInfo) &&
+                nextUri.IsDefaultPort;
             var isAllowedOverride =
                 hasDevOverride &&
                 string.Equals(nextUri.Scheme, overrideOrigin.Scheme, StringComparison.OrdinalIgnoreCase) &&
@@ -500,7 +515,7 @@ public sealed class LegacyBlobSourceDownloader
                 nextUri.Port == overrideOrigin.Port &&
                 string.IsNullOrEmpty(nextUri.UserInfo);
 
-            if (!isAllowedAzure1 && !isAllowedOverride)
+            if (!isAllowedAzure1 && !isAllowedVercelBlob && !isAllowedOverride)
             {
                 // Unsafe / auth redirect — return 3xx response so caller classifies SKIPPED_AUTH_REQUIRED without following
                 return resp;
@@ -515,9 +530,39 @@ public sealed class LegacyBlobSourceDownloader
         throw new InvalidOperationException("Unreachable redirect loop termination.");
     }
 
-    private Uri BuildOutboundRequestUri(string sourceUrl)
+    private static bool IsAllowedVercelPublicBlobHost(string lowerHost)
+    {
+        const string suffix = ".public.blob.vercel-storage.com";
+        if (!lowerHost.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var prefix = lowerHost[..^suffix.Length];
+        if (prefix.Length == 0 || prefix.Length > 63 || prefix.Contains('.'))
+        {
+            return false;
+        }
+
+        foreach (var ch in prefix)
+        {
+            if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-'))
+            {
+                return false;
+            }
+        }
+
+        return prefix[0] != '-' && prefix[^1] != '-';
+    }
+
+    private Uri BuildOutboundRequestUri(string sourceUrl, string provider)
     {
         var originalUri = new Uri(sourceUrl.Trim(), UriKind.Absolute);
+        if (!string.Equals(provider, SyncStorageProvider.AzureBlob1, StringComparison.Ordinal))
+        {
+            return originalUri;
+        }
+
         var withSas = ApplyOptionalSasToken(originalUri);
         if (TryGetDevelopmentOriginOverride(out var overrideOrigin))
         {

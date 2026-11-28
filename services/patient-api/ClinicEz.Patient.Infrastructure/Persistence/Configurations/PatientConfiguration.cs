@@ -37,6 +37,13 @@ public sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
         builder.Property(p => p.Religion).HasMaxLength(80);
         builder.Property(p => p.PrimaryLanguage).HasMaxLength(50);
         builder.Property(p => p.AvatarUrl).HasMaxLength(500);
+        builder.Property(p => p.AvatarContentType).HasMaxLength(100);
+        builder.Property(p => p.AvatarEncryptionAlgorithm).HasMaxLength(32);
+        builder.Property(p => p.AvatarEncryptionKeyId).HasMaxLength(128);
+        builder.Property(p => p.AvatarEncryptionIvBase64).HasMaxLength(100);
+        builder.Property(p => p.AvatarEncryptionTagBase64).HasMaxLength(100);
+        builder.Property(p => p.AvatarEncryptedHash).HasMaxLength(128);
+        builder.Property(p => p.AvatarWrappedKeyJson).HasColumnType("text");
         builder.Property(p => p.Mobile).HasMaxLength(20);
         builder.Property(p => p.AltPhone).HasMaxLength(20);
         builder.Property(p => p.Email).HasMaxLength(254);

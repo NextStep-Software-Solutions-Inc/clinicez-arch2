@@ -389,6 +389,9 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 p.PreferredName,
                 p.Nationality,
                 p.Religion,
+                p.AvatarUrl,
+                p.AvatarEncryptionAlgorithm,
+                p.AvatarEncryptedHash,
                 p.IsDeceased,
                 p.DeceasedAt,
                 p.HasActiveSafetyAlert,
@@ -596,7 +599,8 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 GenderIdentity: p.GenderIdentity,
                 Addresses: p.Addresses.Count > 0 ? p.Addresses : null,
                 Guardians: p.Guardians.Count > 0 ? p.Guardians : null,
-                ActiveQueueTickets: activeTicketsList);
+                ActiveQueueTickets: activeTicketsList,
+                AvatarUrl: PatientAvatarUrlResolver.Resolve(p.Id, p.AvatarUrl, p.AvatarEncryptionAlgorithm, p.AvatarEncryptedHash));
         }).ToList().AsReadOnly();
     }
 }

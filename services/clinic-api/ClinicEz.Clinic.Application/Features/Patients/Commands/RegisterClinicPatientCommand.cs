@@ -742,7 +742,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             GenderIdentity: p.GenderIdentity,
             Addresses: addressesDto,
             Guardians: guardiansDto,
-            StructuredAllergies: structuredAllergiesDto);
+            StructuredAllergies: structuredAllergiesDto,
+            AvatarUrl: Queries.PatientAvatarUrlResolver.Resolve(p));
     }
 
     public static List<PatientAddressDto>? MapAddresses(IEnumerable<PatientAddress>? addresses)

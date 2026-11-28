@@ -1350,6 +1350,7 @@ public sealed class Track2PatientSyncEngine
         var counter = summary.For("PatientAccount");
         var storedHashes = await _ledger.LoadRowHashesAsync(binding.Id, "PatientAccount", ct);
         var existingIdMap = await _ledger.GetAllIdMappingsForEntityAsync(binding.Id, "PatientAccount", ct);
+        var hasAvatarCryptoCol = await ColumnExistsAsync(v2, "patients", "avatar_encryption_algorithm", ct);
 
         await foreach (var chunk in EnumerateBatchesAsync(cohortUserIds, ct))
         {
@@ -1380,7 +1381,7 @@ public sealed class Track2PatientSyncEngine
                         Id: r.GetInt32(0),
                         V1UserIdStr: GetStr(r, 1),
                         Email: SyncTransforms.Clean(GetStr(r, 2), 254),
-                        AvatarUrl: SyncTransforms.Clean(GetStr(r, 3), 500),
+                        AvatarUrl: SyncTransforms.NormalizeAvatarUrl(GetStr(r, 3), 500),
                         FirstName: SyncTransforms.CleanRequired(GetStr(r, 4), "Unknown", 100),
                         MiddleName: SyncTransforms.Clean(GetStr(r, 5), 100),
                         LastName: SyncTransforms.CleanRequired(GetStr(r, 6), "Patient", 100),
@@ -1407,11 +1408,14 @@ public sealed class Track2PatientSyncEngine
 
             var existingByClerk = new Dictionary<string, (Guid Id, string ClinicEzId, Dictionary<string, string?> Fields)>(StringComparer.Ordinal);
             var existingById = new Dictionary<Guid, (string? ClerkUserId, string ClinicEzId, Dictionary<string, string?> Fields)>();
+            var encryptedAvatarIds = new HashSet<Guid>();
+            var migratedAvatarSources = new Dictionary<Guid, string?>();
 
-            const string v2LookupSql = """
+            var v2AvatarEncCol = hasAvatarCryptoCol ? "avatar_encryption_algorithm" : "NULL::text";
+            var v2LookupSql = $"""
                 SELECT id, clerk_user_id, clinic_ez_id, first_name, middle_name, last_name, suffix,
                        sex, date_of_birth, place_of_birth, civil_status, blood_type,
-                       nationality, religion, mobile, alt_phone, email
+                       nationality, religion, mobile, alt_phone, email, avatar_url, {v2AvatarEncCol}
                 FROM public.patients
                 WHERE id = ANY(@ids) OR (clerk_user_id IS NOT NULL AND clerk_user_id = ANY(@clerks))
                 """;
@@ -1426,6 +1430,14 @@ public sealed class Track2PatientSyncEngine
                     var clerk = GetStr(r, 1);
                     var ezId = r.GetString(2);
                     var dob = r.IsDBNull(8) ? (DateOnly?)null : r.GetFieldValue<DateOnly>(8);
+                    var liveAvatar = SyncTransforms.Clean(GetStr(r, 17), 500);
+                    var avatarEncAlg = hasAvatarCryptoCol ? GetStr(r, 18) : null;
+                    if (!string.IsNullOrWhiteSpace(liveAvatar)
+                        && !string.Equals(avatarEncAlg ?? SyncTransforms.LegacyUnencryptedAlgorithm, SyncTransforms.LegacyUnencryptedAlgorithm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        encryptedAvatarIds.Add(id);
+                    }
+
                     var fields = BuildPatientCanonicalMap(
                         SyncTransforms.CleanRequired(GetStr(r, 3), "Unknown", 100),
                         SyncTransforms.Clean(GetStr(r, 4), 100),
@@ -1438,9 +1450,25 @@ public sealed class Track2PatientSyncEngine
                         SyncTransforms.Clean(GetStr(r, 13), 80),
                         SyncTransforms.Clean(GetStr(r, 14), 20),
                         SyncTransforms.Clean(GetStr(r, 15), 20),
-                        SyncTransforms.Clean(GetStr(r, 16), 254));
+                        SyncTransforms.Clean(GetStr(r, 16), 254),
+                        liveAvatar);
                     existingById[id] = (clerk, ezId, fields);
                     if (clerk is not null) existingByClerk[clerk] = (id, ezId, fields);
+                }
+            }
+
+            if (encryptedAvatarIds.Count > 0)
+            {
+                var sources = await _ledger.LoadMigratedSourceInfoByPlaneAsync(
+                    SyncStoragePlane.PatientAvatar, encryptedAvatarIds, ct);
+                foreach (var (id, src) in sources)
+                {
+                    var normalizedSrc = SyncTransforms.Clean(src.SourceUrl, 500);
+                    migratedAvatarSources[id] = normalizedSrc;
+                    if (existingById.TryGetValue(id, out var st))
+                    {
+                        st.Fields["avatar_url"] = normalizedSrc;
+                    }
                 }
             }
 
@@ -1504,7 +1532,7 @@ public sealed class Track2PatientSyncEngine
                 var canonical = BuildPatientCanonicalMap(
                     u.FirstName, u.MiddleName, u.LastName, u.Suffix,
                     u.Sex, u.Dob, u.PlaceOfBirth, u.CivilStatus, u.BloodType,
-                    u.Nationality, u.Religion, u.Mobile, u.AltPhone, u.Email);
+                    u.Nationality, u.Religion, u.Mobile, u.AltPhone, u.Email, u.AvatarUrl);
                 var v1Hash = DeterministicUuid.ComputeCanonicalHash(canonical);
 
                 if (existsInV2 && storedHashes.TryGetValue(v1Key, out var prevHash))
@@ -1520,7 +1548,25 @@ public sealed class Track2PatientSyncEngine
                     }
                     var liveHash = DeterministicUuid.ComputeCanonicalHash(currentFields!);
                     var changed = DeterministicUuid.ComputeChangedFieldNames(currentFields!, canonical);
-                    if (!forceV1OnConflict && !string.Equals(liveHash, prevHash.V2ExpectedHash, StringComparison.Ordinal))
+                    var matchesExpected = string.Equals(liveHash, prevHash.V2ExpectedHash, StringComparison.Ordinal);
+
+                    // Schema-evolution guard: upgrade legacy pre-avatar_url hashes cleanly without raising false V2_MODIFIED conflicts
+                    if (!matchesExpected)
+                    {
+                        var legacyLiveHash = ComputeCanonicalHashWithoutKey(currentFields!, "avatar_url");
+                        if (string.Equals(legacyLiveHash, prevHash.V2ExpectedHash, StringComparison.Ordinal))
+                        {
+                            matchesExpected = true;
+                            if (!forceV1OnConflict && changed.Count == 0)
+                            {
+                                counter.Unchanged++;
+                                if (!isDryRun) ledgerUpdates.Add((v1Key, targetId, v1Hash, v1Hash));
+                                continue;
+                            }
+                        }
+                    }
+
+                    if (!forceV1OnConflict && !matchesExpected)
                     {
                         counter.SkippedV2Wins++;
                         diffBatch.Add(("PatientAccount", v1Key, targetId, SyncDiffAction.SkipV2Wins, changed));
@@ -1583,39 +1629,89 @@ public sealed class Track2PatientSyncEngine
 
                 if (!isDryRun)
                 {
-                    var pCmd = new NpgsqlBatchCommand("""
-                        INSERT INTO public.patients (
-                            id, client_id, clerk_user_id, clinic_ez_id,
-                            first_name, middle_name, last_name, suffix,
-                            sex, date_of_birth, place_of_birth, civil_status, blood_type,
-                            nationality, religion, avatar_url, mobile, alt_phone, email,
-                            consent_to_share_info, created_at, created_by, updated_at, updated_by, is_deleted
-                        ) VALUES (
-                            @id, @id, @clerk, @ezId,
-                            @fn, @mn, @ln, @suf,
-                            @sex, @dob, @pob, @civil, @blood,
-                            @nat, @rel, @avatar, @mob, @alt, @email,
-                            true, @cat, @actor, @uat, @actor, false
-                        ) ON CONFLICT (id) DO UPDATE SET
-                            clerk_user_id = COALESCE(public.patients.clerk_user_id, EXCLUDED.clerk_user_id),
-                            first_name = EXCLUDED.first_name,
-                            middle_name = EXCLUDED.middle_name,
-                            last_name = EXCLUDED.last_name,
-                            suffix = EXCLUDED.suffix,
-                            sex = EXCLUDED.sex,
-                            date_of_birth = EXCLUDED.date_of_birth,
-                            place_of_birth = EXCLUDED.place_of_birth,
-                            civil_status = EXCLUDED.civil_status,
-                            blood_type = EXCLUDED.blood_type,
-                            nationality = EXCLUDED.nationality,
-                            religion = EXCLUDED.religion,
-                            avatar_url = EXCLUDED.avatar_url,
-                            mobile = EXCLUDED.mobile,
-                            alt_phone = EXCLUDED.alt_phone,
-                            email = EXCLUDED.email,
-                            updated_at = now(),
-                            updated_by = @actor
-                        """);
+                    var preserveEncryptedAvatar = hasAvatarCryptoCol
+                        && existsInV2
+                        && encryptedAvatarIds.Contains(targetId)
+                        && migratedAvatarSources.TryGetValue(targetId, out var migratedSrc)
+                        && string.Equals(migratedSrc, u.AvatarUrl, StringComparison.Ordinal);
+
+                    var upsertSql = hasAvatarCryptoCol
+                        ? """
+                          INSERT INTO public.patients (
+                              id, client_id, clerk_user_id, clinic_ez_id,
+                              first_name, middle_name, last_name, suffix,
+                              sex, date_of_birth, place_of_birth, civil_status, blood_type,
+                              nationality, religion, avatar_url, avatar_encryption_algorithm, mobile, alt_phone, email,
+                              consent_to_share_info, created_at, created_by, updated_at, updated_by, is_deleted
+                          ) VALUES (
+                              @id, @id, @clerk, @ezId,
+                              @fn, @mn, @ln, @suf,
+                              @sex, @dob, @pob, @civil, @blood,
+                              @nat, @rel, @avatar, @avatarAlg, @mob, @alt, @email,
+                              true, @cat, @actor, @uat, @actor, false
+                          ) ON CONFLICT (id) DO UPDATE SET
+                              clerk_user_id = COALESCE(public.patients.clerk_user_id, EXCLUDED.clerk_user_id),
+                              first_name = EXCLUDED.first_name,
+                              middle_name = EXCLUDED.middle_name,
+                              last_name = EXCLUDED.last_name,
+                              suffix = EXCLUDED.suffix,
+                              sex = EXCLUDED.sex,
+                              date_of_birth = EXCLUDED.date_of_birth,
+                              place_of_birth = EXCLUDED.place_of_birth,
+                              civil_status = EXCLUDED.civil_status,
+                              blood_type = EXCLUDED.blood_type,
+                              nationality = EXCLUDED.nationality,
+                              religion = EXCLUDED.religion,
+                              avatar_url = CASE WHEN @preserveAvatar THEN public.patients.avatar_url ELSE EXCLUDED.avatar_url END,
+                              avatar_content_type = CASE WHEN @preserveAvatar THEN public.patients.avatar_content_type ELSE NULL END,
+                              avatar_encryption_algorithm = CASE WHEN @preserveAvatar THEN public.patients.avatar_encryption_algorithm ELSE EXCLUDED.avatar_encryption_algorithm END,
+                              avatar_encryption_key_id = CASE WHEN @preserveAvatar THEN public.patients.avatar_encryption_key_id ELSE NULL END,
+                              avatar_encryption_iv_base64 = CASE WHEN @preserveAvatar THEN public.patients.avatar_encryption_iv_base64 ELSE NULL END,
+                              avatar_encryption_tag_base64 = CASE WHEN @preserveAvatar THEN public.patients.avatar_encryption_tag_base64 ELSE NULL END,
+                              avatar_encrypted_size_bytes = CASE WHEN @preserveAvatar THEN public.patients.avatar_encrypted_size_bytes ELSE NULL END,
+                              avatar_encrypted_hash = CASE WHEN @preserveAvatar THEN public.patients.avatar_encrypted_hash ELSE NULL END,
+                              avatar_wrapped_key_json = CASE WHEN @preserveAvatar THEN public.patients.avatar_wrapped_key_json ELSE NULL END,
+                              mobile = EXCLUDED.mobile,
+                              alt_phone = EXCLUDED.alt_phone,
+                              email = EXCLUDED.email,
+                              updated_at = now(),
+                              updated_by = @actor
+                          """
+                        : """
+                          INSERT INTO public.patients (
+                              id, client_id, clerk_user_id, clinic_ez_id,
+                              first_name, middle_name, last_name, suffix,
+                              sex, date_of_birth, place_of_birth, civil_status, blood_type,
+                              nationality, religion, avatar_url, mobile, alt_phone, email,
+                              consent_to_share_info, created_at, created_by, updated_at, updated_by, is_deleted
+                          ) VALUES (
+                              @id, @id, @clerk, @ezId,
+                              @fn, @mn, @ln, @suf,
+                              @sex, @dob, @pob, @civil, @blood,
+                              @nat, @rel, @avatar, @mob, @alt, @email,
+                              true, @cat, @actor, @uat, @actor, false
+                          ) ON CONFLICT (id) DO UPDATE SET
+                              clerk_user_id = COALESCE(public.patients.clerk_user_id, EXCLUDED.clerk_user_id),
+                              first_name = EXCLUDED.first_name,
+                              middle_name = EXCLUDED.middle_name,
+                              last_name = EXCLUDED.last_name,
+                              suffix = EXCLUDED.suffix,
+                              sex = EXCLUDED.sex,
+                              date_of_birth = EXCLUDED.date_of_birth,
+                              place_of_birth = EXCLUDED.place_of_birth,
+                              civil_status = EXCLUDED.civil_status,
+                              blood_type = EXCLUDED.blood_type,
+                              nationality = EXCLUDED.nationality,
+                              religion = EXCLUDED.religion,
+                              avatar_url = EXCLUDED.avatar_url,
+                              mobile = EXCLUDED.mobile,
+                              alt_phone = EXCLUDED.alt_phone,
+                              email = EXCLUDED.email,
+                              updated_at = now(),
+                              updated_by = @actor
+                          """;
+
+                    var pCmd = new NpgsqlBatchCommand(upsertSql);
                     pCmd.Parameters.AddWithValue("id", targetId);
                     pCmd.Parameters.AddWithValue("clerk", (object?)clerkId ?? DBNull.Value);
                     pCmd.Parameters.AddWithValue("ezId", targetEzId);
@@ -1631,6 +1727,11 @@ public sealed class Track2PatientSyncEngine
                     pCmd.Parameters.AddWithValue("nat", (object?)u.Nationality ?? DBNull.Value);
                     pCmd.Parameters.AddWithValue("rel", (object?)u.Religion ?? DBNull.Value);
                     pCmd.Parameters.AddWithValue("avatar", (object?)u.AvatarUrl ?? DBNull.Value);
+                    if (hasAvatarCryptoCol)
+                    {
+                        pCmd.Parameters.AddWithValue("avatarAlg", u.AvatarUrl is null ? DBNull.Value : (object)SyncTransforms.LegacyUnencryptedAlgorithm);
+                        pCmd.Parameters.AddWithValue("preserveAvatar", preserveEncryptedAvatar);
+                    }
                     pCmd.Parameters.AddWithValue("mob", (object?)u.Mobile ?? DBNull.Value);
                     pCmd.Parameters.AddWithValue("alt", (object?)u.AltPhone ?? DBNull.Value);
                     pCmd.Parameters.AddWithValue("email", (object?)u.Email ?? DBNull.Value);
@@ -4751,7 +4852,7 @@ public sealed class Track2PatientSyncEngine
     public static Dictionary<string, string?> BuildPatientCanonicalMap(
         string fn, string? mn, string ln, string? suf, string? sex, DateOnly? dob,
         string? pob, string? civil, string? blood, string? nat, string? rel,
-        string? mob, string? alt, string? email) =>
+        string? mob, string? alt, string? email, string? avatarUrl = null) =>
         new(StringComparer.Ordinal)
         {
             ["first_name"] = fn,
@@ -4767,7 +4868,8 @@ public sealed class Track2PatientSyncEngine
             ["religion"] = rel,
             ["mobile"] = mob,
             ["alt_phone"] = alt,
-            ["email"] = email
+            ["email"] = email,
+            ["avatar_url"] = avatarUrl
         };
 
     public static Dictionary<string, string?> BuildPatientSocialHistoryCanonicalMap(
@@ -4780,6 +4882,19 @@ public sealed class Track2PatientSyncEngine
             ["uses_substances"] = FmtBool(usesSubstances),
             ["is_sexually_active"] = isSexuallyActive.HasValue ? FmtBool(isSexuallyActive.Value) : null
         };
+
+    private static string ComputeCanonicalHashWithoutKey(Dictionary<string, string?> fields, string keyToOmit)
+    {
+        var copy = new Dictionary<string, string?>(fields.Count, StringComparer.Ordinal);
+        foreach (var kv in fields)
+        {
+            if (!string.Equals(kv.Key, keyToOmit, StringComparison.Ordinal))
+            {
+                copy[kv.Key] = kv.Value;
+            }
+        }
+        return DeterministicUuid.ComputeCanonicalHash(copy);
+    }
 
     private static string? GetV2TableNameForEntity(string entityType) => entityType switch
     {

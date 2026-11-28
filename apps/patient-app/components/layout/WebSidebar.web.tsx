@@ -9,6 +9,7 @@ import ClinicEzMark from '@ui/ClinicEzMark';
 import { useNotificationContext } from 'contexts/NotificationContext';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useResolvedAvatarUri } from '../../hooks/useResolvedAvatarUri';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import { extractInitials } from '../../services/home/homeDashboardService';
 import { db } from '@db/index';
@@ -38,7 +39,7 @@ export default function WebSidebar({ state, navigation, collapsed }: WebSidebarP
   const { colors, spacing, radii, sizes } = theme;
   const { colors: ceColors, typography: ceTypography } = useClinicalEmpathyTheme();
   const { user } = useUser();
-  const { internalPatientId } = useAuth();
+  const { internalPatientId, getToken } = useAuth();
   const { unreadCount } = useNotificationContext();
   const active = resolveActiveSection(state);
 
@@ -88,7 +89,8 @@ export default function WebSidebar({ state, navigation, collapsed }: WebSidebarP
     }
   }, [user?.imageUrl]);
 
-  const avatarUrl = user?.imageUrl ?? localAvatarUri ?? patientRecord?.avatarUrl ?? null;
+  const rawAvatarUrl = user?.imageUrl ?? localAvatarUri ?? patientRecord?.avatarUrl ?? null;
+  const avatarUrl = useResolvedAvatarUri(rawAvatarUrl, getToken);
 
   useEffect(() => {
     setAvatarError(false);

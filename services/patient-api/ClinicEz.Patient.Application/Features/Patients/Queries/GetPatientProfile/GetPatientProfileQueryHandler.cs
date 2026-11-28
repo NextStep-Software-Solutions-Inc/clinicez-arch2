@@ -25,7 +25,7 @@ public sealed class GetPatientProfileQueryHandler : IRequestHandler<GetPatientPr
             patient.Nationality, patient.Ethnicity, patient.Religion, patient.PrimaryLanguage,
             patient.EducationLevel?.ToString(),
             patient.Mobile, patient.AltPhone, patient.Email, patient.MessengerHandle,
-            patient.AvatarUrl,
+            ClinicEz.Patient.Application.Common.Helpers.PatientAvatarUrlResolver.Resolve(patient),
             patient.ConsentToShareInfo,
             patient.ClinicEzId);
 

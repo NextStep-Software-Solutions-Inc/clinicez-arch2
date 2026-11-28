@@ -18,6 +18,7 @@ import { formatCompressedLongAge } from '../../../utils/age';
 import { formatPhilHealthPin, formatBloodTypeLabel } from '../PatientSummarySpine';
 import ChartLayoutSwitcher from '../ChartLayoutSwitcher';
 import ChartTabContentView from '../ChartTabContentView';
+import { PatientAvatar } from '../../patient/PatientAvatar';
 import type { ChartLayoutProps, ChartTab } from '../types';
 
 interface NavItemMeta {
@@ -125,11 +126,14 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
             {/* Patient Profile Card */}
             {patient ? (
               <View style={styles.patientProfileCard}>
-                <View style={styles.avatarContainer}>
-                  <ThemedText variant="title" color={theme.colors.onPrimary}>
-                    {(patient.firstName?.[0] || 'P') + (patient.lastName?.[0] || '')}
-                  </ThemedText>
-                </View>
+                <PatientAvatar
+                  avatarUrl={patient.avatarUrl ?? patientChart?.demographics?.avatarUrl}
+                  initials={(patient.firstName?.[0] || 'P') + (patient.lastName?.[0] || '')}
+                  size={56}
+                  containerStyle={styles.avatarContainer}
+                  textVariant="title"
+                  textColor={theme.colors.onPrimary}
+                />
 
                 <ThemedText variant="h3" color={theme.colors.text} numberOfLines={2} style={styles.patientName}>
                   {patient.fullName}

@@ -13,6 +13,7 @@ import { useUser } from '@clerk/expo';
 import { desc, eq } from 'drizzle-orm';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { useResolvedAvatarUri } from '../../hooks/useResolvedAvatarUri';
 import { useNotificationContext } from '../../contexts/NotificationContext';
 import { useContentInsets } from '../../hooks/useContentInsets';
 import { usePatientId } from '../../hooks/usePatientId';
@@ -391,6 +392,10 @@ export default function HomeScreen() {
     unreadCount,
     dashboard?.healthPass.unreadNotificationsCount ?? 0,
   );
+  const resolvedAvatarUrl = useResolvedAvatarUri(
+    dashboard?.healthPass.avatarUrl ?? user?.imageUrl ?? null,
+    getToken,
+  );
 
   return (
     <SafeAreaView
@@ -402,7 +407,7 @@ export default function HomeScreen() {
         title={headerTitle}
         subtitle={headerSubtitle}
         fullName={dashboard?.healthPass.fullName ?? user?.fullName ?? 'Patient'}
-        avatarUrl={dashboard?.healthPass.avatarUrl ?? user?.imageUrl ?? null}
+        avatarUrl={resolvedAvatarUrl}
         unreadCount={effectiveUnreadCount}
         onNotificationsPress={() => navigateToMainRoute('NotificationScreen')}
         onAvatarPress={() => navigateToMainRoute('ProfileScreen')}

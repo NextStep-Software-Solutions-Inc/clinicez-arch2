@@ -851,7 +851,12 @@ export function SkippedStorageFilesCard({
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       <Chip
-                        tone={item.targetPlane === 'CLINIC_ATTACHMENT' ? 'primary' : 'info'}
+                        tone={
+                          item.targetPlane === 'CLINIC_ATTACHMENT' ||
+                          item.targetPlane === 'CLINIC_PATIENT_AVATAR'
+                            ? 'primary'
+                            : 'info'
+                        }
                         size="xs"
                       >
                         {formatStoragePlane(item.targetPlane)}

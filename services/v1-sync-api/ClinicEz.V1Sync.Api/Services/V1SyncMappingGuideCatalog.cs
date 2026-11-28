@@ -90,6 +90,7 @@ public static class V1SyncMappingGuideCatalog
                     Col("User.civilStatus", "CivilStatus", "UPPER_CASE -> PascalCase enum"),
                     Col("User.bloodType", "BloodType", "e.g. O_POSITIVE / O+ -> OPositive; invalid -> NULL"),
                     Col("User.phone, email, occupation, nationality, religion", "ContactNumber, Email, Occupation, Nationality, Religion", "Trimmed & length-checked to v2 column limits"),
+                    Col("User.picture", "AvatarUrl, AvatarEncryptionAlgorithm", "Live HTTPS avatars normalized (drops retired Blob #2 & default Gravatar); Track 3 encrypts legacy blobs into Clinic Cloud Vault"),
                     Col("UserEmergencyContact (primary)", "EmergencyContactName, EmergencyContactNumber, EmergencyContactRelationship", "Primary contact mirrored onto patient summary columns"),
                     Col("PhilHealthRecord.pin", "PhilHealthNumber", "Primary PIN mirrored onto patient record"),
                     Col("UserStudentRecord + UserEmploymentRecord + UserAddress + PhilHealthDependent", "CustomFields", "Sorted JSONB containing institutional, intake, secondary address, and dependents snapshot"),
@@ -622,7 +623,7 @@ public static class V1SyncMappingGuideCatalog
                     Col("User.userId", "clerk_user_id", "Keeps user_* only; auth0|* -> NULL"),
                     Col("User.firstName, middleName, lastName, suffix", "first_name, middle_name, last_name, suffix", "Trimmed to column width"),
                     Col("User.gender, birthDate, placeOfBirth, civilStatus, bloodType", "sex, date_of_birth, place_of_birth, civil_status, blood_type", "Normalized enums; invalid birthDate -> NULL"),
-                    Col("User.phone, altPhone, email, nationality, religion, avatarUrl", "mobile, alt_phone, email, nationality, religion, avatar_url", "Trimmed & normalized")
+                    Col("User.phone, altPhone, email, nationality, religion, picture", "mobile, alt_phone, email, nationality, religion, avatar_url", "Trimmed & normalized; retired Blob #2 & default Gravatar nulled; Track 3 encrypts legacy blobs into Patient Cloud Vault")
                 ],
                 ConflictPolicy: "v2-Wins with Deletion Shield; existing live Clerk accounts are adopted rather than duplicated."
             ),

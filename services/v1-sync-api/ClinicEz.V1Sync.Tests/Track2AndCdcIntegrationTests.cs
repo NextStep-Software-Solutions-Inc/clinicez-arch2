@@ -1121,6 +1121,85 @@ public sealed class Track2AndCdcIntegrationTests
         Assert.Equal(SyncRunStatus.Completed, incManual.Status);
     }
 
+    [Fact]
+    public async Task T18_PatientAvatar_NormalizesLegacyHosts_TracksAvatarOnlyUpdates_AndUpgradesLegacyHashesWithoutFalseConflicts()
+    {
+        await using var fx = await CreateInitializedTrack2FixtureAsync();
+        var binding = await CreateScopedTrack2BindingAsync(fx, "Track2 Patient Avatar Sync T18");
+
+        const string azure1Avatar = "https://clinicezstorage.blob.core.windows.net/prod/avatar-t18-1.jpg";
+        const string vercelAvatar = "https://wkkzdib5fdabtkpz.public.blob.vercel-storage.com/avatar-t18-2.jpg";
+        const string clerkAvatar = "https://images.clerk.dev/oauth_google/img_t18_3";
+
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, $"""
+            INSERT INTO public."User" (id, "userId", email, picture, "firstName", "lastName", dob, gender, mobile, "isActive")
+            VALUES
+                (9401, 'auth0|t18-1', 'av9401@example.test', '{azure1Avatar}', 'Ava', 'One', '1992-01-10', 'FEMALE', '09170009401', true),
+                (9402, 'auth0|t18-2', 'av9402@example.test', 'https://clinicez.blob.core.windows.net/clinicez/dead.jpg', 'Dead', 'BlobTwo', '1993-02-11', 'MALE', '09170009402', true),
+                (9403, 'auth0|t18-3', 'av9403@example.test', 'https://www.gravatar.com/avatar?d=mp', 'Default', 'Gravatar', '1994-03-12', 'FEMALE', '09170009403', true),
+                (9404, 'auth0|t18-4', 'av9404@example.test', '{clerkAvatar}', 'Clerk', 'Cdn', '1995-04-13', 'MALE', '09170009404', true);
+            INSERT INTO public."ClinicPatient" (id, "clinicId", "patientId") VALUES
+                (9401, 101, 9401), (9402, 101, 9402), (9403, 101, 9403), (9404, 101, 9404);
+            """);
+
+        var backfill = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.Backfill, null, false, "test-t18", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, backfill.Status);
+
+        var pid1 = DeterministicUuid.PatientAccountId(9401);
+        var pid2 = DeterministicUuid.PatientAccountId(9402);
+        var pid3 = DeterministicUuid.PatientAccountId(9403);
+        var pid4 = DeterministicUuid.PatientAccountId(9404);
+
+        await using var v2 = new NpgsqlConnection(fx.PatientConnectionString);
+        await v2.OpenAsync();
+        Assert.Equal(azure1Avatar, await ScalarStringAsync(v2, $"SELECT avatar_url FROM public.patients WHERE id = '{pid1}'"));
+        Assert.Equal("NONE", await ScalarStringAsync(v2, $"SELECT avatar_encryption_algorithm FROM public.patients WHERE id = '{pid1}'"));
+        Assert.Null(await ScalarStringAsync(v2, $"SELECT avatar_url FROM public.patients WHERE id = '{pid2}'"));
+        Assert.Null(await ScalarStringAsync(v2, $"SELECT avatar_url FROM public.patients WHERE id = '{pid3}'"));
+        Assert.Equal(clerkAvatar, await ScalarStringAsync(v2, $"SELECT avatar_url FROM public.patients WHERE id = '{pid4}'"));
+
+        // Avatar-only update in V1 must be detected by canonical hash and synced via incremental CDC
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, $"""
+            UPDATE public."User" SET picture = '{vercelAvatar}' WHERE id = 9401;
+            """);
+        var inc = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.Incremental, null, false, "test-t18", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, inc.Status);
+        Assert.Equal(vercelAvatar, await ScalarStringAsync(v2, $"SELECT avatar_url FROM public.patients WHERE id = '{pid1}'"));
+        Assert.Equal(0, await fx.Ledger.CountOpenConflictsAsync(binding.Id));
+
+        // Simulate legacy pre-avatar_url 14-field hash stored in sync_row_hashes — must upgrade cleanly with zero false V2_MODIFIED conflicts
+        var legacy14Hash = DeterministicUuid.ComputeCanonicalHash(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["first_name"] = "Default",
+            ["middle_name"] = null,
+            ["last_name"] = "Gravatar",
+            ["suffix"] = null,
+            ["sex"] = "Female",
+            ["date_of_birth"] = "1994-03-12",
+            ["place_of_birth"] = null,
+            ["civil_status"] = null,
+            ["blood_type"] = null,
+            ["nationality"] = null,
+            ["religion"] = null,
+            ["mobile"] = "09170009403",
+            ["alt_phone"] = null,
+            ["email"] = "av9403@example.test"
+        });
+        await Pg17TestFixture.ExecuteSqlAsync(fx.SyncConnectionString, $"""
+            UPDATE sync_row_hashes
+            SET v1_payload_hash = '{legacy14Hash}', v2_expected_hash = '{legacy14Hash}'
+            WHERE binding_id = '{binding.Id}' AND entity_type = 'PatientAccount' AND v1_id = '9403';
+            """);
+        await Pg17TestFixture.ExecuteSqlAsync(fx.V1ConnectionString, $"""
+            UPDATE public."User" SET picture = '{azure1Avatar}' WHERE id = 9403;
+            """);
+
+        var incLegacy = await fx.Coordinator.ExecuteAsync(binding.Id, SyncRunMode.Incremental, null, false, "test-t18", CancellationToken.None);
+        Assert.Equal(SyncRunStatus.Completed, incLegacy.Status);
+        Assert.Equal(azure1Avatar, await ScalarStringAsync(v2, $"SELECT avatar_url FROM public.patients WHERE id = '{pid3}'"));
+        Assert.Equal(0, await fx.Ledger.CountOpenConflictsAsync(binding.Id));
+    }
+
     // -------------------------------------------------------------------------
     // Helpers: Isolated Test Schema Provisioning (Exact 26-table PatientDb + V1)
     // -------------------------------------------------------------------------

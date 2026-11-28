@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.V1Sync.Api.Data;
 using ClinicEz.V1Sync.Api.Models;
 using Npgsql;
 using NpgsqlTypes;
@@ -92,7 +93,7 @@ internal static class InspectorDbHelpers
     }
 }
 
-public sealed class Track2PatientAccountConflictInspector : IConflictDiffInspector
+public sealed class Track2PatientAccountConflictInspector(SyncLedgerRepository? ledger = null) : IConflictDiffInspector
 {
     public string Track => SyncTrack.Track2Patient;
     public string EntityType => "PatientAccount";
@@ -113,6 +114,7 @@ public sealed class Track2PatientAccountConflictInspector : IConflictDiffInspect
         new("mobile", "Mobile Number", FieldSensitivity.PiiMasked),
         new("alt_phone", "Alternate Phone", FieldSensitivity.PiiMasked),
         new("email", "Email Address", FieldSensitivity.PiiMasked),
+        new("avatar_url", "Profile Avatar", FieldSensitivity.PiiMasked),
     ];
 
     public async Task<ConflictLiveSnapshot> LoadSnapshotAsync(
@@ -144,7 +146,8 @@ public sealed class Track2PatientAccountConflictInspector : IConflictDiffInspect
                                SELECT 1 FROM public."OrganizationMember" om
                                WHERE om."userId" = u.id AND om."organizationId" = @oid
                            ))
-                       ) AS in_scope
+                       ) AS in_scope,
+                       u.picture
                 FROM public."User" u
                 WHERE u.id = @uid
                 """;
@@ -168,6 +171,7 @@ public sealed class Track2PatientAccountConflictInspector : IConflictDiffInspect
                 var deletedAt = InspectorDbHelpers.GetUtc(r, 17);
                 var isActive = r.IsDBNull(18) || r.GetBoolean(18);
                 var inScope = !r.IsDBNull(19) && r.GetBoolean(19);
+                var avatarUrl = SyncTransforms.NormalizeAvatarUrl(InspectorDbHelpers.GetStr(r, 20));
 
                 v1UpdatedAt = updatedAt;
                 if (deletedAt.HasValue || !isActive)
@@ -197,7 +201,8 @@ public sealed class Track2PatientAccountConflictInspector : IConflictDiffInspect
                     rel: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 12), 80),
                     mob: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 13), 20),
                     alt: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 14), 20),
-                    email: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 1), 254));
+                    email: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 1), 254),
+                    avatarUrl: avatarUrl);
             }
         }
 
@@ -205,14 +210,18 @@ public sealed class Track2PatientAccountConflictInspector : IConflictDiffInspect
         DateTimeOffset? v2UpdatedAt = null;
         Dictionary<string, string?>? v2Fields = null;
 
-        const string v2Sql = """
+        var hasAvatarCryptoCol = await InspectorDbHelpers.ColumnExistsAsync(v2, "patients", "avatar_encryption_algorithm", ct);
+        var cryptoExpr = hasAvatarCryptoCol ? "avatar_encryption_algorithm" : "NULL::text";
+        var v2Sql = $"""
             SELECT first_name, middle_name, last_name, suffix,
                    sex, date_of_birth, place_of_birth, civil_status, blood_type,
                    nationality, religion, mobile, alt_phone, email,
-                   created_at, updated_at, is_deleted
+                   created_at, updated_at, is_deleted, avatar_url, {cryptoExpr}
             FROM public.patients
             WHERE id = @id
             """;
+        string? rawAvatarUrl = null;
+        bool isEncryptedAvatar = false;
         await using (var cmd = new NpgsqlCommand(v2Sql, v2))
         {
             cmd.Parameters.AddWithValue("id", conflict.V2Id);
@@ -224,6 +233,8 @@ public sealed class Track2PatientAccountConflictInspector : IConflictDiffInspect
                 v2UpdatedAt = InspectorDbHelpers.GetUtc(r, 15) ?? createdAt;
                 var isDeleted = !r.IsDBNull(16) && r.GetBoolean(16);
                 v2Status = isDeleted ? ConflictRecordStatus.SoftDeleted : ConflictRecordStatus.Active;
+                rawAvatarUrl = SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 17), 500);
+                isEncryptedAvatar = string.Equals(InspectorDbHelpers.GetStr(r, 18), "AES-256-GCM", StringComparison.OrdinalIgnoreCase);
 
                 v2Fields = Track2PatientSyncEngine.BuildPatientCanonicalMap(
                     fn: SyncTransforms.CleanRequired(InspectorDbHelpers.GetStr(r, 0), "Unknown", 100),
@@ -239,7 +250,18 @@ public sealed class Track2PatientAccountConflictInspector : IConflictDiffInspect
                     rel: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 10), 80),
                     mob: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 11), 20),
                     alt: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 12), 20),
-                    email: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 13), 254));
+                    email: SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 13), 254),
+                    avatarUrl: rawAvatarUrl);
+            }
+        }
+
+        if (v2Fields is not null && isEncryptedAvatar && ledger is not null)
+        {
+            var migratedUrls = await ledger.LoadMigratedSourceInfoByPlaneAsync(
+                SyncStoragePlane.PatientAvatar, [conflict.V2Id], ct);
+            if (migratedUrls.TryGetValue(conflict.V2Id, out var migratedSource))
+            {
+                v2Fields["avatar_url"] = SyncTransforms.NormalizeAvatarUrl(migratedSource.SourceUrl) ?? rawAvatarUrl;
             }
         }
 
@@ -335,7 +357,7 @@ public sealed class Track2PatientSocialHistoryConflictInspector : IConflictDiffI
     }
 }
 
-public sealed class Track1PatientConflictInspector : IConflictDiffInspector
+public sealed class Track1PatientConflictInspector(SyncLedgerRepository? ledger = null) : IConflictDiffInspector
 {
     public string Track => SyncTrack.Track1Clinic;
     public string EntityType => "Patient";
@@ -363,6 +385,7 @@ public sealed class Track1PatientConflictInspector : IConflictDiffInspector
         new("emergencyContactRelationship", "Emergency Contact Relationship", FieldSensitivity.PiiMasked),
         new("verificationStatus", "Verification Status", FieldSensitivity.SafeEnumOrBool),
         new("customFields", "Custom Profile Fields", FieldSensitivity.StructuredJson),
+        new("avatarUrl", "Profile Avatar", FieldSensitivity.PiiMasked),
     ];
 
     public async Task<ConflictLiveSnapshot> LoadSnapshotAsync(
@@ -372,6 +395,9 @@ public sealed class Track1PatientConflictInspector : IConflictDiffInspector
         NpgsqlConnection v2,
         CancellationToken ct)
     {
+        var hasAvatarCol = await InspectorDbHelpers.ColumnExistsAsync(v2, "Patients", "AvatarUrl", ct);
+        var hasAvatarCryptoCol = hasAvatarCol && await InspectorDbHelpers.ColumnExistsAsync(v2, "Patients", "AvatarEncryptionAlgorithm", ct);
+
         var v1Status = ConflictRecordStatus.Missing;
         DateTimeOffset? v1UpdatedAt = null;
         Dictionary<string, string?>? v1Fields = null;
@@ -442,7 +468,8 @@ public sealed class Track1PatientConflictInspector : IConflictDiffInspector
                                AND EXISTS (SELECT 1 FROM public."OrganizationMember" om WHERE om."userId" = u.id AND om."organizationId" = @oid)
                                AND NOT EXISTS (SELECT 1 FROM public."ClinicPatient" cp_del WHERE cp_del."patientId" = u.id AND cp_del."clinicId" = @cid AND cp_del."deletedAt" IS NOT NULL)
                            )
-                       ) AS in_active_scope
+                       ) AS in_active_scope,
+                       u.picture
                 FROM public."User" u
                 LEFT JOIN LATERAL (
                     SELECT s."studentId", s.lrn, s.level, s."collegeId", s."programId", s."yearLevel"
@@ -617,11 +644,13 @@ public sealed class Track1PatientConflictInspector : IConflictDiffInspector
                     philHealthDependents: phDeps);
 
                 var customFieldsJson = SyncTransforms.SerializeSortedJson(customFields);
+                var v1AvatarUrl = SyncTransforms.NormalizeAvatarUrl(InspectorDbHelpers.GetStr(r, 53));
 
                 v1Fields = Track1ClinicSyncEngine.BuildClinicPatientCanonicalMap(
                     firstName, lastName, middleName, suffix, dob, sex, civilStatus, bloodType,
                     contactNumber, landline, email, empPos, nationality, religion, nickname, philHealthPin,
-                    ecName, ecPhone, ecRel, verificationStatus, customFieldsJson);
+                    ecName, ecPhone, ecRel, verificationStatus, customFieldsJson,
+                    avatarUrl: v1AvatarUrl, includeAvatar: hasAvatarCol);
             }
         }
 
@@ -629,14 +658,20 @@ public sealed class Track1PatientConflictInspector : IConflictDiffInspector
         DateTimeOffset? v2UpdatedAt = null;
         Dictionary<string, string?>? v2Fields = null;
 
-        const string v2Sql = """
+        var avatarSelectCols = hasAvatarCol
+            ? (hasAvatarCryptoCol ? ""","AvatarUrl","AvatarEncryptionAlgorithm" """ : ""","AvatarUrl",NULL::text """)
+            : ",NULL::text,NULL::text";
+        var v2Sql = $"""
             SELECT "FirstName","LastName","MiddleName","Suffix","DateOfBirth","Sex","CivilStatus","BloodType",
                    "ContactNumber","LandlineNumber","Email","Occupation","Nationality","Religion","PreferredName","PhilHealthNumber",
                    "EmergencyContactName","EmergencyContactNumber","EmergencyContactRelationship","VerificationStatus","CustomFields"::text,
                    "CreatedAt","UpdatedAt","IsDeleted"
+                   {avatarSelectCols}
             FROM public."Patients"
             WHERE "Id" = @id
             """;
+        string? rawClinicAvatarUrl = null;
+        bool isEncryptedClinicAvatar = false;
         await using (var cmd = new NpgsqlCommand(v2Sql, v2))
         {
             cmd.Parameters.AddWithValue("id", conflict.V2Id);
@@ -652,6 +687,8 @@ public sealed class Track1PatientConflictInspector : IConflictDiffInspector
                 v2UpdatedAt = InspectorDbHelpers.GetUtc(r, 22) ?? createdAt;
                 var isDeleted = !r.IsDBNull(23) && r.GetBoolean(23);
                 v2Status = isDeleted ? ConflictRecordStatus.SoftDeleted : ConflictRecordStatus.Active;
+                rawClinicAvatarUrl = SyncTransforms.Clean(InspectorDbHelpers.GetStr(r, 24), 500);
+                isEncryptedClinicAvatar = string.Equals(InspectorDbHelpers.GetStr(r, 25), "AES-256-GCM", StringComparison.OrdinalIgnoreCase);
 
                 v2Fields = Track1ClinicSyncEngine.BuildClinicPatientCanonicalMap(
                     r.GetString(0), r.GetString(1), InspectorDbHelpers.GetStr(r, 2), InspectorDbHelpers.GetStr(r, 3),
@@ -660,7 +697,18 @@ public sealed class Track1PatientConflictInspector : IConflictDiffInspector
                     InspectorDbHelpers.GetStr(r, 11), InspectorDbHelpers.GetStr(r, 12), InspectorDbHelpers.GetStr(r, 13),
                     InspectorDbHelpers.GetStr(r, 14), InspectorDbHelpers.GetStr(r, 15), InspectorDbHelpers.GetStr(r, 16),
                     InspectorDbHelpers.GetStr(r, 17), InspectorDbHelpers.GetStr(r, 18),
-                    InspectorDbHelpers.GetStr(r, 19) ?? "Verified", cfSorted);
+                    InspectorDbHelpers.GetStr(r, 19) ?? "Verified", cfSorted,
+                    avatarUrl: rawClinicAvatarUrl, includeAvatar: hasAvatarCol);
+            }
+        }
+
+        if (v2Fields is not null && hasAvatarCol && isEncryptedClinicAvatar && ledger is not null)
+        {
+            var migratedUrls = await ledger.LoadMigratedSourceInfoByPlaneAsync(
+                SyncStoragePlane.ClinicPatientAvatar, [conflict.V2Id], ct);
+            if (migratedUrls.TryGetValue(conflict.V2Id, out var migratedSource))
+            {
+                v2Fields["avatarUrl"] = SyncTransforms.NormalizeAvatarUrl(migratedSource.SourceUrl) ?? rawClinicAvatarUrl;
             }
         }
 

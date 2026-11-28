@@ -2947,6 +2947,7 @@ export interface PatientDemographics {
   isPwd?: boolean;
   hasActiveCaseNo?: boolean;
   patientName?: string;
+  avatarUrl?: string | null;
 }
 
 export interface PatientImmunizationRecord {
@@ -3207,6 +3208,7 @@ export interface ClinicPatient {
   cityMunicipalityPsgc?: string | null;
   barangayPsgc?: string | null;
   zipCode?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface DuplicateMatch {

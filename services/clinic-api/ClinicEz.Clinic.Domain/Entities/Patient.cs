@@ -55,6 +55,15 @@ public class Patient : ClinicScopedEntity
     public string? PreferredName { get; set; }
     public string? Nationality { get; set; }
     public string? Religion { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string? AvatarContentType { get; set; }
+    public string? AvatarEncryptionAlgorithm { get; set; }
+    public string? AvatarEncryptionKeyId { get; set; }
+    public string? AvatarEncryptionIvBase64 { get; set; }
+    public string? AvatarEncryptionTagBase64 { get; set; }
+    public long? AvatarEncryptedSizeBytes { get; set; }
+    public string? AvatarEncryptedHash { get; set; }
+    public string? AvatarWrappedKeyJson { get; set; }
     public bool IsDeceased { get; set; } = false;
     public DateTime? DeceasedAt { get; set; }
 

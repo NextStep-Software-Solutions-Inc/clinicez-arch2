@@ -33,6 +33,14 @@ public sealed class Patient : BaseEntity, ISyncable
     public string? PrimaryLanguage { get; set; }
     public EducationLevel? EducationLevel { get; set; }
     public string? AvatarUrl { get; set; }
+    public string? AvatarContentType { get; set; }
+    public string? AvatarEncryptionAlgorithm { get; set; }
+    public string? AvatarEncryptionKeyId { get; set; }
+    public string? AvatarEncryptionIvBase64 { get; set; }
+    public string? AvatarEncryptionTagBase64 { get; set; }
+    public long? AvatarEncryptedSizeBytes { get; set; }
+    public string? AvatarEncryptedHash { get; set; }
+    public string? AvatarWrappedKeyJson { get; set; }
 
     // A3 — Contact Information
     public string? Mobile { get; set; }

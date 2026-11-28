@@ -96,6 +96,31 @@ public sealed class PatientsController : ControllerBase
         return Ok(ApiResponse<ClinicPatientDto>.Success(result));
     }
 
+    [HttpGet("{id:guid}/avatar")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<IActionResult> GetPatientAvatar(
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new DownloadPatientAvatarQuery(id), ct);
+        if (result == null)
+        {
+            return NotFound(ApiResponse<object>.Fail("Patient avatar not found."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.ExternalRedirectUrl))
+        {
+            return Redirect(result.ExternalRedirectUrl);
+        }
+
+        Response.Headers.CacheControl = "private, max-age=3600";
+        if (!string.IsNullOrWhiteSpace(result.ETag))
+        {
+            Response.Headers.ETag = $"\"{result.ETag}\"";
+        }
+        return File(result.FileBytes, result.ContentType);
+    }
+
     [HttpPost]
     [HasPermission(ClinicPermissions.PatientsWrite)]
     public async Task<ActionResult<ApiResponse<ClinicPatientDto>>> RegisterPatient(

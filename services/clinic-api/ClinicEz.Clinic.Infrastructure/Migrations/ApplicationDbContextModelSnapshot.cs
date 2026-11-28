@@ -3962,6 +3962,40 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("AvatarContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AvatarEncryptedHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<long?>("AvatarEncryptedSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("AvatarEncryptionAlgorithm")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("AvatarEncryptionIvBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AvatarEncryptionKeyId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("AvatarEncryptionTagBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("AvatarWrappedKeyJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("BloodType")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");

@@ -156,11 +156,11 @@ public sealed class SyncLedgerRepository
 
             CREATE TABLE IF NOT EXISTS sync_storage_objects (
                 binding_id                   UUID        NOT NULL REFERENCES sync_bindings(id) ON DELETE CASCADE,
-                target_plane                 TEXT        NOT NULL CHECK (target_plane IN ('CLINIC_ATTACHMENT', 'PATIENT_FILE')),
+                target_plane                 TEXT        NOT NULL CHECK (target_plane IN ('CLINIC_ATTACHMENT', 'PATIENT_FILE', 'CLINIC_PATIENT_AVATAR', 'PATIENT_AVATAR')),
                 target_entity_id             UUID        NOT NULL,
                 owner_id                     UUID        NOT NULL,
                 tenant_id                    TEXT,
-                source_provider              TEXT        NOT NULL CHECK (source_provider IN ('AZURE_BLOB_1', 'AZURE_BLOB_2', 'GOOGLE_DRIVE', 'OTHER')),
+                source_provider              TEXT        NOT NULL CHECK (source_provider IN ('AZURE_BLOB_1', 'AZURE_BLOB_2', 'VERCEL_BLOB', 'GOOGLE_DRIVE', 'OTHER')),
                 source_url                   TEXT        NOT NULL,
                 source_size_bytes            BIGINT      NOT NULL DEFAULT 0,
                 source_content_type          TEXT,
@@ -186,6 +186,14 @@ public sealed class SyncLedgerRepository
                 updated_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
                 PRIMARY KEY (binding_id, target_plane, target_entity_id)
             );
+
+            ALTER TABLE sync_storage_objects DROP CONSTRAINT IF EXISTS sync_storage_objects_target_plane_check;
+            ALTER TABLE sync_storage_objects ADD CONSTRAINT sync_storage_objects_target_plane_check
+                CHECK (target_plane IN ('CLINIC_ATTACHMENT', 'PATIENT_FILE', 'CLINIC_PATIENT_AVATAR', 'PATIENT_AVATAR'));
+
+            ALTER TABLE sync_storage_objects DROP CONSTRAINT IF EXISTS sync_storage_objects_source_provider_check;
+            ALTER TABLE sync_storage_objects ADD CONSTRAINT sync_storage_objects_source_provider_check
+                CHECK (source_provider IN ('AZURE_BLOB_1', 'AZURE_BLOB_2', 'VERCEL_BLOB', 'GOOGLE_DRIVE', 'OTHER'));
 
             ALTER TABLE sync_storage_objects ADD COLUMN IF NOT EXISTS source_content_type TEXT;
             ALTER TABLE sync_storage_objects ADD COLUMN IF NOT EXISTS source_content_type_captured BOOLEAN NOT NULL DEFAULT FALSE;
@@ -1783,16 +1791,20 @@ public sealed class SyncLedgerRepository
             }
         }
 
-        string? normalizedPlane = null;
+        string[]? normalizedPlanes = null;
         if (!string.IsNullOrWhiteSpace(planeFilter))
         {
             var trimmed = planeFilter.Trim().ToUpperInvariant();
-            normalizedPlane = trimmed switch
+            normalizedPlanes = trimmed switch
             {
                 "ALL" or "BOTH" => null,
-                "CLINIC" or "CLINIC_ONLY" or SyncStoragePlane.ClinicAttachment => SyncStoragePlane.ClinicAttachment,
-                "PATIENT" or "PATIENT_ONLY" or SyncStoragePlane.PatientFile => SyncStoragePlane.PatientFile,
-                _ => trimmed
+                "CLINIC" or "CLINIC_ONLY" => new[] { SyncStoragePlane.ClinicAttachment, SyncStoragePlane.ClinicPatientAvatar },
+                "PATIENT" or "PATIENT_ONLY" => new[] { SyncStoragePlane.PatientFile, SyncStoragePlane.PatientAvatar },
+                SyncStoragePlane.ClinicAttachment => new[] { SyncStoragePlane.ClinicAttachment },
+                SyncStoragePlane.ClinicPatientAvatar => new[] { SyncStoragePlane.ClinicPatientAvatar },
+                SyncStoragePlane.PatientFile => new[] { SyncStoragePlane.PatientFile },
+                SyncStoragePlane.PatientAvatar => new[] { SyncStoragePlane.PatientAvatar },
+                _ => new[] { trimmed }
             };
         }
 
@@ -1802,7 +1814,7 @@ public sealed class SyncLedgerRepository
             WHERE binding_id = @bindingId
               AND (@statuses IS NULL OR status = ANY(@statuses))
               AND (@providers IS NULL OR source_provider = ANY(@providers))
-              AND (@plane IS NULL OR target_plane = @plane)
+              AND (@planes IS NULL OR target_plane = ANY(@planes))
             """;
 
         long totalCount;
@@ -1811,7 +1823,7 @@ public sealed class SyncLedgerRepository
             countCmd.Parameters.AddWithValue("bindingId", bindingId);
             countCmd.Parameters.Add(new NpgsqlParameter("statuses", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = (object?)statuses ?? DBNull.Value });
             countCmd.Parameters.Add(new NpgsqlParameter("providers", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = (object?)providers ?? DBNull.Value });
-            countCmd.Parameters.Add(new NpgsqlParameter("plane", NpgsqlDbType.Text) { Value = (object?)normalizedPlane ?? DBNull.Value });
+            countCmd.Parameters.Add(new NpgsqlParameter("planes", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = (object?)normalizedPlanes ?? DBNull.Value });
             totalCount = Convert.ToInt64(await countCmd.ExecuteScalarAsync(ct));
         }
 
@@ -1832,7 +1844,7 @@ public sealed class SyncLedgerRepository
             cmd.Parameters.AddWithValue("bindingId", bindingId);
             cmd.Parameters.Add(new NpgsqlParameter("statuses", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = (object?)statuses ?? DBNull.Value });
             cmd.Parameters.Add(new NpgsqlParameter("providers", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = (object?)providers ?? DBNull.Value });
-            cmd.Parameters.Add(new NpgsqlParameter("plane", NpgsqlDbType.Text) { Value = (object?)normalizedPlane ?? DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter("planes", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = (object?)normalizedPlanes ?? DBNull.Value });
             cmd.Parameters.AddWithValue("limit", clampedLimit);
             cmd.Parameters.AddWithValue("offset", clampedOffset);
             await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -1865,12 +1877,12 @@ public sealed class SyncLedgerRepository
             WHERE binding_id = @bindingId
               AND status = 'FAILED_RETRYABLE'
               AND (@providers IS NULL OR source_provider = ANY(@providers))
-              AND (@plane IS NULL OR target_plane = @plane)
+              AND (@planes IS NULL OR target_plane = ANY(@planes))
             """, conn))
         {
             retryCountCmd.Parameters.AddWithValue("bindingId", bindingId);
             retryCountCmd.Parameters.Add(new NpgsqlParameter("providers", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = (object?)providers ?? DBNull.Value });
-            retryCountCmd.Parameters.Add(new NpgsqlParameter("plane", NpgsqlDbType.Text) { Value = (object?)normalizedPlane ?? DBNull.Value });
+            retryCountCmd.Parameters.Add(new NpgsqlParameter("planes", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = (object?)normalizedPlanes ?? DBNull.Value });
             failedRetryableCount = Convert.ToInt64(await retryCountCmd.ExecuteScalarAsync(ct));
         }
 
@@ -1908,14 +1920,18 @@ public sealed class SyncLedgerRepository
         string? providerFilter,
         CancellationToken ct = default)
     {
-        string? normalizedPlane = null;
+        string[]? normalizedPlanes = null;
         if (!string.IsNullOrWhiteSpace(targetPlaneFilter))
         {
             var trimmed = targetPlaneFilter.Trim().ToUpperInvariant();
-            normalizedPlane = trimmed switch
+            normalizedPlanes = trimmed switch
             {
-                "CLINIC_ONLY" or "CLINIC" or SyncStoragePlane.ClinicAttachment => SyncStoragePlane.ClinicAttachment,
-                "PATIENT_ONLY" or "PATIENT" or SyncStoragePlane.PatientFile => SyncStoragePlane.PatientFile,
+                "CLINIC_ONLY" or "CLINIC" => new[] { SyncStoragePlane.ClinicAttachment, SyncStoragePlane.ClinicPatientAvatar },
+                "PATIENT_ONLY" or "PATIENT" => new[] { SyncStoragePlane.PatientFile, SyncStoragePlane.PatientAvatar },
+                SyncStoragePlane.ClinicAttachment => new[] { SyncStoragePlane.ClinicAttachment },
+                SyncStoragePlane.ClinicPatientAvatar => new[] { SyncStoragePlane.ClinicPatientAvatar },
+                SyncStoragePlane.PatientFile => new[] { SyncStoragePlane.PatientFile },
+                SyncStoragePlane.PatientAvatar => new[] { SyncStoragePlane.PatientAvatar },
                 _ => null
             };
         }
@@ -1927,6 +1943,7 @@ public sealed class SyncLedgerRepository
             normalizedProvider = trimmed switch
             {
                 "AZURE_BLOB_1" or "AZURE_BLOB" => SyncStorageProvider.AzureBlob1,
+                "VERCEL_BLOB" => SyncStorageProvider.VercelBlob,
                 _ => null
             };
         }
@@ -1952,7 +1969,7 @@ public sealed class SyncLedgerRepository
                 last_error_message = NULL,
                 updated_at = now()
             WHERE binding_id = @bindingId
-              AND (@plane IS NULL OR target_plane = @plane)
+              AND (@planes IS NULL OR target_plane = ANY(@planes))
               AND (@provider IS NULL OR source_provider = @provider)
               AND (
                   status = 'FAILED_RETRYABLE'
@@ -1962,7 +1979,7 @@ public sealed class SyncLedgerRepository
         await using var cmd = new NpgsqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("bindingId", bindingId);
         cmd.Parameters.AddWithValue("includeAuth", includeAuthSkipped);
-        cmd.Parameters.Add(new NpgsqlParameter("plane", NpgsqlDbType.Text) { Value = (object?)normalizedPlane ?? DBNull.Value });
+        cmd.Parameters.Add(new NpgsqlParameter("planes", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = (object?)normalizedPlanes ?? DBNull.Value });
         cmd.Parameters.Add(new NpgsqlParameter("provider", NpgsqlDbType.Text) { Value = (object?)normalizedProvider ?? DBNull.Value });
         return await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -2126,11 +2143,13 @@ public sealed class SyncLedgerRepository
         return ids;
     }
 
-    public async Task<(Guid[] ClinicIds, Guid[] PatientIds)> LoadGloballySkippedStorageEntityIdsAsync(
+    public async Task<(Guid[] ClinicIds, Guid[] PatientIds, Guid[] ClinicAvatarIds, Guid[] PatientAvatarIds)> LoadGloballySkippedStorageEntityIdsAsync(
         CancellationToken ct = default)
     {
         var clinicIds = new List<Guid>();
         var patientIds = new List<Guid>();
+        var clinicAvatarIds = new List<Guid>();
+        var patientAvatarIds = new List<Guid>();
 
         try
         {
@@ -2161,6 +2180,14 @@ public sealed class SyncLedgerRepository
                 {
                     patientIds.Add(entityId);
                 }
+                else if (string.Equals(plane, SyncStoragePlane.ClinicPatientAvatar, StringComparison.Ordinal))
+                {
+                    clinicAvatarIds.Add(entityId);
+                }
+                else if (string.Equals(plane, SyncStoragePlane.PatientAvatar, StringComparison.Ordinal))
+                {
+                    patientAvatarIds.Add(entityId);
+                }
             }
         }
         catch (PostgresException ex) when (ex.SqlState == "42P01")
@@ -2168,7 +2195,7 @@ public sealed class SyncLedgerRepository
             // sync_storage_objects table not yet created
         }
 
-        return (clinicIds.ToArray(), patientIds.ToArray());
+        return (clinicIds.ToArray(), patientIds.ToArray(), clinicAvatarIds.ToArray(), patientAvatarIds.ToArray());
     }
 
     public async Task<SyncRuntimeSettings?> GetRuntimeSettingsAsync(CancellationToken ct = default)

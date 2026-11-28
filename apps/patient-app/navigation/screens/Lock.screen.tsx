@@ -4,6 +4,7 @@ import { useUser } from '@clerk/expo';
 import { eq } from 'drizzle-orm';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useResolvedAvatarUri } from '../../hooks/useResolvedAvatarUri';
 import { db } from '@db/index';
 import { patients } from '@db/schema/patients';
 import ThemedText from '@ui/ThemedText';
@@ -19,7 +20,7 @@ interface LockScreenProps {
 export default function LockScreen({ onUnlockPress }: LockScreenProps) {
   const { colors, spacing, radii, sizes } = useAppTheme();
   const { user } = useUser();
-  const { logout, internalPatientId } = useAuth();
+  const { logout, internalPatientId, getToken } = useAuth();
   const [patientRecord, setPatientRecord] = useState<{
     firstName?: string | null;
     lastName?: string | null;
@@ -62,7 +63,8 @@ export default function LockScreen({ onUnlockPress }: LockScreenProps) {
     email ||
     'Patient';
 
-  const avatarUri = user?.imageUrl ?? patientRecord?.avatarUrl ?? null;
+  const rawAvatarUri = user?.imageUrl ?? patientRecord?.avatarUrl ?? null;
+  const avatarUri = useResolvedAvatarUri(rawAvatarUri, getToken);
 
   const handleLogout = () => {
     dialog.alert('Sign Out', 'Are you sure you want to sign out?', [

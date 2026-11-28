@@ -444,7 +444,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 PatientCode: patient.PatientCode,
                 ClinicEzId: patient.ClinicEzId,
                 VerificationStatus: patient.VerificationStatus.ToString(),
-                GenderIdentity: patient.GenderIdentity
+                GenderIdentity: patient.GenderIdentity,
+                AvatarUrl: PatientAvatarUrlResolver.Resolve(patient)
             );
         }
         else
